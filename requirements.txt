@@ -1,0 +1,17 @@
+# Core
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0,<2.0.0
+scipy>=1.10.0
+opencv-python-headless>=4.8.0
+Pillow>=9.5.0
+tqdm>=4.65.0
+
+# Logging
+tensorboard>=2.13.0
+matplotlib>=3.7.0
+
+# Dataset (parquet ingest)
+datasets>=2.18.0
+huggingface_hub>=0.20.0
+pyarrow>=14.0.0

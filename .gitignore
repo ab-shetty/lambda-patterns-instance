@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Training outputs
+checkpoints/
+logs/
+runs/
+*.pth
+*.pt
+predictions*.png
+
+# Data / HF cache
+data/
+datasets/
+*.parquet
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# TensorBoard
+events.out.tfevents.*
