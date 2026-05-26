@@ -70,31 +70,79 @@ def sample_reference_box(mask, min_size=128, max_size=512):
     return (max(0, cx - 16), max(0, cy - 16), 32, 32)
 
 
-def _spatial_augment(image, masks):
-    """Apply the same flip/rot90 to image [H,W,3] and masks [G,H,W]."""
-    if random.random() < 0.5:
-        image = np.ascontiguousarray(image[:, ::-1])
-        masks = np.ascontiguousarray(masks[:, :, ::-1])
-    if random.random() < 0.5:
-        image = np.ascontiguousarray(image[::-1])
-        masks = np.ascontiguousarray(masks[:, ::-1])
-    k = random.randint(0, 3)
-    if k:
-        image = np.ascontiguousarray(np.rot90(image, k))
-        masks = np.ascontiguousarray(np.rot90(masks, k, axes=(1, 2)))
-    return image, masks
+def _sample_fliprot():
+    """Sample one flip/rot90 transform: (hflip, vflip, k_quarter_turns)."""
+    return random.random() < 0.5, random.random() < 0.5, random.randint(0, 3)
 
 
-def _augment_reference(patch):
-    """Orientation augmentation on the reference patch (independent of the image)."""
-    if random.random() < 0.5:
-        patch = patch[:, ::-1]
-    if random.random() < 0.5:
-        patch = patch[::-1]
-    k = random.randint(0, 3)
+def _apply_fliprot_image(image, hflip, vflip, k):
+    """Apply a flip/rot90 transform to an image [H, W, C]."""
+    if hflip:
+        image = image[:, ::-1]
+    if vflip:
+        image = image[::-1]
     if k:
-        patch = np.rot90(patch, k)
-    return np.ascontiguousarray(patch)
+        image = np.rot90(image, k)
+    return np.ascontiguousarray(image)
+
+
+def _apply_fliprot_masks(masks, hflip, vflip, k):
+    """Apply the same flip/rot90 transform to masks [G, H, W]."""
+    if hflip:
+        masks = masks[:, :, ::-1]
+    if vflip:
+        masks = masks[:, ::-1]
+    if k:
+        masks = np.rot90(masks, k, axes=(1, 2))
+    return np.ascontiguousarray(masks)
+
+
+def _realism_degrade(img_uint8, rng):
+    """Mild, randomized degradations that mimic a real PDF-export rasterization.
+
+    Measured: real excerpts carry MORE fine high-frequency detail / softer edges
+    than synth (edge-density 0.080 vs 0.063), i.e. synth renders too clean. A
+    model trained on crisp synthetic edges overfits them and stumbles on the
+    blurrier, noisier, JPEG-compressed real plans. Applying these degradations to
+    the synth scene + reference at train time closes that low-level appearance
+    gap without touching real-eval (which is already 'degraded'). Kept gentle so
+    the hatch texture the matching head relies on survives.
+    """
+    img = img_uint8
+    # brightness / contrast jitter
+    if rng.random() < 0.7:
+        a = rng.uniform(0.85, 1.15)
+        b = rng.uniform(-12, 12)
+        img = np.clip(img.astype(np.float32) * a + b, 0, 255).astype(np.uint8)
+    # rasterization softness
+    if rng.random() < 0.5:
+        sigma = rng.uniform(0.4, 1.2)
+        img = cv2.GaussianBlur(img, (0, 0), sigma)
+    # sensor / scan noise
+    if rng.random() < 0.5:
+        std = rng.uniform(2.0, 8.0)
+        noise = np.random.normal(0, std, img.shape).astype(np.float32)
+        img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+    # JPEG compression artifacts
+    if rng.random() < 0.7:
+        q = int(rng.uniform(40, 90))
+        ok, enc = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), q])
+        if ok:
+            img = cv2.imdecode(enc, cv2.IMREAD_COLOR)
+    return np.ascontiguousarray(img)
+
+
+def _to_gray3(img_uint8):
+    """RGB uint8 [H, W, 3] -> luminance replicated across 3 channels.
+
+    Keeping 3 channels (R=G=B) lets the ImageNet-pretrained backbone and its
+    per-channel normalization apply unchanged; the only thing removed is colour.
+    Architectural plans are near-monochrome line/hatch art, so colour is largely
+    a domain-discriminating nuisance (synth fills vs. real scan tints / markup);
+    dropping it forces both synth and real onto the same structural appearance.
+    """
+    gray = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2GRAY)
+    return np.repeat(gray[:, :, None], 3, axis=2)
 
 
 def _normalize_chw(img_uint8):
@@ -108,7 +156,8 @@ def _normalize_chw(img_uint8):
 # --------------------------------------------------------------------------- #
 class InstanceSegDataset(Dataset):
     def __init__(self, records, indices, image_max_size=1024, ref_size=224,
-                 augment=True, min_patch=128, max_patch=512):
+                 augment=True, min_patch=128, max_patch=512, grayscale=False,
+                 realism_aug=False):
         self.records = records
         self.indices = list(indices)
         self.image_max_size = image_max_size
@@ -116,6 +165,8 @@ class InstanceSegDataset(Dataset):
         self.augment = augment
         self.min_patch = min_patch
         self.max_patch = max_patch
+        self.grayscale = grayscale
+        self.realism_aug = realism_aug
 
     def __len__(self):
         return len(self.indices)
@@ -123,7 +174,11 @@ class InstanceSegDataset(Dataset):
     def _load(self, i):
         rec = self.records[self.indices[i]]
         image = np.array(Image.open(io.BytesIO(rec["image"])).convert("RGB"))
-        anns = json.loads(rec["annotations"])
+        # Training config stores annotations as a JSON string; the real-world-test
+        # config stores them as an already-parsed list of structs.
+        anns = rec["annotations"]
+        if isinstance(anns, str):
+            anns = json.loads(anns)
         return image, anns
 
     def __getitem__(self, i):
@@ -162,8 +217,29 @@ class InstanceSegDataset(Dataset):
                            interpolation=cv2.INTER_LINEAR)
 
         if self.augment:
-            image_r, masks_arr = _spatial_augment(image_r, masks_arr)
-            ref_r = _augment_reference(ref_r)
+            # One flip/rot90 transform shared by image, masks, AND the reference
+            # patch. The reference is cropped from the un-augmented image, so
+            # applying the same transform keeps it orientation-aligned with the
+            # instances it must match — which mirrors real plans, where the same
+            # pattern always appears at one consistent orientation. (Independent
+            # reference rotation would train for an invariance that doesn't exist
+            # and would discard orientation, a real discriminator between patterns.)
+            hflip, vflip, k = _sample_fliprot()
+            image_r = _apply_fliprot_image(image_r, hflip, vflip, k)
+            masks_arr = _apply_fliprot_masks(masks_arr, hflip, vflip, k)
+            ref_r = _apply_fliprot_image(ref_r, hflip, vflip, k)
+
+            if self.realism_aug:
+                # Train-time only: push synth toward real PDF-export appearance.
+                # Independent draws so scene and reference aren't identically degraded.
+                image_r = _realism_degrade(image_r, random)
+                ref_r = _realism_degrade(ref_r, random)
+
+        if self.grayscale:
+            # Strip colour from both the scene and the reference patch so the
+            # synth/real comparison runs on identical (luminance-only) appearance.
+            image_r = _to_gray3(image_r)
+            ref_r = _to_gray3(ref_r)
 
         return {
             "image": _normalize_chw(image_r),                       # [3, nh, nw]
@@ -213,15 +289,44 @@ def collate_fn(batch, size_divisible=32):
 # --------------------------------------------------------------------------- #
 # Builders
 # --------------------------------------------------------------------------- #
-def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None):
-    """Load the full parquet split (image bytes + annotation strings)."""
+def load_local_records(root):
+    """Load records from a local generate_synthetic_v5.py output folder
+    (`<root>/images/*.png` + `<root>/annotations/*.json`). Returns a list of
+    dicts shaped like the parquet rows: {"image": <png bytes>, "annotations":
+    <list of dicts>}, which `InstanceSegDataset._load` already handles. Lets us
+    iterate on the generator and train on a small batch without building a
+    parquet each round."""
+    import glob
+    import os
+
+    recs = []
+    ann_files = sorted(glob.glob(os.path.join(root, "annotations", "*.json")))
+    for jf in ann_files:
+        with open(jf) as f:
+            ann = json.load(f)
+        img_path = os.path.join(root, "images", ann["image"]["file_name"])
+        with open(img_path, "rb") as f:
+            img_bytes = f.read()
+        recs.append({"image": img_bytes, "annotations": ann["annotations"]})
+    return recs
+
+
+def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None,
+                         config=None, split="train"):
+    """Load a parquet split (image bytes + annotation strings).
+
+    The synthetic training data lives in the default config (`split="train"`,
+    20k rows). The hand-annotated real-world evaluation set is a separate config
+    reached with `config="real-world-test", split="test"` (28 rows,
+    schema-identical so it flows through the same dataset pipeline).
+    """
     from datasets import load_dataset
-    ds = load_dataset(repo_id, split="train", cache_dir=cache_dir)
+    ds = load_dataset(repo_id, config, split=split, cache_dir=cache_dir)
     return ds
 
 
 def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
-                   seed=42):
+                   seed=42, grayscale=False, realism_aug=False):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -230,7 +335,9 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
     train_idx, val_idx = idx[:n_train], idx[n_train:]
 
     train_ds = InstanceSegDataset(records, train_idx, image_max_size, ref_size,
-                                  augment=True)
+                                  augment=True, grayscale=grayscale,
+                                  realism_aug=realism_aug)
+    # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
-                                augment=False)
+                                augment=False, grayscale=grayscale)
     return train_ds, val_ds

@@ -6,6 +6,7 @@ from .dataset import (
     collate_fn,
     build_datasets,
     load_parquet_records,
+    load_local_records,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "collate_fn",
     "build_datasets",
     "load_parquet_records",
+    "load_local_records",
 ]

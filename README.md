@@ -64,6 +64,26 @@ Notes:
 The loader picks a target pattern per image, crops a reference patch from one of
 its instances, and labels every instance match/no-match against it.
 
+### Real-world test set
+
+A second config, `real-world-test` (split `test`, 28 samples), holds
+**hand-annotated real architectural plans** — not synthetic. It measures
+generalization beyond the generator. It is schema-compatible with training and
+flows through the same `InstanceSegDataset`, with two differences the loader
+handles transparently:
+
+- `annotations` is stored as a parsed list of structs (training stores it as a
+  JSON string); `dataset.py` accepts either.
+- `mode` is `"unknown"` (real plans aren't classified elevation/floorplan). The
+  model doesn't use this field.
+
+```python
+load_dataset("abshetty/floz-synth-v5", "real-world-test", split="test")  # 28 rows
+```
+
+The default config still returns exactly the 20k train rows and never picks up
+the test file.
+
 ## Setup
 
 ```bash
@@ -73,9 +93,9 @@ pip install -r requirements.txt
 ## Train
 
 ```bash
-./run_training.sh                      # sensible defaults, single GPU
+./run_training.sh                      # 2048px, bf16, batch 8, 15 epochs, single GPU
 # or
-python train.py --image-max-size 1024 --batch-size 8 --epochs 50 --num-workers 8
+python train.py --image-max-size 2048 --batch-size 8 --epochs 15 --num-workers 16
 ```
 
 Quick local run on a slice of the data:
@@ -86,6 +106,23 @@ python train.py --max-records 500 --image-max-size 512 --batch-size 4 --epochs 5
 
 Multi-GPU (opt-in) with `--data-parallel`. Final training targets a single GH200.
 
+**Mixed precision.** Training uses **bf16 autocast** by default on CUDA (disable
+with `--no-amp`). bf16 — not fp16 — because it keeps fp32's exponent range, so no
+`GradScaler` is needed and the loss/matcher stay stable (autocast auto-promotes
+BCE/cross-entropy/softmax to fp32). Quality is within run-to-run noise of fp32;
+the win is ~halved activation memory and faster tensor-core matmuls.
+
+**Memory.** In fp32, batch 8 at 2048px OOMs on a 94.5GB GH200 (~1.5GB short).
+bf16 roughly halves activation memory, so batch 8 fits; the script also exports
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to curb fragmentation. If you
+still hit an OOM, drop to `--batch-size 4`.
+
+**Throughput.** ~42 min/epoch (fp32, batch 4) on the full 20k set → a 15-epoch
+run is ~10–11 hours; bf16 + the deeper input pipeline (`--num-workers 16
+--prefetch-factor 4`, persistent workers) brings it under that. At 2048px the
+dataloader can bottleneck the GPU (util swings rather than pinning at 100%), so
+watch `nvidia-smi` — if util sags, raise `--num-workers`.
+
 ## Evaluate
 
 ```bash
@@ -94,6 +131,16 @@ python evaluate.py --checkpoint checkpoints/best.pth
 
 Reports, for the reference-conditioned task, mean matched IoU, precision/recall/F1
 at IoU≥0.5, reference-match accuracy, and class-agnostic detection recall.
+
+To measure generalization on the held-out real plans (the whole `real-world-test`
+config is the eval set — no train/val split):
+
+```bash
+python evaluate_real_world.py --checkpoint checkpoints/best.pth
+```
+
+Same metrics as above. Reference crops are seeded (`--seed`) so the 28-sample
+numbers are reproducible run to run.
 
 ## Visualize
 
@@ -108,10 +155,13 @@ Saves `predictions.png`: image · reference · GT target instances · predicted 
 | Arg | Default | Description |
 |-----|---------|-------------|
 | `--hf-repo` | `abshetty/floz-synth-v5` | HuggingFace dataset repo |
-| `--image-max-size` | 1024 | Longest side after aspect-preserving resize |
+| `--image-max-size` | 1024 | Longest side after aspect-preserving resize (`run_training.sh` uses 2048) |
 | `--ref-size` | 224 | Reference patch size |
 | `--batch-size` | 8 | Batch size |
-| `--epochs` | 50 | Epochs |
+| `--epochs` | 50 | Epochs (`run_training.sh` uses 15) |
+| `--no-amp` | off | Disable bf16 autocast (train in full fp32) |
+| `--num-workers` | 4 | Dataloader workers (`run_training.sh` uses 16) |
+| `--prefetch-factor` | 4 | Batches prefetched per worker (num-workers > 0) |
 | `--lr` | 1e-4 | Base LR (backbone & reference encoder use ×`--backbone-lr-mult`) |
 | `--num-queries` | 100 | Object queries (data has ≤9 instances/image) |
 | `--dec-layers` | 9 | Transformer decoder layers |
@@ -124,8 +174,11 @@ Saves `predictions.png`: image · reference · GT target instances · predicted 
 
 ```python
 out = model.predict(images, pixel_mask, reference,
-                    score_thresh=0.5, match_thresh=0.5)
+                    score_thresh=0.5, match_thresh=0.0)
 # out[i] -> {"masks": [n, H, W] bool, "scores": [n], "match_sim": [n]}
 ```
 Instances kept = foreground score > `score_thresh` **and** cosine similarity to
-the reference > `match_thresh`.
+the reference > `match_thresh`. `match_thresh` defaults to **0.0**: the
+embeddings are normalized, true-match sims center near +0.32 and non-match near
+−0.43 (separability AUC ~0.99), so 0.0 is the natural boundary. A higher cutoff
+like 0.5 sits *above* the match cluster and silently drops most true matches.

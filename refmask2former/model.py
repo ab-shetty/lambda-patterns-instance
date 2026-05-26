@@ -67,12 +67,17 @@ class RefMask2Former(nn.Module):
 
     @torch.no_grad()
     def predict(self, images, pixel_mask, reference, score_thresh=0.5,
-                match_thresh=0.5, mask_thresh=0.5):
+                match_thresh=0.0, mask_thresh=0.5):
         """Convenience inference: returns per-image matched instances.
 
         Returns a list (len B) of dicts with keys: masks [n, H, W] (bool),
         scores [n], match_sim [n]. Instances are those with foreground score >
         score_thresh AND cosine similarity to the reference > match_thresh.
+
+        match_thresh defaults to 0.0 — the orthogonality boundary for the
+        normalized embeddings. Empirically true-match sims center near +0.32 and
+        non-match near -0.43 (AUC ~0.99), so 0.0 separates them cleanly; the old
+        0.5 default sat above the match cluster and rejected most true matches.
         """
         self.eval()
         out = self.forward(images, pixel_mask, reference)

@@ -36,7 +36,7 @@ def parse_args():
     p.add_argument("--num-workers", type=int, default=4)
     p.add_argument("--max-records", type=int, default=0)
     p.add_argument("--score-thresh", type=float, default=0.5)
-    p.add_argument("--match-thresh", type=float, default=0.5)
+    p.add_argument("--match-thresh", type=float, default=0.0)
     p.add_argument("--iou-thresh", type=float, default=0.5)
     return p.parse_args()
 
@@ -50,11 +50,9 @@ def masks_iou(a, b):
     return inter / union.clamp(min=1)
 
 
-def main():
-    args = parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    ck = torch.load(args.checkpoint, map_location=device)
+def load_model(checkpoint, device):
+    """Rebuild RefMask2Former from a checkpoint's saved args and load weights."""
+    ck = torch.load(checkpoint, map_location=device)
     saved = ck.get("args", {})
     model = RefMask2Former(
         num_queries=saved.get("num_queries", 100),
@@ -66,23 +64,18 @@ def main():
         pretrained=False).to(device)
     model.load_state_dict(ck["model"])
     model.eval()
-    print(f"Loaded {args.checkpoint} (epoch {ck.get('epoch','?')})")
+    return model, ck
 
-    records = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir)
-    if args.max_records:
-        records = records.select(range(min(args.max_records, len(records))))
-    _, val_ds = build_datasets(records, image_max_size=args.image_max_size,
-                               ref_size=args.ref_size, train_split=args.train_split)
-    loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
-                        num_workers=args.num_workers,
-                        collate_fn=partial(collate_fn, size_divisible=32))
 
+def run_eval(model, loader, device, score_thresh=0.5, match_thresh=0.5,
+             iou_thresh=0.5, desc="eval"):
+    """Run the reference-conditioned eval loop; returns a metrics dict."""
     ious, tp, fp, fn = [], 0, 0, 0
     match_correct, match_total = 0, 0
     det_found, det_total = 0, 0
 
     with torch.no_grad():
-        for batch in tqdm(loader, desc="eval"):
+        for batch in tqdm(loader, desc=desc):
             images = batch["images"].to(device)
             pmask = batch["pixel_mask"].to(device)
             refs = batch["references"].to(device)
@@ -102,14 +95,14 @@ def main():
                 gt_match = tgt["ref_match"].to(device).bool()
 
                 # Class-agnostic detection recall (all instances).
-                fg = probs[b] > args.score_thresh
+                fg = probs[b] > score_thresh
                 if fg.any():
                     iou_all = masks_iou(gt_masks, pred_masks[b][fg])
-                    det_found += (iou_all.max(1).values >= args.iou_thresh).sum().item()
+                    det_found += (iou_all.max(1).values >= iou_thresh).sum().item()
                 det_total += g
 
                 # Reference-conditioned instances.
-                keep = (probs[b] > args.score_thresh) & (sim[b] > args.match_thresh)
+                keep = (probs[b] > score_thresh) & (sim[b] > match_thresh)
                 kept = pred_masks[b][keep]
                 gt_pos = gt_masks[gt_match]
                 ng = gt_pos.shape[0]
@@ -125,7 +118,7 @@ def main():
                 best_iou, best_k = iou.max(1)
                 matched_k = set()
                 for gi in range(ng):
-                    if best_iou[gi] >= args.iou_thresh and best_k[gi].item() not in matched_k:
+                    if best_iou[gi] >= iou_thresh and best_k[gi].item() not in matched_k:
                         tp += 1
                         matched_k.add(best_k[gi].item())
                         ious.append(best_iou[gi].item())
@@ -144,18 +137,56 @@ def main():
     precision = tp / max(tp + fp, 1)
     recall = tp / max(tp + fn, 1)
     f1 = 2 * precision * recall / max(precision + recall, 1e-9)
+    return {
+        "mean_iou": float(np.mean(ious)) if ious else 0.0,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "ref_acc": match_correct / max(match_total, 1),
+        "det_recall": det_found / max(det_total, 1),
+        "iou_thresh": iou_thresh,
+    }
 
+
+def print_metrics(m, title="Reference-conditioned instance segmentation"):
+    it = m["iou_thresh"]
     print("\n" + "=" * 60)
-    print("Reference-conditioned instance segmentation")
+    print(title)
     print("=" * 60)
-    print(f"Mean matched IoU:        {np.mean(ious) if ious else 0:.4f}")
-    print(f"Precision @IoU>={args.iou_thresh}:   {precision:.4f}")
-    print(f"Recall    @IoU>={args.iou_thresh}:   {recall:.4f}")
-    print(f"F1        @IoU>={args.iou_thresh}:   {f1:.4f}")
-    print(f"Ref-match accuracy:      {match_correct / max(match_total,1):.4f}")
-    print(f"Class-agnostic recall:   {det_found / max(det_total,1):.4f} "
+    print(f"Mean matched IoU:        {m['mean_iou']:.4f}")
+    print(f"Precision @IoU>={it}:   {m['precision']:.4f}")
+    print(f"Recall    @IoU>={it}:   {m['recall']:.4f}")
+    print(f"F1        @IoU>={it}:   {m['f1']:.4f}")
+    print(f"Ref-match accuracy:      {m['ref_acc']:.4f}")
+    print(f"Class-agnostic recall:   {m['det_recall']:.4f} "
           f"(all instances found, ignoring reference)")
     print("=" * 60)
+
+
+def main():
+    args = parse_args()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model, ck = load_model(args.checkpoint, device)
+    print(f"Loaded {args.checkpoint} (epoch {ck.get('epoch','?')})")
+
+    grayscale = ck.get("args", {}).get("grayscale", False)
+    if grayscale:
+        print("Checkpoint trained in grayscale mode -> evaluating in grayscale.")
+
+    records = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir)
+    if args.max_records:
+        records = records.select(range(min(args.max_records, len(records))))
+    _, val_ds = build_datasets(records, image_max_size=args.image_max_size,
+                               ref_size=args.ref_size, train_split=args.train_split,
+                               grayscale=grayscale)
+    loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.num_workers,
+                        collate_fn=partial(collate_fn, size_divisible=32))
+
+    metrics = run_eval(model, loader, device, score_thresh=args.score_thresh,
+                       match_thresh=args.match_thresh, iou_thresh=args.iou_thresh)
+    print_metrics(metrics)
 
 
 if __name__ == "__main__":
