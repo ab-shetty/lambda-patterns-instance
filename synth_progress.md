@@ -142,6 +142,74 @@ inst/img (synth ~8–11), bbox min-side med 102px@2048, area-frac p90 0.32 (synt
 0.18) — real is COARSER and wider-spread than synth, opposite the earlier
 "make it finer" direction.
 
+## 2026-05-27 — Kaggle 2×T4, cold-start, half-resolution (no warm-start)
+
+Environment moved off the Lambda box to a **Kaggle 2×Tesla T4 (15 GB each),
+4 vCPU** instance. Differences that matter for every command from here on:
+- CUDA only works after `export LD_LIBRARY_PATH=/usr/local/nvidia/lib64` — the
+  driver `libcuda.so` is not on the default loader path, and torch reports 0
+  GPUs without it (nvidia-smi lives in `/opt/bin`).
+- **4 vCPU, not 64** — generation must use `--workers 4`. Gen rate ~0.55 img/s;
+  500 images ≈ 15 min.
+- HF token is in `~/.bashrc` as `HF_TOKEN`; both `abshetty/floz-assets` (tiles)
+  and `abshetty/floz-synth-v5` (real-eval) are private and need it.
+- There is **no checkpoint** on this box (`checkpoints_v51/` does not exist, and
+  no `.pth` is on HF).
+
+Two deliberate changes this run:
+1. **Image size halved**: `--image-max-size 1024` (was 2048).
+2. **No warm-start**: dropped `--init-from` entirely. Per the user, "we should
+   never have been using a warm start."
+Plus one forced change: bs8 OOMs on a 15 GB T4 at 1024 (decoder masked
+cross-attention softmax), so **batch-size 4**.
+
+Dataset: `/tmp/synth_v58base_500` (canonical v58 recipe, seed 5858 → byte-identical
+data to v58_base). Gen log: `v58base_500_gen.log`. Train log:
+`v58base_1024_3ep.log`. ~7 min/epoch (~22 min total).
+
+- `ep0`: synth `0.1830`, real `0.1982`, div **`-0.0152`**
+- `ep1`: synth `0.2845`, real `0.2394`, div `+0.0451`
+- `ep2`: synth `0.2968`, real `0.2488`, div `+0.0479`
+
+### Interpretation — recontextualizes the whole divergence story
+Cold-start divergence is **tiny** (−0.015 → +0.048) versus the warm-started 2048
+runs (+0.25 → +0.33); at ep0 real actually *beats* synth. This strongly suggests
+the large historical divergence was substantially a **warm-start artifact**:
+initializing from the synth-pretrained `checkpoints_v51` meant the model already
+scored ~0.68 on synth but only ~0.40 on real, so the "+0.30 gap" was baked in
+*before* the dataset under test was ever trained on. Trained from scratch, synth
+and real climb together and stay near parity.
+
+CAVEAT: absolute IoU is low (synth ~0.30, real ~0.25) because 3 cold epochs on
+450 images is underfit. Low divergence under underfitting is weaker evidence than
+low divergence at high absolute IoU — the model may simply not have learned
+enough yet to exploit synth-specific shortcuts. Honest read: **no divergence
+explosion appears in the cold-start regime at 3 epochs** (encouraging for
+parity), but confirm by training longer to see whether a gap opens as synth IoU
+climbs.
+
+Benchmark note: `v58_base ep0 real_iou 0.4253` is **NOT comparable** to these
+numbers — it was warm-started, 2048px, bs8. Cold-start / 1024 / bs4 is a new
+regime; its ep2 real baseline to beat is now `0.2488`.
+
+### Exact commands used on the T4 box
+```bash
+export HF_TOKEN=...                       # from ~/.bashrc
+TILES=/root/.cache/huggingface/hub/datasets--abshetty--floz-assets/snapshots/6dfc52ececbe353f10324a761350b72d535861df/reference_tiles_curated
+
+python generate_synthetic_v5.py --n 500 --seed 5858 --tiles "$TILES" \
+  --out /tmp/synth_v58base_500 --workers 4 \
+  --dense-fill-scope instance --dense-fill-frac 0.45 --dense-fill-opacity 0.18 \
+  --mode-weights 65,5,30 --markup-overlay-prob 0.35 > v58base_500_gen.log 2>&1
+
+env LD_LIBRARY_PATH=/usr/local/nvidia/lib64 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MPLCONFIGDIR=/tmp/matplotlib \
+python train.py --local-data /tmp/synth_v58base_500 \
+  --image-max-size 1024 --batch-size 4 --epochs 3 --num-workers 4 --real-eval \
+  --checkpoint-dir /tmp/ck_v58base_1024_3ep --log-dir /tmp/log_v58base_1024_3ep \
+  > v58base_1024_3ep.log 2>&1
+```
+
 ## What changed in the generator
 Main file: `generate_synthetic_v5.py`
 
@@ -250,8 +318,14 @@ python scripts/build_review_pairs.py \
 ```
 
 ## What the next model should do
-Benchmark to beat is now **`v58_base ep0 real_iou = 0.4253`** (clean canonical
-recipe), not v53's 0.4009.
+NOTE (2026-05-27): the `v58_base ep0 real_iou = 0.4253` benchmark below was
+**warm-started** (`--init-from checkpoints_v51`), 2048px, bs8. The user has since
+dropped warm-start. In the new cold-start / 1024 / bs4 regime the comparable
+baseline is `ep2 real_iou = 0.2488` and divergence collapses to ~+0.05 (see the
+"2026-05-27 — Kaggle 2×T4" section). Pick the benchmark that matches your regime.
+
+Historical (warm-start) benchmark to beat was **`v58_base ep0 real_iou = 0.4253`**
+(clean canonical recipe), not v53's 0.4009.
 
 Do **not** keep searching the appearance/cue axis. The v58 ablations show
 grayscale, outline-removal, and rasterization-degradation all HURT, and instance
