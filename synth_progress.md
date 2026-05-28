@@ -500,3 +500,80 @@ CONFOUND: v61 bundled instance-scale + min-ink + furniture. Ablations launched t
 isolate which change drove the regression (instance-scale-only first). Knobs all
 default-OFF except where a run sets them, so this does not affect the v58/v60
 recipe.
+
+### `v61a` — instance-scale 0.2 ONLY (no min-ink), median 5 inst
+Stopped at ep5 (enough evidence). `/tmp/train_v61a_15ep.log`.
+- ep0 synth 0.270 real 0.121 div +0.149
+- ep1 synth 0.319 real 0.228 div +0.091
+- ep2 synth 0.448 real **0.256** div +0.192  (real peak)
+- ep5 synth 0.509 real 0.203 div +0.306
+**Coarsening alone is independently harmful**: synth climbs to 0.51 (easier),
+real peaks at only ~0.256 (below v60's 0.304) then declines, divergence grows
+toward +0.31. Confirms: matching real's low instance count makes synth EASIER and
+hurts real transfer. Instance-scale is NOT a useful lever in this direction;
+don't coarsen.
+
+### `v61b` — min-ink 0.35 ONLY (no coarsening), median 11 inst
+Full 15ep. `/tmp/train_v61b_15ep.log`, ckpt `/tmp/ck_v61b_15ep/best.pth`.
+Real curve: ep2 0.240, ep5 0.242, ep8 0.252, ep10 **0.256**, ep14 0.237; synth
+plateaus ~0.42; divergence ~+0.16-0.20. So **min-ink alone ≈ neutral-to-slightly
+worse** than v60 (real ~0.30): real lands ~0.24-0.26, a bit below v60. Combined
+with v61a, the v61 collapse to ~0.20 was BOTH changes stacking; neither helps.
+Net: instance-scale and min-ink are both dead ends for raising real_iou. v60
+(mono only, real 0.304) remains the best.
+
+## 2026-05-28 — PER-IMAGE REAL ERROR ANALYSIS (model = v61b best, ep14)
+Tool: `/tmp/per_image_real.py` (per-image `mean_gt_iou` + GT count, pred count,
+saturation), run with `PYTHONPATH=<repo>`. Worst real images extracted to
+`review_pairs/v61_samples/WORST_*.png`.
+
+### Dominant failure mode: massive OVER-PREDICTION (fragmentation)
+- Model predicts **30.9 instances/image on average vs GT 4.6 → 6.7x over-pred**
+  (median pred 27 vs GT 3).
+- `corr(pred_count, iou) = -0.45`: the more it predicts, the worse the IoU.
+- Worst 9 images (iou<0.15) average **38 preds for 6 GT**.
+
+### Worst images (iou, GT, pred, mono/col)
+- 0.033  GT3 pred52 col  Las Huertas page9_excerpt7   (clean elevation)
+- 0.054  GT2 pred40 MONO Las Huertas page2_excerpt1   (full floor plan)
+- 0.059  GT1 pred18 MONO Ceilhunt page11_excerpt1
+- 0.061  GT3 pred53 col  Las Huertas page5_excerpt6
+- 0.071  GT1 pred24 col  Markups 1075 E Walnut page4
+- 0.074  GT2 pred22 MONO Construction Documents page14
+- 0.084  GT5 pred50 col  Las Huertas page4_excerpt4
+Best images are nearly all single-region markup sheets (GT1): Walnut page6
+0.788, Topanga page4 0.675, Maple page8 0.680.
+
+### What the worst images look like (visual)
+- **Las Huertas p9 (elevation, worst):** one large lap-siding wall + one shingle
+  roof + garage door (GT3). The model SHATTERS the finely-textured siding/roof
+  into ~52 fragments — it splits along the fine repetitive texture that the real
+  annotator keeps as ONE instance.
+- **Las Huertas p2 (floor plan, mono):** only 2 material-pattern regions are
+  labeled, but the model fires 40 predictions — it proposes "pattern" in every
+  textured room / furniture / dimension-grid, unable to distinguish a LABELED
+  material region from ordinary plan line-work.
+
+### Key conclusions
+1. **Mono is now fully neutral**: MONO mean iou 0.298 vs COLORED 0.299. The mono
+   feature already closed the color axis; color is no longer a discriminator.
+   (Supersedes the earlier "color is a driver" framing for this model.)
+2. The real gap is **precision / over-segmentation**, not color and not (simply)
+   instance count. The model proposes far too many instances and fragments large
+   real regions.
+3. This explains the coarsening paradox: coarse + min-ink made synth regions
+   large but internally SMOOTH/uniform — the opposite of real's large-but-finely-
+   textured regions (lap siding, shingles, hatching) — so the model got even less
+   practice holding a textured region together as one instance, and fragmented
+   real worse.
+4. Implied levers (untested, for next session):
+   a. Synth needs **large single instances with real-like fine internal texture**
+      (siding rows, shingle courses, hatching) that must stay whole — NOT solid
+      dense fill, and NOT split into many pieces.
+   b. Synth needs **textured NEGATIVES**: rooms / furniture / grids that are
+      textured but are NOT labeled instances, so the model stops firing "pattern"
+      on every textured region (the p2 floor-plan failure).
+   c. Eval-side sanity check: raise inference score threshold / add NMS to cut
+      the 6.7x over-prediction (band-aid, but quantifies how much is calibration
+      vs representation).
+PAUSED here per user before acting on these.
