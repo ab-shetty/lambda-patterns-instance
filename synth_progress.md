@@ -345,3 +345,158 @@ not "make the synth image prettier":
 
 If a new run improves visuals but cannot beat `v58_base` on epoch-0 real transfer,
 it is solving the wrong axis. Use the clean `v58_base` recipe as the data default.
+
+## 2026-05-28 — GH200 cold-start baseline + monochrome axis
+
+Environment back on the Lambda GH200 (480GB, 64 vCPU). Confirmed cold-start is
+the regime (no `--init-from`), per "we should never have been using a warm
+start." ~43s/epoch at 2048px/bs8. HF token in `~/.bashrc`; both private datasets
+download instantly to the same snapshot hashes as before.
+
+### CRITICAL framing correction (from the user)
+Divergence is NOT a data-volume problem. The correct reading of synth>real IoU:
+- `synth_iou > real_iou` ⟺ **synth is EASIER than real** (model learns synth
+  shortcuts that don't transfer).
+- If synth were as hard as / harder than real, real_iou would track or EXCEED
+  synth_iou (the ideal case).
+- This is independent of dataset size — more easy synth stays easy. Generating
+  more images will NOT close the gap. The lever is making synth *harder* /
+  removing easiness cues that are absent in real.
+Do not frame the gap as "needs more data." (My earlier capacity-limited
+hypothesis was wrong; the user corrected it.)
+
+### `v59_cold_15ep` — cold-start baseline (no mono, old code)
+Dataset `/tmp/synth_v59_500` (v58 canonical recipe, seed 5858).
+Train log `/tmp/train_v59_cold_15ep.log`. Best real **0.2931** (ep6); real
+plateaus 0.26–0.29 and NEVER breaks 0.30. synth plateaus ~0.45. Divergence
+oscillates +0.10–0.19 (mean eps6-14 ≈ +0.154) — much better than warm-start's
++0.25–0.33, but a clear residual gap remains. Note: v59 was already 60%
+incidentally-monochrome (sat<8) because random tile pick favors the 28/50 gray
+tiles and the 0.18-opacity fill is light.
+
+### Monochrome easiness axis (NEW generator feature)
+Finding: **14/28 (50%) of the real eval plans are monochrome** (mean HSV
+saturation < 8) — pure B&W line-art. Synth almost never rendered *truly*
+color-free images: even its low-sat images carried light colored dense-fills,
+and tile selection wasn't constrained to gray tiles. Color was acting as a free
+instance-boundary cue absent on half the real set ⟹ a synth-easiness driver.
+
+New code in `generate_synthetic_v5.py` (default-ON at 0.5):
+- `--mono-image-prob` (default 0.5): per-image, render pure B&W.
+- `load_curated_tiles` tags each tile `is_gray` via `sat_mean < TILE_GRAY_SAT_MAX`
+  (8.0). 28/50 curated tiles are grayscale.
+- Mono images: restrict tile pool to gray tiles, use gray dense-fills
+  (`MONO_FILL_GRAY_RANGE` 70–205) instead of `FILL_PALETTE`, and gray markup.
+- Verified: mono=1.0 → all images sat≤0.6; mono=0.0 → colored preserved
+  (sat up to 24, matching real colored plans).
+
+### `v60_mono50_15ep` — same cold-start recipe + mono 0.5
+Dataset `/tmp/synth_v60_mono50_500` (seed 5858, `--mono-image-prob 0.5` → 81%
+mono in practice, vs v59's incidental 60%; the colored half is unreliable so
+total mono overshoots the knob). Train log `/tmp/train_v60_mono50_15ep.log`.
+
+| Epoch | v59 real | v60 real | v59 div | v60 div |
+|-------|----------|----------|---------|---------|
+| 3  | 0.1745 | 0.2829 | +0.1238 | +0.0625 |
+| 6  | 0.2931 | 0.2957 | +0.1013 | +0.1021 |
+| 7  | 0.2809 | 0.3044 | +0.1333 | +0.1174 |
+| 8  | 0.2831 | 0.3026 | +0.1453 | +0.1088 |
+| 10 | 0.2589 | 0.3034 | +0.1827 | +0.1278 |
+| 12 | 0.2716 | 0.3037 | +0.1785 | +0.1376 |
+| 13 | 0.2751 | 0.3039 | +0.1708 | +0.1380 |
+| 14 | 0.2755 | 0.2979 | +0.1729 | +0.1408 |
+
+Best real: v59 0.2931 → v60 **0.3044**. v60 broke 0.30 at 5 epochs; v59 never
+did. Mean real eps6-14 ~0.278 → ~0.298 (+0.02). Mean div ~+0.154 → ~+0.130
+(−0.02). **Both axes moved the right way, but modestly** — consistent with v59
+already being 60% mono. Color was a contributing easiness cue, NOT the dominant
+one. Residual gap (real ~0.30 vs synth ~0.44, div ~+0.14) remains.
+
+### Next axis to attack: instance granularity
+Biggest untested distributional gap: real has **~3 coarse instances/image**,
+synth has **~8–11 finer ones** (real bbox min-side med ~102px@2048, area-frac
+p90 0.32 vs synth 0.18 — real is COARSER and wider-spread). Many small synth
+instances = an easier, more regular decomposition than real's few large coarse
+regions. `--split-scale 0` was a no-op before because instance count is baked
+into the architectural decomposition (surfaces/facets), not the splitting
+machinery — so reducing count needs a change at the scene-builder level
+(coarser facet/room/bay decomposition), not just lowering split probs.
+This is a generation-side structural change, and per the easiness framing it
+should make synth HARDER (fewer, coarser instances) → predict real_iou rises
+toward synth_iou.
+
+## 2026-05-28 (cont.) — `--instance-scale` knob + floorplan density findings
+
+### `--instance-scale` (NEW, default 1.0 = unchanged)
+Implements the instance-granularity coarsening. Float in [0,1]: 1.0 = current
+fine decomposition, lower = coarser toward real (~3 inst/img). Effects:
+- Elevation: caps wall bands (`_inst_cap(3,1)`).
+- Rowhouse: caps units (`_inst_cap(5,3)`).
+- Roof plan: merges same-material facets into one instance with prob
+  (1-scale) via the existing merge branch — visually faithful because
+  `render_roofplan_post` still draws internal ridge/hip lines; also biases the
+  footprint toward single-wing rect.
+- Scales all interleave/bay split probs via `_apply_split_scale(scale)`.
+- Floor plans deliberately untouched (5% of recipe; cutting coverage = blank
+  rooms = unrealistic).
+Measured instance counts (40-img samples, canonical recipe + mono 0.5):
+`scale 1.0 → median 14`, `0.5 → 8`, `0.2 → ~6`, `0.0 → median 4` (mean 4.9).
+Real is median ~3, so **scale ~0.0–0.2 matches real**. Visual check (in
+`review_pairs/v61_samples/`): coarse elevation = clean single-material facade;
+coarse roof = one merged material region with ridge/hip lines = reads exactly
+like a real roof plan. Both look realistic at scale 0.2. NOT yet trained — run
+pending fill-density decision below.
+
+### Floorplan non-pattern crowding (user: "non-pattern spaces too sparse")
+Changes made in `render_floorplan_pre`: fixture prob 0.55→0.85 (+a 2nd fixture
+in big rooms), furniture count now scales with room AREA (~1 cluster/160px cell,
+cap 16) instead of flat 1-3, furniture outline bolder (width 2, darker).
+
+BUT instrumenting the actual image showed the real driver is NOT empty rooms:
+a mono floorplan had 15 pattern / 5 non-pattern rooms (2 furn-eligible, which DO
+get furniture). The big "empty white" areas are **pattern regions with too-faint
+fill**: measured **44% of instances have interior ink < 0.10** (near-white),
+median ink **0.139** — vs real median **~0.53** (per the fill-density notes).
+Worst in mono mode: light gray fill (`--dense-fill-opacity 0.18`) over low-ink
+grayscale tiles ≈ white. So the sparse appearance is a FILL-DENSITY gap, not a
+furniture gap.
+
+OPEN DECISION (raised with user): close the ink-coverage gap toward real ~0.53,
+e.g. (a) run with higher `--dense-fill-opacity`/`--dense-fill-frac`, or (b) add a
+per-region minimum-ink floor in code (mono-aware). NOTE this interacts with the
+v58 finding that clean/light recipe was best for warm-start transfer — but that
+was warm-start; cold-start + visual-resemblance goal may favor denser fills.
+Decide before the next training run.
+
+Artifacts for review: `review_pairs/v61_samples/` (coarse_mix_*, floorplan_*,
+REAL_* extracted real plans).
+
+### `v61_coarse_15ep` — coarse + dense, STRONG NEGATIVE RESULT
+Dataset `/tmp/synth_v61_coarse_500`: canonical recipe + `--mono-image-prob 0.5
+--instance-scale 0.2 --dense-fill-min-ink 0.35` (median 5 inst/img vs v60's ~14,
+real ~3). Same cold-start 2048/bs8/15ep. Train log `/tmp/train_v61_coarse_15ep.log`.
+
+| Epoch | v60 real | v61 real | v60 div | v61 div |
+|-------|----------|----------|---------|---------|
+| 6  | 0.2957 | 0.2008 | +0.1021 | +0.3307 |
+| 7  | 0.3044 | 0.2306 | +0.1174 | +0.3106 |
+| 14 | 0.2979 | 0.1841 | +0.1408 | +0.3743 |
+
+synth_iou JUMPED 0.44→0.56 (best 0.5633), real DROPPED 0.30→~0.20, divergence
+BLEW UP to +0.37 (warm-start territory). **Coarsening + dense-fill made synth
+EASIER and hurt real transfer** — opposite of the hypothesis. Big solid coarse
+regions are trivial to segment (synth_iou up), and either (a) the model never
+learns the fine boundary detection real plans need, and/or (b) the min-ink floor
+over-filled regions into a uniform gray that no longer resembles real (real plans
+are white + line work + some shading, NOT mostly gray-filled — I over-corrected
+the 'sparse' complaint).
+
+LESSON: matching real's LOW instance count (coarsening) does NOT make synth
+harder — it makes it EASIER for the segmentation objective. The earlier
+"real is coarser, match it" intuition was wrong for this task. Instance count is
+not a straightforward easiness lever.
+
+CONFOUND: v61 bundled instance-scale + min-ink + furniture. Ablations launched to
+isolate which change drove the regression (instance-scale-only first). Knobs all
+default-OFF except where a run sets them, so this does not affect the v58/v60
+recipe.

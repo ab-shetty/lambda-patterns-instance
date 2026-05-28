@@ -143,6 +143,23 @@ def _apply_split_scale(scale):
     ELEVATION_INTERLEAVE_PROB *= scale
     ROOFPLAN_INTERLEAVE_PROB *= scale
 
+# Instance granularity. Real plans carry ~3 coarse instances/image; synth ~8-11
+# finer ones (a structural easiness cue: many small regular regions are an easier
+# decomposition than a few large coarse ones). INSTANCE_SCALE in [0,1]: 1.0 = the
+# current fine decomposition, lower = coarser toward real. It (a) caps elevation
+# wall bands, (b) merges same-material roof facets into one instance with prob
+# (1-scale) -- visually faithful since render_roofplan_post keeps the internal
+# ridge/hip lines -- (c) biases roof footprints toward a single wing, and (d)
+# scales all interleave/bay split probs (via _apply_split_scale). Floor plans are
+# left alone (5% of the recipe; cutting their coverage would leave blank rooms,
+# which real plans don't have).
+INSTANCE_SCALE = 1.0
+
+def _inst_cap(fine, coarse):
+    """Integer count interpolated between coarse (INSTANCE_SCALE=0) and fine
+    (INSTANCE_SCALE=1)."""
+    return int(round(coarse + (fine - coarse) * INSTANCE_SCALE))
+
 # Dense/colored fills: real instances are densely filled (median interior ink
 # coverage ~0.53 — colored/shaded elevation materials), while raw quilted-hatch
 # synth instances are sparse (median ~0.11, thin lines on white). Render a
@@ -161,6 +178,22 @@ FILL_PALETTE = [
     (181, 150, 124), (160, 120, 100), (138, 110, 96), (120, 130, 120),
     (158, 168, 176), (200, 190, 170), (146, 134, 120), (110, 122, 134),
 ]
+# Fraction of images rendered as pure black-and-white (no color). ~50% of the
+# real eval plans are monochrome line-art; synth otherwise always injects color
+# via FILL_PALETTE and colored tiles, giving the model a color boundary cue that
+# is absent on those real plans. Mono images use only grayscale tiles, gray
+# dense fills, and gray markup.
+MONO_IMAGE_PROB = 0.5
+MONO_FILL_GRAY_RANGE = (70, 205)  # poché-dark to light-hatch gray for dense fills
+# Saturation below this (mean HSV S, 0-255) marks a tile as grayscale/B&W.
+TILE_GRAY_SAT_MAX = 8.0
+# Minimum interior ink coverage for a dense-filled region. Real instances have
+# median interior ink ~0.53; raw synth (esp. low-ink grayscale tiles in mono
+# mode, with light fills) leaves ~44% of regions near-white (<0.10). This floor
+# lifts only the too-faint regions (darkening their fill toward this coverage)
+# so pattern regions read as filled like real plans; already-dense regions are
+# untouched. 0.0 = off.
+DENSE_FILL_MIN_INK = 0.35
 
 # ============================================================
 # Helpers
@@ -198,6 +231,7 @@ def load_curated_tiles(tiles_dir=None):
             path = os.path.join(tiles_dir, info['tile_file'])
             arr = np.array(Image.open(path).convert('L'))
             ink_density = float((255 - arr).mean()) / 255.0
+            sat_mean = float(np.array(Image.open(path).convert('HSV'))[..., 1].mean())
             tiles.append({
                 'path': path,
                 'name': info['tile_file'],
@@ -205,6 +239,7 @@ def load_curated_tiles(tiles_dir=None):
                 'image_key': img_key,
                 'pattern_key': pat_key,
                 'ink_density': ink_density,
+                'is_gray': sat_mean < TILE_GRAY_SAT_MAX,
             })
             cat_id += 1
     return tiles
@@ -740,19 +775,27 @@ def render_floorplan_pre(d: ImageDraw.ImageDraw, meta: dict, rng: random.Random)
     for room in meta['rooms']:
         if room in pat_set:
             continue
-        if rng.random() < 0.55:
-            _draw_fixture(d, room, rng)
-        # Add 1-3 small furniture/closet outlines per non-pattern room.
         rx0, ry0, rx1, ry1 = room
         rw_, rh_ = rx1 - rx0, ry1 - ry0
+        # Real plans crowd non-pattern rooms with fixtures + furniture; draw 1-2
+        # fixtures (a second one only in larger rooms) so they don't read empty.
+        if rng.random() < 0.85:
+            _draw_fixture(d, room, rng)
+        if rw_ > 260 and rh_ > 220 and rng.random() < 0.55:
+            _draw_fixture(d, room, rng)
+        # Add small furniture/closet/appliance outlines. Count scales with room
+        # AREA (~one cluster per 160px cell) so large non-pattern rooms fill up
+        # like real plans instead of sitting as big empty boxes.
         if rw_ > 120 and rh_ > 120:
-            for _ in range(rng.randint(1, 3)):
+            n_cells = (rw_ * rh_) // (160 * 160)
+            n_furn = int(min(16, max(2, n_cells * rng.uniform(0.8, 1.3))))
+            for _ in range(n_furn):
                 fw = rng.randint(40, max(50, min(rw_ // 2, 140)))
                 fh = rng.randint(30, max(40, min(rh_ // 2, 110)))
                 fx = rng.randint(rx0 + 8, max(rx0 + 9, rx1 - fw - 8))
                 fy = rng.randint(ry0 + 8, max(ry0 + 9, ry1 - fh - 8))
                 d.rectangle([fx, fy, fx + fw, fy + fh],
-                            outline=(70, 70, 70), width=1)
+                            outline=(45, 45, 45), width=2)
                 # Optional internal hatch / cross / divider
                 kind = rng.choice(['plain', 'cross', 'hdiv', 'vdiv', 'circle'])
                 if kind == 'cross':
@@ -1052,10 +1095,14 @@ def render_elevation_decorations(d: ImageDraw.ImageDraw, meta: dict,
     d.text((30, H - 28), 'SCALE: 1/4" = 1\'-0"', fill=(60, 60, 60), font=sub_f)
 
 
-def render_markup_overlay(img: Image.Image, meta, rng: random.Random, mode: str):
+def render_markup_overlay(img: Image.Image, meta, rng: random.Random, mode: str,
+                          mono: bool = False):
     """Add review/markup artifacts found in the real excerpts."""
     if rng.random() >= MARKUP_OVERLAY_PROB:
         return img
+    # Keep monochrome images color-free: render markup in dark gray instead of
+    # the red/magenta/blue palette.
+    markup_colors = ([(60, 60, 60, 175)] if mono else MARKUP_COLORS)
 
     W, H = img.size
     overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -1079,7 +1126,7 @@ def render_markup_overlay(img: Image.Image, meta, rng: random.Random, mode: str)
         cx = rng.randint(max(24, rx0), min(W - 24, rx1))
         cy = rng.randint(max(24, ry0), min(H - 24, ry1))
         rad = rng.randint(24, 54)
-        color = rng.choice(MARKUP_COLORS)
+        color = rng.choice(markup_colors)
         if rng.random() < 0.75:
             d.ellipse([cx - rad, cy - rad, cx + rad, cy + rad],
                       fill=color, outline=color[:3] + (210,), width=4)
@@ -1240,6 +1287,9 @@ def build_rowhouse_elevation_scene(rng: random.Random, tiles):
     than the generic detached-house builder."""
     items = []
     n_units = rng.randint(3, 5)
+    # Coarsen toward real: fewer units = fewer instances; a 3-unit excerpt reads
+    # as real as a 5-unit one.
+    n_units = min(n_units, _inst_cap(5, 3))
     unit_w = rng.randint(250, 360)
     floor_h = rng.randint(175, 225)
     stories = 2
@@ -1540,6 +1590,8 @@ def build_elevation_scene(rng: random.Random, tiles):
             n_bands = rng.choice([2, 2, 3, 3])
         else:
             n_bands = rng.choice([1, 2, 2, 3])
+        # Coarsen toward real: cap bands (3 at scale 1 -> 1 at scale 0).
+        n_bands = max(1, min(n_bands, _inst_cap(3, 1)))
         # Choose distinct tiles per band
         wall_tiles = []
         used_paths = set()
@@ -1950,7 +2002,14 @@ def build_roofplan_scene(W: int, H: int, rng: random.Random, tiles):
     ox, oy = margin_x, margin_y
     ow, oh = W - 2 * margin_x, H - 2 * margin_y
 
-    shape = rng.choice(['rect', 'L', 'L', 'T', 'T', 'U', 'U', 'U'])
+    # Coarsen toward real: bias the footprint toward a single-wing rect (fewer
+    # facets/instances). At scale 1 the full multi-wing shape mix is used; as
+    # scale->0 it collapses to 'rect'. Multi-wing L/T/U roofs are still realistic,
+    # just rarer when coarse.
+    if rng.random() > INSTANCE_SCALE:
+        shape = 'rect'
+    else:
+        shape = rng.choice(['rect', 'L', 'L', 'T', 'T', 'U', 'U', 'U'])
     params = {}
     if shape == 'L':
         params['cw'] = rng.randint(int(ow * 0.30), int(ow * 0.55))
@@ -1992,8 +2051,13 @@ def build_roofplan_scene(W: int, H: int, rng: random.Random, tiles):
     # v5.1: emit each facet as its OWN instance. Real plans keep adjacent
     # same-material facets (meeting at a ridge/hip) as separate annotations, so
     # do NOT union same-tile facets into one blob.
+    # Coarsen toward real: with prob (1-INSTANCE_SCALE), merge adjacent
+    # same-material facets into one instance. render_roofplan_post still draws the
+    # internal ridge/hip lines, so a merged region reads exactly like a real roof
+    # plan (one material, ridge lines inside) rather than many per-facet tiles.
+    merge_facets = rng.random() > INSTANCE_SCALE
     items = []
-    if NO_MERGE_SAME_MATERIAL:
+    if NO_MERGE_SAME_MATERIAL and not merge_facets:
         for i, tile in enumerate(facet_tiles):
             poly_int = [(int(round(x)), int(round(y))) for x, y in all_facets[i]]
             items.extend(_surface_items(
@@ -2652,6 +2716,16 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
     mode_names = ['elevation', 'freeform', 'roof_plan']
     mode = rng.choices(mode_names, weights=[MODE_WEIGHTS[m] for m in mode_names])[0]
 
+    # Pure black-and-white image: draw only from grayscale tiles so the rendered
+    # patterns carry no color. Matches the ~50% of real plans that are monochrome.
+    mono = rng.random() < MONO_IMAGE_PROB
+    if mono:
+        gray_tiles = [t for t in tiles_pool if t.get('is_gray')]
+        if len(gray_tiles) >= 3:
+            tiles_pool = gray_tiles
+        else:
+            mono = False  # not enough B&W tiles to build a scene; fall back
+
     if mode == 'elevation':
         items, meta = build_elevation_scene(rng, tiles_pool)
         if not items or meta is None:
@@ -2806,7 +2880,11 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         # toward real plans without forcing every dense instance to fully solid.
         if DENSE_COLOR_FILL and role != 'roof':
             if path not in cat_style:
-                cat_style[path] = rng.choice(FILL_PALETTE)
+                if mono:
+                    g = rng.randint(*MONO_FILL_GRAY_RANGE)
+                    cat_style[path] = (g, g, g)
+                else:
+                    cat_style[path] = rng.choice(FILL_PALETTE)
             color = cat_style[path]
             dense_bias = float(item.get('dense_bias', 0.0))
             dense_opacity = min(1.0, DENSE_FILL_OPACITY
@@ -2827,6 +2905,20 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
                 else:
                     crop = base
                 crop = ImageChops.multiply(crop, hatch)
+            # Minimum-ink floor, applied to EVERY pattern region (dense or not):
+            # lift too-faint regions (low-ink tiles, esp. mono, and non-dense
+            # regions) toward real interior coverage so none render near-white.
+            # Regions already at/above the floor are untouched. Blends toward a
+            # dark shade of the region color, preserving hatch texture.
+            if DENSE_FILL_MIN_INK > 0.0:
+                cur_lum = float(np.asarray(crop.convert('L')).mean())
+                target_lum = 255.0 * (1.0 - DENSE_FILL_MIN_INK)
+                if cur_lum > target_lum:
+                    dark = tuple(int(c * 0.45) for c in color)
+                    dark_lum = 0.299 * dark[0] + 0.587 * dark[1] + 0.114 * dark[2]
+                    if cur_lum > dark_lum:
+                        op = min(1.0, (cur_lum - target_lum) / (cur_lum - dark_lum))
+                        crop = Image.blend(crop, Image.new('RGB', crop.size, dark), op)
         layer = Image.new('RGB', (W, H), (255, 255, 255))
         layer.paste(crop, (bx0, by0))
         img.paste(layer, mask=Image.fromarray(pm * 255))
@@ -2873,7 +2965,7 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         render_floorplan_post(ImageDraw.Draw(img), meta, rng, W, H)
     elif mode == 'roof_plan':
         render_roofplan_post(ImageDraw.Draw(img), meta, rng, W, H)
-    img = render_markup_overlay(img, meta, rng, mode)
+    img = render_markup_overlay(img, meta, rng, mode, mono=mono)
     img = apply_document_effects(img, rng, mode)
 
     return img, {
@@ -2904,7 +2996,9 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  dense_fill_frac=None, dense_fill_opacity=None,
                  dense_fill_scope=None, no_dense_fill=False,
                  mode_weights=None, elevation_excerpt_shift=None,
-                 markup_overlay_prob=None, split_scale=None):
+                 markup_overlay_prob=None, split_scale=None,
+                 mono_image_prob=None, instance_scale=None,
+                 dense_fill_min_ink=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -2912,6 +3006,7 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global DRAW_INSTANCE_OUTLINE, DENSE_COLOR_FILL, DENSE_FILL_FRAC
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
+    global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
     if smoke:
         _apply_smoke_overrides()
     if no_outline:
@@ -2930,6 +3025,13 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         ELEVATION_EXCERPT_SHIFT_FRAC = elevation_excerpt_shift
     if markup_overlay_prob is not None:
         MARKUP_OVERLAY_PROB = markup_overlay_prob
+    if mono_image_prob is not None:
+        MONO_IMAGE_PROB = mono_image_prob
+    if instance_scale is not None:
+        INSTANCE_SCALE = instance_scale
+        _apply_split_scale(instance_scale)  # coarser surfaces + fewer splits
+    if dense_fill_min_ink is not None:
+        DENSE_FILL_MIN_INK = dense_fill_min_ink
     if split_scale is not None:
         _apply_split_scale(split_scale)
     _WORKER_TILES = load_curated_tiles(tiles_dir)
@@ -2980,6 +3082,20 @@ def main():
                          '(0 = no added splitting)')
     ap.add_argument('--markup-overlay-prob', type=float, default=None,
                     help='probability of adding markup-style circles/notes')
+    ap.add_argument('--mono-image-prob', type=float, default=None,
+                    help='fraction of images rendered as pure black-and-white '
+                         '(grayscale tiles only, gray fills/markup); ~50%% of real '
+                         'plans are monochrome')
+    ap.add_argument('--instance-scale', type=float, default=None,
+                    help='instance granularity in [0,1]: 1.0 = current fine '
+                         'decomposition, lower = coarser toward real (~3 inst/img). '
+                         'Caps elevation bands & rowhouse units, merges same-material '
+                         'roof facets, biases roof footprints to single-wing, and '
+                         'scales all split probs.')
+    ap.add_argument('--dense-fill-min-ink', type=float, default=None,
+                    help='minimum interior ink coverage for dense-filled regions '
+                         '(real median ~0.53). Lifts too-faint regions so they do '
+                         'not render near-white; 0 = off.')
     args = ap.parse_args()
 
     if args.smoke:
@@ -2987,6 +3103,7 @@ def main():
     global DRAW_INSTANCE_OUTLINE, DENSE_COLOR_FILL, DENSE_FILL_FRAC
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE, MODE_WEIGHTS
     global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
+    global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
     if args.no_outline:
         DRAW_INSTANCE_OUTLINE = False
     if args.no_dense_fill:
@@ -3006,6 +3123,18 @@ def main():
         ELEVATION_EXCERPT_SHIFT_FRAC = args.elevation_excerpt_shift
     if args.markup_overlay_prob is not None:
         MARKUP_OVERLAY_PROB = args.markup_overlay_prob
+    if args.mono_image_prob is not None:
+        MONO_IMAGE_PROB = args.mono_image_prob
+    if not 0.0 <= MONO_IMAGE_PROB <= 1.0:
+        raise ValueError('--mono-image-prob must be in [0, 1]')
+    if args.instance_scale is not None:
+        INSTANCE_SCALE = args.instance_scale
+    if not 0.0 <= INSTANCE_SCALE <= 1.0:
+        raise ValueError('--instance-scale must be in [0, 1]')
+    if args.dense_fill_min_ink is not None:
+        DENSE_FILL_MIN_INK = args.dense_fill_min_ink
+    if not 0.0 <= DENSE_FILL_MIN_INK <= 1.0:
+        raise ValueError('--dense-fill-min-ink must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_FRAC <= 1.0:
         raise ValueError('--dense-fill-frac must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_OPACITY <= 1.0:
@@ -3032,7 +3161,8 @@ def main():
             args.dense_fill_frac, args.dense_fill_opacity,
             args.dense_fill_scope, args.no_dense_fill,
             MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
-            args.split_scale,
+            args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
+            args.dense_fill_min_ink,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -3053,7 +3183,8 @@ def main():
                   args.dense_fill_frac, args.dense_fill_opacity,
                   args.dense_fill_scope, args.no_dense_fill,
                   MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
-                  args.split_scale,
+                  args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
+                  args.dense_fill_min_ink,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):
