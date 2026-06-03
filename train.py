@@ -57,6 +57,14 @@ def parse_args():
                    help="Limit number of records (0 = all). Useful for quick runs.")
     # Training
     p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--grad-accum", type=int, default=1,
+                   help="accumulate grads over N micro-batches before stepping; "
+                        "effective batch = batch-size * grad-accum. Lets a 12GB "
+                        "GPU train at 2048px/bs1 with an effective batch of 8.")
+    p.add_argument("--freeze-backbone-bn", action="store_true",
+                   help="freeze backbone BatchNorm (eval running stats, no grad). "
+                        "Standard for detection; required for valid bs1/grad-accum "
+                        "since per-forward BN over 1 image is noise.")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)
@@ -132,6 +140,26 @@ def _roc_auc(scores, labels):
 
 
 @torch.no_grad()
+def freeze_backbone_bn(model):
+    """Put every BatchNorm in the backbone into eval mode and freeze its affine
+    params, so it uses fixed pretrained running stats regardless of batch size."""
+    base = model.module if isinstance(model, nn.DataParallel) else model
+    for m in base.backbone.modules():
+        if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+            m.eval()
+            for p in m.parameters():
+                p.requires_grad_(False)
+
+
+def set_backbone_bn_eval(model):
+    """Re-assert eval() on backbone BN after a model.train() call (which would
+    otherwise flip them back to training mode)."""
+    base = model.module if isinstance(model, nn.DataParallel) else model
+    for m in base.backbone.modules():
+        if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+            m.eval()
+
+
 def evaluate(model, loader, criterion, device, use_amp=False):
     model.eval()
     total_loss, n = 0.0, 0
@@ -307,6 +335,16 @@ def main():
         print(f"Warm-started model weights from {args.init_from} "
               f"(epoch {ck.get('epoch','?')}); fresh optimizer + epoch 0")
 
+    if args.freeze_backbone_bn:
+        # Standard DETR/Mask2Former choice: keep the pretrained ImageNet BN
+        # running stats fixed instead of re-estimating them from tiny detection
+        # batches. Essential when grad-accum forces bs1 forwards (per-forward BN
+        # over 1 image is pure noise). Params frozen here so build_optimizer
+        # (which filters requires_grad) excludes them.
+        freeze_backbone_bn(model)
+        print("Froze backbone BatchNorm (eval mode + no grad) — batch-size-"
+              "independent backbone, valid under grad-accum / bs1.")
+
     matcher = HungarianMatcher(
         cost_class=args.class_weight, cost_mask=args.mask_weight,
         cost_dice=args.dice_weight, num_points=args.num_points)
@@ -349,20 +387,26 @@ def main():
     print(f"\nTraining for {args.epochs} epochs...")
     for epoch in range(start_epoch, args.epochs):
         model.train()
+        if args.freeze_backbone_bn:
+            set_backbone_bn_eval(model)
         t0 = time.time()
         running = 0.0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch} [train]")
+        accum = max(1, args.grad_accum)
+        optimizer.zero_grad()
+        n_steps = len(train_loader)
         for step, batch in enumerate(pbar):
             batch = move_batch(batch, device)
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_amp):
                 outputs = model(batch["images"], batch["pixel_mask"], batch["references"])
                 loss, parts = criterion(outputs, batch["targets"])
 
-            optimizer.zero_grad()
-            loss.backward()
-            if args.clip_grad > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
-            optimizer.step()
+            (loss / accum).backward()
+            if (step + 1) % accum == 0 or (step + 1) == n_steps:
+                if args.clip_grad > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
+                optimizer.step()
+                optimizer.zero_grad()
             scheduler.step()
 
             running += loss.item()

@@ -195,6 +195,50 @@ TILE_GRAY_SAT_MAX = 8.0
 # untouched. 0.0 = off.
 DENSE_FILL_MIN_INK = 0.35
 
+# Per-image probability of injecting UNLABELED textured "negatives" (material
+# swatches, dimension grids, section hatching) into background space. Real plans
+# contain textured line-work that annotators do NOT label as material instances;
+# synth historically labeled EVERY textured region, so the model learned
+# "texture => instance" and massively over-predicts on real (per-image analysis:
+# 30.9 preds vs 4.6 GT, 6.7x; fires 'pattern' on every textured room/grid). These
+# carry texture but no annotation, teaching that texture alone is insufficient.
+# 0.0 = off (default; preserves the canonical recipe).
+NEGATIVE_TEXTURE_PROB = 0.0
+
+# Per-elevation probability of rendering a "real-style" excerpt that mimics the
+# real plans the model fails HARDEST on (Las Huertas / Ceilhunt elevations): one
+# large WHOLE material region per surface (no band-splitting, no interleave),
+# FAINT subtle texture (not dense saturated fill), and NO dark instance outline,
+# on lots of white space. Direct response to the per-image failure analysis
+# (model shatters a single real siding wall into ~50 fragments). Default-OFF.
+REALSTYLE_PROB = 0.0
+
+
+def _realstyle_scene_overrides():
+    """Force whole-region elevations for a real-style image: single building,
+    one band per wall, no interleave/bay splits. Returns the saved globals so
+    the caller can restore them right after build_elevation_scene."""
+    global ROWHOUSE_ELEVATION_PROB, INSTANCE_SCALE
+    global BAY_SPLIT_PROB, FLOORPLAN_INTERLEAVE_PROB
+    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB
+    saved = dict(rh=ROWHOUSE_ELEVATION_PROB, isc=INSTANCE_SCALE,
+                 bay=BAY_SPLIT_PROB, fp=FLOORPLAN_INTERLEAVE_PROB,
+                 el=ELEVATION_INTERLEAVE_PROB, rf=ROOFPLAN_INTERLEAVE_PROB)
+    ROWHOUSE_ELEVATION_PROB = 0.0   # clean single house, not a rowhouse strip
+    INSTANCE_SCALE = 0.0            # 1 band per wall (whole region)
+    BAY_SPLIT_PROB = FLOORPLAN_INTERLEAVE_PROB = 0.0
+    ELEVATION_INTERLEAVE_PROB = ROOFPLAN_INTERLEAVE_PROB = 0.0
+    return saved
+
+
+def _restore_scene_overrides(saved):
+    global ROWHOUSE_ELEVATION_PROB, INSTANCE_SCALE
+    global BAY_SPLIT_PROB, FLOORPLAN_INTERLEAVE_PROB
+    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB
+    ROWHOUSE_ELEVATION_PROB = saved['rh']; INSTANCE_SCALE = saved['isc']
+    BAY_SPLIT_PROB = saved['bay']; FLOORPLAN_INTERLEAVE_PROB = saved['fp']
+    ELEVATION_INTERLEAVE_PROB = saved['el']; ROOFPLAN_INTERLEAVE_PROB = saved['rf']
+
 # ============================================================
 # Helpers
 # ============================================================
@@ -2709,6 +2753,87 @@ def _draw_fixture(d, room, rng, return_bbox=False):
 
 
 # ============================================================
+# Unlabeled textured negatives
+# ============================================================
+
+def _negative_patch(pw, ph, tiles_pool, rng, mono):
+    """Build a pw x ph textured patch that will NOT be annotated. Mix of:
+    real material quilt (hard negative: identical texture to labeled
+    instances), dimension/furniture grid, and section hatching. Lines are
+    drawn on the patch canvas so they clip to the patch."""
+    kind = rng.random()
+    if kind < 0.5 and tiles_pool:
+        # Hard negative: same quilted material texture as labeled instances,
+        # but no label. Forces the model to use context, not just "texture".
+        tile_meta = rng.choice(tiles_pool)
+        try:
+            tile_arr = np.array(Image.open(tile_meta['path']).convert('RGB'))
+            scale = rng.uniform(0.40, 0.85)
+            nh = max(40, int(tile_arr.shape[0] * scale))
+            nw = max(40, int(tile_arr.shape[1] * scale))
+            tile_arr = np.array(Image.fromarray(tile_arr).resize((nw, nh),
+                                                                 Image.BILINEAR))
+            try:
+                tex = quilt_synthesize(tile_arr, ph, pw, rng)
+            except Exception:
+                ry = math.ceil(ph / tile_arr.shape[0])
+                rx = math.ceil(pw / tile_arr.shape[1])
+                tex = np.tile(tile_arr, (ry, rx, 1))[:ph, :pw]
+            return Image.fromarray(tex).resize((pw, ph), Image.BILINEAR)
+        except Exception:
+            pass  # fall through to a line pattern
+    patch = Image.new('RGB', (pw, ph), (255, 255, 255))
+    d = ImageDraw.Draw(patch)
+    shade = rng.randint(60, 150)
+    col = (shade, shade, shade)
+    if kind < 0.8:
+        # Dimension / furniture grid
+        step = rng.randint(14, 40)
+        for x in range(0, pw, step):
+            d.line([(x, 0), (x, ph)], fill=col, width=1)
+        for y in range(0, ph, step):
+            d.line([(0, y), (pw, y)], fill=col, width=1)
+    else:
+        # 45-degree section hatching
+        step = rng.randint(8, 22)
+        for off in range(-ph, pw, step):
+            d.line([(off, ph), (off + ph, 0)], fill=col, width=1)
+    return patch
+
+
+def _inject_negative_textures(img, occupied, tiles_pool, rng, W, H, mono):
+    """Paste a few UNLABELED textured regions into background (unoccupied)
+    space. occupied is updated so labeled instances and negatives never
+    collide. Default-OFF (NEGATIVE_TEXTURE_PROB=0)."""
+    if NEGATIVE_TEXTURE_PROB <= 0.0 or rng.random() >= NEGATIVE_TEXTURE_PROB:
+        return
+    n_neg = rng.randint(1, 4)
+    placed = 0
+    d = ImageDraw.Draw(img)
+    for _ in range(n_neg * 6):
+        if placed >= n_neg:
+            break
+        pw = max(60, min(int(rng.uniform(0.05, 0.22) * W), W - 4))
+        ph = max(60, min(int(rng.uniform(0.05, 0.22) * H), H - 4))
+        if pw >= W or ph >= H:
+            continue
+        px = rng.randint(0, W - pw)
+        py = rng.randint(0, H - ph)
+        if float(occupied[py:py + ph, px:px + pw].mean()) > 0.03:
+            continue  # would collide with a labeled instance
+        patch = _negative_patch(pw, ph, tiles_pool, rng, mono)
+        img.paste(patch, (px, py))
+        # Some negatives get a thin border (legend swatch / callout box), which
+        # makes them look even more like a candidate instance => harder negative.
+        if rng.random() < 0.5:
+            s = rng.randint(20, 90)
+            d.rectangle([px, py, px + pw - 1, py + ph - 1],
+                        outline=(s, s, s), width=rng.randint(1, 2))
+        occupied[py:py + ph, px:px + pw] = 1
+        placed += 1
+
+
+# ============================================================
 # Compose one synthetic image
 # ============================================================
 
@@ -2726,10 +2851,18 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         else:
             mono = False  # not enough B&W tiles to build a scene; fall back
 
+    # Real-style: mimic the hard real elevations (whole faint outline-free walls).
+    realstyle = (mode == 'elevation') and (rng.random() < REALSTYLE_PROB)
+
     if mode == 'elevation':
-        items, meta = build_elevation_scene(rng, tiles_pool)
+        if realstyle:
+            _rs_saved = _realstyle_scene_overrides()
+            items, meta = build_elevation_scene(rng, tiles_pool)
+            _restore_scene_overrides(_rs_saved)
+        else:
+            items, meta = build_elevation_scene(rng, tiles_pool)
         if not items or meta is None:
-            mode = 'freeform'
+            mode = 'freeform'; realstyle = False
 
     if mode == 'elevation':
         # Tight crop: canvas size from building bbox + margins for grid + dim chains.
@@ -2878,7 +3011,13 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         # Dense colored fill: blend toward a muted base material color, then
         # multiply the hatch over it. This lets us tune interior ink coverage
         # toward real plans without forcing every dense instance to fully solid.
-        if DENSE_COLOR_FILL and role != 'roof':
+        if realstyle and role != 'roof':
+            # Real-style faint wall: lighten the quilt toward white so only a
+            # subtle siding/brick texture remains (matches the cream, near-white
+            # real facades), no dense color and no min-ink darkening.
+            white = Image.new('RGB', crop.size, (252, 252, 252))
+            crop = Image.blend(crop, white, rng.uniform(0.55, 0.80))
+        elif DENSE_COLOR_FILL and role != 'roof':
             if path not in cat_style:
                 if mono:
                     g = rng.randint(*MONO_FILL_GRAY_RANGE)
@@ -2923,8 +3062,10 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         layer.paste(crop, (bx0, by0))
         img.paste(layer, mask=Image.fromarray(pm * 255))
 
-        # Pattern boundary line. Off when ablating the outline shortcut.
-        if item.get('draw_outline', DRAW_INSTANCE_OUTLINE):
+        # Pattern boundary line. Off when ablating the outline shortcut, and off
+        # for real-style images (real material regions have no drawn boundary —
+        # the model must infer it from the texture, as on the failing real plans).
+        if item.get('draw_outline', DRAW_INSTANCE_OUTLINE) and not realstyle:
             ImageDraw.Draw(img).line(poly + [poly[0]], fill=(20, 20, 20), width=2)
 
         wants_windows = item.get('has_windows', role == 'wall')
@@ -2960,6 +3101,10 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
             'role': role,
         })
         next_ann_id += 1
+
+    # Unlabeled textured negatives: texture present, no annotation. Teaches the
+    # model that texture alone is not an instance (cuts real over-prediction).
+    _inject_negative_textures(img, occupied, tiles_pool, rng, W, H, mono)
 
     if mode == 'freeform':
         render_floorplan_post(ImageDraw.Draw(img), meta, rng, W, H)
@@ -2998,7 +3143,8 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  mode_weights=None, elevation_excerpt_shift=None,
                  markup_overlay_prob=None, split_scale=None,
                  mono_image_prob=None, instance_scale=None,
-                 dense_fill_min_ink=None):
+                 dense_fill_min_ink=None, negative_texture_prob=None,
+                 realstyle_prob=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -3007,6 +3153,7 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
+    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB
     if smoke:
         _apply_smoke_overrides()
     if no_outline:
@@ -3032,6 +3179,10 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         _apply_split_scale(instance_scale)  # coarser surfaces + fewer splits
     if dense_fill_min_ink is not None:
         DENSE_FILL_MIN_INK = dense_fill_min_ink
+    if negative_texture_prob is not None:
+        NEGATIVE_TEXTURE_PROB = negative_texture_prob
+    if realstyle_prob is not None:
+        REALSTYLE_PROB = realstyle_prob
     if split_scale is not None:
         _apply_split_scale(split_scale)
     _WORKER_TILES = load_curated_tiles(tiles_dir)
@@ -3096,6 +3247,16 @@ def main():
                     help='minimum interior ink coverage for dense-filled regions '
                          '(real median ~0.53). Lifts too-faint regions so they do '
                          'not render near-white; 0 = off.')
+    ap.add_argument('--negative-texture-prob', type=float, default=None,
+                    help='per-image prob of injecting UNLABELED textured negatives '
+                         '(material swatches, dimension grids, hatching) into '
+                         'background. Teaches that texture alone != instance, to '
+                         'cut real over-prediction; 0 = off (default).')
+    ap.add_argument('--realstyle-prob', type=float, default=None,
+                    help='per-elevation prob of rendering a "real-style" excerpt: '
+                         'one WHOLE faint outline-free material region per surface '
+                         '(no banding/interleave), mimicking the real elevations '
+                         'the model fragments worst; 0 = off (default).')
     args = ap.parse_args()
 
     if args.smoke:
@@ -3104,6 +3265,7 @@ def main():
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE, MODE_WEIGHTS
     global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
+    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB
     if args.no_outline:
         DRAW_INSTANCE_OUTLINE = False
     if args.no_dense_fill:
@@ -3135,6 +3297,14 @@ def main():
         DENSE_FILL_MIN_INK = args.dense_fill_min_ink
     if not 0.0 <= DENSE_FILL_MIN_INK <= 1.0:
         raise ValueError('--dense-fill-min-ink must be in [0, 1]')
+    if args.negative_texture_prob is not None:
+        NEGATIVE_TEXTURE_PROB = args.negative_texture_prob
+    if not 0.0 <= NEGATIVE_TEXTURE_PROB <= 1.0:
+        raise ValueError('--negative-texture-prob must be in [0, 1]')
+    if args.realstyle_prob is not None:
+        REALSTYLE_PROB = args.realstyle_prob
+    if not 0.0 <= REALSTYLE_PROB <= 1.0:
+        raise ValueError('--realstyle-prob must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_FRAC <= 1.0:
         raise ValueError('--dense-fill-frac must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_OPACITY <= 1.0:
@@ -3162,7 +3332,8 @@ def main():
             args.dense_fill_scope, args.no_dense_fill,
             MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
             args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
-            args.dense_fill_min_ink,
+            args.dense_fill_min_ink, args.negative_texture_prob,
+            args.realstyle_prob,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -3184,7 +3355,8 @@ def main():
                   args.dense_fill_scope, args.no_dense_fill,
                   MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
                   args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
-                  args.dense_fill_min_ink,
+                  args.dense_fill_min_ink, args.negative_texture_prob,
+                  args.realstyle_prob,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):

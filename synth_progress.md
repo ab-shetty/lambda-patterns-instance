@@ -577,3 +577,87 @@ Best images are nearly all single-region markup sheets (GT1): Walnut page6
       the 6.7x over-prediction (band-aid, but quantifies how much is calibration
       vs representation).
 PAUSED here per user before acting on these.
+
+## 2026-06-03 — RTX 5070 12GB box; real-style generation; over-prediction confirmed
+
+### New hardware regime (see also CLAUDE memory, now lost with container)
+Moved to **RTX 5070 12GB GPU, 28 vCPU, only 15GB system RAM**. Forced changes:
+- **2048px OOMs the 12GB GPU** (decoder per-query mask interpolate) even at bs2 →
+  default to `--image-max-size 1024`.
+- 15GB RAM: `--num-workers 12 --prefetch-factor 4` triggers the system OOM-killer.
+  Use `--num-workers 4 --prefetch-factor 2`.
+- Working train cmd: `--image-max-size 1024 --batch-size 4 --num-workers 4
+  --prefetch-factor 2` → ~47s/epoch, GPU ~11.3/12GB.
+- **Parity check shortened to 10 epochs** (was 15), per user "for time".
+- Generation: `--workers 24-28`, ~3 img/s, 500 imgs ≈ 3 min.
+- These 1024 numbers are NOT comparable to the GH200 2048 numbers (v59/v60). The
+  T4 v58base 1024 run (real 0.2488) is the comparable prior baseline.
+
+### NORTH STAR (user, explicit): divergence is the target
+**"If synth is exactly like real, synth val IoU should be exactly near real IoU."**
+Judge every experiment by **divergence = synth_iou − real_iou → 0**, NOT real_iou
+alone. div>0 ⟺ synth is EASIER than real. A change that raises real but raises
+synth more (bigger divergence) is making synth LESS real. Report synth, real, div
+every time.
+
+### Baselines on this box (1024/bs4, cold-start, mono 0.5, seed 5858 = v60 recipe)
+- 15ep: real best **0.237** (ep6), synth →0.476, **div →+0.27**.
+- best.pth per-image diagnostic: **mean_pred 30.4 vs mean_GT 4.6 = 6.6x
+  over-prediction** (matches the old 6.7x), `corr(pred,iou)=-0.45`.
+
+### NEW NEGATIVE results this session
+- **Textured negatives** (`--negative-texture-prob`, NEW knob): unlabeled material
+  quilt/grid/hatch patches in background. Hoped to cut over-prediction. CONFIRMED
+  DEAD END via per_image diagnostic: mean_pred 30.4→**33.6 (worse)**, real
+  0.259→0.215. Not a "blind-metric" win — it genuinely doesn't help. Knob stays
+  default-OFF.
+- **`--split-scale 0`** (no interleave): killed at ep4, real 0.155 (≪0.237). Hurts.
+- **2048 apples-to-apples** (added `--grad-accum`; bs1@2048 fits): div drops to
+  **+0.12** (v60's regime) ⟹ the 1024 +0.27 is a RESOLUTION PENALTY on tiny real
+  instances, not a data regression. But trainable-BN@bs1 cripples backbone (synth
+  fell to 0.31) and 2048 eval OOMs on the biggest near-square real plans ⟹ 2048
+  not reliably runnable on 12GB.
+- **`--freeze-backbone-bn`** (added to train.py, standard DETR choice, needed to
+  make grad-accum/bs1 valid): reliably triggers a SPURIOUS WSL2 "CUDA driver
+  error: out of memory" (with 11.5GB free) — abandoned. NOT a real OOM.
+
+### KEY metric caveat (why over-prediction analysis needs per_image)
+`evaluate()` `mean_gt_iou` is recall-of-best-prediction per GT (train.py:159-177),
+so it is BLIND to over-prediction. Use `scripts/per_image_real.py` (NEW, in-repo)
+to measure per-image pred-count / over-pred ratio. Raising score-thr / NMS CANNOT
+improve mean_gt_iou (removing preds only lowers each GT's best). The gap is a
+representation issue (fragmentation), confirmed.
+
+### Per-image worst real images (re-extracted to `real_worst/`, I looked at them)
+All FAINT, OUTLINE-FREE, WHOLE large material regions on white space:
+- idx6 Las Huertas p9 (GT3, pred32): ONE cream siding wall across the facade +
+  ONE shingle roof + garage — model shatters into ~32-52 fragments.
+- idx0 Las Huertas p2 (GT2, pred40): mostly-white floor plan, only 2 material
+  regions labeled; model fires on every textured room/grid/furniture.
+- idx13 Ceilhunt (GT11): two faint MONO line-art elevations w/ leader-line
+  material callouts ("wood siding", "light gray brick tile").
+Synth is the OPPOSITE: saturated dense fills + dark outlines + band/interleave
+splits.
+
+### NEW FEATURE (user-directed): `--realstyle-prob` — train NOT yet run (GPU died)
+Per-elevation prob to render a "real-style" excerpt matching the hard real cases:
+single building, **1 whole band per wall** (no interleave/bay split), **faint**
+wall (lighten quilt toward white, keep subtle texture, no dense color, no min-ink),
+**NO instance outline**, + real CAD furniture (grid bubbles, dim chains). This is
+the conclusion-4a recipe (whole + faint-fine-texture + no outline) applied as a
+FRACTION, NOT global coarsening (which always hurt). Visually validated — close
+match to idx6/idx13 (2-6 instances vs usual 8-15). Dataset
+`/tmp/synth_realstyle_500` (prob 0.5, seed 5858) was generating.
+NEXT: train it 1024/bs4 10ep, judge by DIVERGENCE, re-run per_image_real.py to
+check mean_pred dropped below 30.4.
+
+### GPU DIED (why container is being recreated)
+After many CUDA-process kills, the WSL2 driver leaked VRAM: even the exact
+baseline command that ran 15 epochs OOMs immediately, reporting impossible numbers
+(24.69 GiB allocated on a 12GiB card) while nvidia-smi shows 11.5GB free. Needs a
+container/GPU reset. Generation (CPU) was unaffected.
+
+### All NEW knobs are default-OFF (canonical recipe unchanged)
+generator: `--negative-texture-prob`, `--realstyle-prob`.
+train.py: `--grad-accum N`, `--freeze-backbone-bn`.
+new file: `scripts/per_image_real.py` (per-image real diagnostic).
