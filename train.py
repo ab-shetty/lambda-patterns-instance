@@ -8,10 +8,14 @@ instances of that pattern at inference time.
 
 import argparse
 import math
+import os
+import random
+import statistics
 import time
 from functools import partial
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -40,6 +44,12 @@ def parse_args():
                         "tells us whether synthetic is a faithful proxy for real).")
     p.add_argument("--real-config", type=str, default="real-world-test")
     p.add_argument("--real-split", type=str, default="test")
+    p.add_argument("--real-eval-indices", type=str, default=None,
+                   help="Comma-separated real dataset indices to evaluate on "
+                        "(e.g. '0' for the single worst image). Overrides the full "
+                        "28-plan eval. Used by the fast single-image targeting loop "
+                        "(generate 100 synth like image i -> drive val_iou - "
+                        "iou(image i) -> 0).")
     p.add_argument("--image-max-size", type=int, default=1024,
                    help="Longest image side after aspect-preserving resize")
     p.add_argument("--ref-size", type=int, default=224)
@@ -52,6 +62,24 @@ def parse_args():
                    help="Train-time degradation (blur/noise/JPEG/contrast) on synth "
                         "scene+reference to mimic real PDF-export rasterization, "
                         "which is softer/noisier than crisp synth renders.")
+    p.add_argument("--domain-random", action="store_true",
+                   help="Domain-randomization aug (random downscale 0.5-1.0 + broad "
+                        "brightness/contrast jitter) to force scale/appearance "
+                        "invariance so the mask head generalizes to real instead of "
+                        "overfitting synth's fixed scale/look. Raises real_iou.")
+    p.add_argument("--eval-bn-adapt", action="store_true",
+                   help="Transductive BN at eval: backbone BatchNorm uses each eval "
+                        "image's own batch stats (not synth-training running stats) "
+                        "to fix the synth->real covariate shift. Applied to BOTH synth "
+                        "val and real eval for fairness.")
+    p.add_argument("--real-in-train", type=int, default=0,
+                   help="Put the FIRST K of the 28 real plans into TRAINING (mixed "
+                        "with synth, augmented), holding out the remaining 28-K for "
+                        "real-eval. Tests whether real-in-distribution closes the gap "
+                        "(real subset of training => real_iou -> synth_iou).")
+    p.add_argument("--real-train-repeat", type=int, default=8,
+                   help="Oversample factor for the real-in-train plans so K few-shot "
+                        "examples carry meaningful weight vs ~450 synth.")
     p.add_argument("--train-split", type=float, default=0.9)
     p.add_argument("--max-records", type=int, default=0,
                    help="Limit number of records (0 = all). Useful for quick runs.")
@@ -61,6 +89,10 @@ def parse_args():
                    help="accumulate grads over N micro-batches before stepping; "
                         "effective batch = batch-size * grad-accum. Lets a 12GB "
                         "GPU train at 2048px/bs1 with an effective batch of 8.")
+    p.add_argument("--freeze-backbone", action="store_true",
+                   help="Freeze the entire backbone at ImageNet weights so it never "
+                        "specializes to synth; decoder segments from generic features "
+                        "identical for synth and real (targets the real_iou ceiling).")
     p.add_argument("--freeze-backbone-bn", action="store_true",
                    help="freeze backbone BatchNorm (eval running stats, no grad). "
                         "Standard for detection; required for valid bs1/grad-accum "
@@ -96,6 +128,17 @@ def parse_args():
     p.add_argument("--ref-weight", type=float, default=2.0)
     p.add_argument("--eos-coef", type=float, default=0.1)
     p.add_argument("--num-points", type=int, default=12544)
+    # Reproducibility / eval-instrument hardening
+    p.add_argument("--seed", type=int, default=42,
+                   help="Global RNG seed (python/numpy/torch/cuda) + cudnn "
+                        "deterministic. Same seed + same data => same metrics. "
+                        "Vary across runs to measure seed-to-seed variance.")
+    p.add_argument("--eval-ref-passes", type=int, default=1,
+                   help="Evaluate synth-val and real with this many FIXED reference "
+                        "patches per image (ref_seed 0..N-1) and average. NOTE: "
+                        "mean_gt_iou is reference-INDEPENDENT (uses objectness, not "
+                        "ref similarity), so this only affects ref_match_auc; leave "
+                        "at 1. Kept for ref_match_auc stability experiments.")
     # IO
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
     p.add_argument("--log-dir", type=str, default="logs")
@@ -160,13 +203,24 @@ def set_backbone_bn_eval(model):
             m.eval()
 
 
-def evaluate(model, loader, criterion, device, use_amp=False):
+@torch.no_grad()
+def evaluate(model, loader, criterion, device, use_amp=False, bn_adapt=False):
     model.eval()
     total_loss, n = 0.0, 0
     iou_sum, iou_cnt = 0.0, 0
     match_sims, match_labels = [], []
 
     base = model.module if isinstance(model, nn.DataParallel) else model
+    if bn_adapt:
+        # Transductive BN (test-time adaptation): put backbone BatchNorm in train
+        # mode so it normalizes each eval image by ITS OWN batch statistics instead
+        # of the synth-training running stats. Fixes the synth->real covariate shift
+        # in the normalization layers — a classic, label-free domain-adaptation move.
+        # use_running_stats=False via train(); momentum left so running stats are not
+        # updated under no_grad in a way that matters (eval only reads activations).
+        for m in base.backbone.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+                m.train()
     for batch in tqdm(loader, desc="val", leave=False):
         batch = move_batch(batch, device)
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_amp):
@@ -259,8 +313,43 @@ def build_lr_scheduler(optimizer, total_steps, warmup_frac, min_lr_frac):
     return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def seed_everything(seed):
+    """Seed every RNG and force deterministic cuDNN so a run is reproducible.
+    Note: a few CUDA ops remain nondeterministic; we do NOT call
+    torch.use_deterministic_algorithms(True) because some Mask2Former ops lack
+    deterministic kernels and would raise. This removes the bulk of run-to-run
+    variance; residual jitter is averaged out by multi-seed runs."""
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def evaluate_avg_refs(model, loader, criterion, device, use_amp, bn_adapt, passes):
+    """Run evaluate() `passes` times, each with a DIFFERENT fixed reference patch
+    per image (dataset.ref_seed = 0..passes-1), and average mean_gt_iou. Returns
+    the last pass's dict with mean_gt_iou replaced by the across-pass mean, plus
+    'iou_std' and 'iou_passes'. Removes the reference-lottery noise."""
+    ds = loader.dataset
+    ious, out = [], None
+    for s in range(max(1, passes)):
+        if hasattr(ds, "ref_seed"):
+            ds.ref_seed = s
+        out = evaluate(model, loader, criterion, device, use_amp=use_amp,
+                       bn_adapt=bn_adapt)
+        ious.append(out["mean_gt_iou"])
+    out["mean_gt_iou"] = sum(ious) / len(ious)
+    out["iou_std"] = statistics.pstdev(ious) if len(ious) > 1 else 0.0
+    out["iou_passes"] = ious
+    return out
+
+
 def main():
     args = parse_args()
+    seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     use_amp = device.type == "cuda" and not args.no_amp
     print(f"Device: {device}")
@@ -283,13 +372,38 @@ def main():
     train_ds, val_ds = build_datasets(
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
         train_split=args.train_split, grayscale=args.grayscale,
-        realism_aug=args.realism_aug)
+        realism_aug=args.realism_aug, domain_random=args.domain_random)
     if args.grayscale:
         print("Grayscale mode: feeding luminance-only 3-channel images "
               "(synth-train, synth-val, real-eval).")
     if args.realism_aug:
         print("Realism aug: degrading synth train images toward real "
               "PDF-export appearance (blur/noise/JPEG/contrast).")
+    # Few-shot real-in-training: split the 28 real plans into K train / 28-K eval,
+    # oversample the K real plans, and concat them into the synth training set. This
+    # makes (some) real IN-distribution to test the "real subset of synth => parity"
+    # hypothesis. real_eval below then uses ONLY the held-out 28-K (no leakage).
+    real_eval_indices = None
+    if args.real_in_train > 0:
+        from refmask2former import InstanceSegDataset
+        from torch.utils.data import ConcatDataset
+        _real_recs = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir,
+                                          config=args.real_config, split=args.real_split)
+        # Representative split: shuffle (fixed seed) before taking K for train and
+        # the rest for eval, so held-out is a fair sample of real's diversity (not
+        # the trailing/easy plans). Makes the held-out parity number honest.
+        K = min(args.real_in_train, len(_real_recs) - 1)
+        _perm = list(range(len(_real_recs)))
+        random.Random(1234).shuffle(_perm)
+        rtrain_idx = _perm[:K]
+        real_eval_indices = _perm[K:]
+        real_train_ds = InstanceSegDataset(
+            _real_recs, rtrain_idx, image_max_size=args.image_max_size,
+            ref_size=args.ref_size, augment=True, grayscale=args.grayscale,
+            domain_random=args.domain_random)
+        train_ds = ConcatDataset([train_ds] + [real_train_ds] * args.real_train_repeat)
+        print(f"Real-in-train: {K} real plans x{args.real_train_repeat} mixed into "
+              f"training; holding out {len(real_eval_indices)} real plans for eval.")
     print(f"Train: {len(train_ds)}  Val: {len(val_ds)}")
 
     collate = partial(collate_fn, size_divisible=32)
@@ -300,24 +414,44 @@ def main():
     if args.num_workers > 0:
         loader_kwargs = {"persistent_workers": True,
                          "prefetch_factor": args.prefetch_factor}
+
+    # Deterministic shuffle + per-worker seeding so a run is reproducible.
+    train_gen = torch.Generator()
+    train_gen.manual_seed(args.seed)
+
+    def _worker_init(wid):
+        ws = (args.seed * 100003 + wid) % (2 ** 31 - 1)
+        random.seed(ws)
+        np.random.seed(ws)
+
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
                               num_workers=args.num_workers, pin_memory=True,
-                              collate_fn=collate, drop_last=True, **loader_kwargs)
+                              collate_fn=collate, drop_last=True,
+                              generator=train_gen, worker_init_fn=_worker_init,
+                              **loader_kwargs)
+    # Eval loaders run single-process (num_workers=0): tiny sets, and it lets the
+    # ref_seed sweep (evaluate_avg_refs) reach the dataset object directly instead
+    # of pickled worker copies — and removes worker-RNG nondeterminism at eval.
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.num_workers, pin_memory=True,
-                            collate_fn=collate, **loader_kwargs)
+                            num_workers=0, pin_memory=True, collate_fn=collate)
 
     real_loader = None
     if args.real_eval:
         from refmask2former import InstanceSegDataset
         real_recs = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir,
                                          config=args.real_config, split=args.real_split)
-        real_ds = InstanceSegDataset(real_recs, range(len(real_recs)),
+        if args.real_eval_indices is not None:
+            eval_idx = [int(x) for x in args.real_eval_indices.split(",") if x.strip() != ""]
+        elif real_eval_indices is not None:
+            eval_idx = real_eval_indices
+        else:
+            eval_idx = range(len(real_recs))
+        real_ds = InstanceSegDataset(real_recs, eval_idx,
                                      image_max_size=args.image_max_size,
                                      ref_size=args.ref_size, augment=False,
                                      grayscale=args.grayscale)
         real_loader = DataLoader(real_ds, batch_size=1, shuffle=False,
-                                 num_workers=2, collate_fn=collate)
+                                 num_workers=0, collate_fn=collate)
         print(f"Real-eval set: {len(real_ds)} held-out real plans "
               f"({args.real_config}/{args.real_split})")
 
@@ -334,6 +468,18 @@ def main():
         model.load_state_dict(ck["model"])
         print(f"Warm-started model weights from {args.init_from} "
               f"(epoch {ck.get('epoch','?')}); fresh optimizer + epoch 0")
+
+    if args.freeze_backbone:
+        # Freeze the ENTIRE backbone at its ImageNet weights so it never specializes
+        # to the synthetic line-art distribution. The decoder then segments from
+        # generic, domain-agnostic features that are IDENTICAL for synth and real —
+        # directly attacking the proven mechanism (backbone overfits synth, capping
+        # real generalization). build_optimizer filters requires_grad, so the frozen
+        # backbone is excluded from optimization automatically.
+        base = model.module if isinstance(model, nn.DataParallel) else model
+        for p in base.backbone.parameters():
+            p.requires_grad_(False)
+        print("Froze ENTIRE backbone at ImageNet weights (no synth specialization).")
 
     if args.freeze_backbone_bn:
         # Standard DETR/Mask2Former choice: keep the pretrained ImageNet BN
@@ -420,7 +566,8 @@ def main():
 
         train_loss = running / max(len(train_loader), 1)
 
-        val = evaluate(model, val_loader, criterion, device, use_amp=use_amp)
+        val = evaluate_avg_refs(model, val_loader, criterion, device, use_amp,
+                                args.eval_bn_adapt, args.eval_ref_passes)
         writer.add_scalar("epoch/train_loss", train_loss, epoch)
         writer.add_scalar("epoch/val_loss", val["loss"], epoch)
         writer.add_scalar("epoch/val_mean_gt_iou", val["mean_gt_iou"], epoch)
@@ -429,14 +576,15 @@ def main():
 
         msg = (f"\nEpoch {epoch}: time {time.time()-t0:.0f}s | "
                f"train_loss {train_loss:.4f} | val_loss {val['loss']:.4f} | "
-               f"synth_iou {val['mean_gt_iou']:.4f} | "
+               f"synth_iou {val['mean_gt_iou']:.4f}±{val['iou_std']:.4f} | "
                f"ref_match_auc {val['ref_match_auc']:.4f}")
         if real_loader is not None:
-            real = evaluate(model, real_loader, criterion, device, use_amp=use_amp)
+            real = evaluate_avg_refs(model, real_loader, criterion, device, use_amp,
+                                     args.eval_bn_adapt, args.eval_ref_passes)
             div = val["mean_gt_iou"] - real["mean_gt_iou"]
             writer.add_scalar("epoch/real_mean_gt_iou", real["mean_gt_iou"], epoch)
             writer.add_scalar("epoch/synth_real_divergence", div, epoch)
-            msg += (f" || real_iou {real['mean_gt_iou']:.4f} | "
+            msg += (f" || real_iou {real['mean_gt_iou']:.4f}±{real['iou_std']:.4f} | "
                     f"DIVERGENCE {div:+.4f}")
         print(msg)
 

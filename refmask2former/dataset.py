@@ -40,8 +40,11 @@ def render_instance_mask(segmentation, height, width):
     return mask
 
 
-def sample_reference_box(mask, min_size=128, max_size=512):
-    """Random box fully inside a single instance mask. Returns (x, y, w, h)."""
+def sample_reference_box(mask, min_size=128, max_size=512, rng=None):
+    """Random box fully inside a single instance mask. Returns (x, y, w, h).
+    Pass `rng` (a random.Random) to make the box DETERMINISTIC (eval); None uses
+    the global RNG (training)."""
+    r = rng if rng is not None else random
     coords = np.argwhere(mask > 0)
     if len(coords) == 0:
         return (0, 0, 32, 32)
@@ -51,8 +54,8 @@ def sample_reference_box(mask, min_size=128, max_size=512):
     max_size = max(min(max_size, int(pw * 0.7), int(ph * 0.7)), min_size)
 
     for _ in range(200):
-        size = int(min_size + (max_size - min_size) * (random.random() ** 0.5))
-        cy, cx = coords[random.randint(0, len(coords) - 1)]
+        size = int(min_size + (max_size - min_size) * (r.random() ** 0.5))
+        cy, cx = coords[r.randint(0, len(coords) - 1)]
         x = int(np.clip(cx - size // 2, 0, mask.shape[1] - size))
         y = int(np.clip(cy - size // 2, 0, mask.shape[0] - size))
         if mask[y:y + size, x:x + size].mean() == 1.0:
@@ -61,8 +64,8 @@ def sample_reference_box(mask, min_size=128, max_size=512):
     for frac in (0.6, 0.5, 0.4, 0.3, 0.2):
         tw, th = max(min_size, int(pw * frac)), max(min_size, int(ph * frac))
         for _ in range(50):
-            x = random.randint(x0, max(x0, x1 - tw))
-            y = random.randint(y0, max(y0, y1 - th))
+            x = r.randint(x0, max(x0, x1 - tw))
+            y = r.randint(y0, max(y0, y1 - th))
             if mask[y:y + th, x:x + tw].mean() == 1.0:
                 return (x, y, tw, th)
 
@@ -157,7 +160,7 @@ def _normalize_chw(img_uint8):
 class InstanceSegDataset(Dataset):
     def __init__(self, records, indices, image_max_size=1024, ref_size=224,
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
-                 realism_aug=False):
+                 realism_aug=False, domain_random=False):
         self.records = records
         self.indices = list(indices)
         self.image_max_size = image_max_size
@@ -167,6 +170,13 @@ class InstanceSegDataset(Dataset):
         self.max_patch = max_patch
         self.grayscale = grayscale
         self.realism_aug = realism_aug
+        self.domain_random = domain_random
+        # When not augmenting (val / real eval), the reference patch is chosen
+        # DETERMINISTICALLY per image so the metric measures the MODEL, not a
+        # random "reference lottery" (the dominant epoch-to-epoch noise source).
+        # ref_seed selects WHICH fixed reference; the eval harness sweeps it over
+        # several values and averages for a robust, low-variance number.
+        self.ref_seed = 0
 
     def __len__(self):
         return len(self.indices)
@@ -189,12 +199,19 @@ class InstanceSegDataset(Dataset):
         masks = [render_instance_mask(a["segmentation"], h0, w0) for a in anns]
         cats = [a.get("category_name", "pattern") for a in anns]
 
-        # Pick a target pattern and a reference patch cropped from one of its instances.
+        # Pick a target pattern and a reference patch cropped from one of its
+        # instances. Training (augment) uses the global RNG for reference variety;
+        # eval (not augment) uses a per-image deterministic RNG keyed on (ref_seed,
+        # i) so the SAME reference is used every epoch/run -> reproducible metric.
+        ref_rng = None if self.augment else random.Random(
+            (self.ref_seed * 1_000_003) ^ (i * 65537 + 12345))
         if len(anns) > 0:
-            target_cat = random.choice(list(dict.fromkeys(cats)))
+            _rc = ref_rng if ref_rng is not None else random
+            target_cat = _rc.choice(list(dict.fromkeys(cats)))
             cand = [j for j, c in enumerate(cats) if c == target_cat]
-            ref_idx = random.choice(cand)
-            bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch, self.max_patch)
+            ref_idx = _rc.choice(cand)
+            bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch,
+                                                  self.max_patch, rng=ref_rng)
             ref_patch = image[by:by + bh, bx:bx + bw].copy()
             ref_match = np.array([1.0 if c == target_cat else 0.0 for c in cats], np.float32)
         else:
@@ -234,6 +251,39 @@ class InstanceSegDataset(Dataset):
                 # Independent draws so scene and reference aren't identically degraded.
                 image_r = _realism_degrade(image_r, random)
                 ref_r = _realism_degrade(ref_r, random)
+
+            if self.domain_random:
+                # Domain randomization (sim2real): random DOWNSCALE so the model sees
+                # synth regions across the scale range real exhibits (real instances
+                # are larger / wider-spread than synth's fixed generator scale), plus
+                # broad photometric jitter. Forces scale/appearance invariance so the
+                # mask head generalizes to real instead of overfitting synth's fixed
+                # look — the one lever that can raise real_iou WITHOUT lowering synth.
+                s = random.uniform(0.4, 1.0)
+                if s < 0.99:
+                    new_w, new_h = max(1, int(nw * s)), max(1, int(nh * s))
+                    image_r = cv2.resize(image_r, (new_w, new_h),
+                                         interpolation=cv2.INTER_LINEAR)
+                    if masks_arr.shape[0]:
+                        masks_arr = np.stack(
+                            [cv2.resize(m, (new_w, new_h),
+                                        interpolation=cv2.INTER_NEAREST)
+                             for m in masks_arr], 0)
+                    else:
+                        masks_arr = np.zeros((0, new_h, new_w), np.uint8)
+                    nh, nw = new_h, new_w
+                # (Random crop of the scene was tested here — div@ep10 +0.114, within
+                # noise of DR-alone +0.101, lowered real too — so not kept.)
+                # Photometric: brightness/contrast jitter. (Wider scale 0.4 and
+                # added gamma were tested and overshot — real@10 0.21, div +0.148 —
+                # so kept at the 0.4-1.0 + brightness/contrast sweet spot: div +0.101.)
+                a = random.uniform(0.75, 1.25)
+                b = random.uniform(-18, 18)
+                image_r = np.clip(image_r.astype(np.float32) * a + b,
+                                  0, 255).astype(np.uint8)
+                # (Line-weight jitter via morphological erode/dilate was tested here
+                # — div@ep10 +0.153, worse: it disrupts the hatch texture the
+                # reference-matching head depends on, ref_match_auc fell to ~0.48.)
 
         if self.grayscale:
             # Strip colour from both the scene and the reference patch so the
@@ -326,7 +376,8 @@ def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None,
 
 
 def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
-                   seed=42, grayscale=False, realism_aug=False):
+                   seed=42, grayscale=False, realism_aug=False,
+                   domain_random=False):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -336,7 +387,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
 
     train_ds = InstanceSegDataset(records, train_idx, image_max_size, ref_size,
                                   augment=True, grayscale=grayscale,
-                                  realism_aug=realism_aug)
+                                  realism_aug=realism_aug,
+                                  domain_random=domain_random)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale)

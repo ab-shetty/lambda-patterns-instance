@@ -38,3 +38,7 @@ datasets/
 
 # TensorBoard
 events.out.tfevents.*
+
+# Regenerable experiment artifacts (conclusions live in synth_progress.md)
+*.log
+review_pairs/*/

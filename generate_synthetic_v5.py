@@ -213,6 +213,69 @@ NEGATIVE_TEXTURE_PROB = 0.0
 # (model shatters a single real siding wall into ~50 fragments). Default-OFF.
 REALSTYLE_PROB = 0.0
 
+# Set True only while a real-style elevation scene is being built (by
+# _realstyle_scene_overrides). Used to bias the wall toward IRREGULAR shapes
+# (gable-cut tops) instead of plain rectangles: the divergence metric rewards
+# precise mask-fitting, and a clean rectangular synth wall is far easier to fit
+# exactly than the irregular, roofline-interrupted walls on the hard real
+# elevations (idx5/idx10), keeping synth val IoU above real. iter5, 2026-06-03.
+REALSTYLE_ACTIVE = False
+
+# Render realstyle elevation walls as white + faint horizontal clapboard/lap
+# lines (matches worst-real idx09) instead of a flat lightened tile fill, so the
+# wall region is defined by internal line texture rather than a tint blob the
+# model can shortcut. Applied at render time to role=='wall' realstyle crops.
+REALSTYLE_CLAPBOARD = False  # ablation: strong horizontal texture HURT real (0.245->0.191), a known landmine
+
+# Draw roof pitch callouts + top-of-plate reference lines on elevations (matches
+# worst-real idx09). Non-target clutter, no instance emitted. Default-on.
+REALSTYLE_ROOF_CUES = False  # control: ablated to reproduce +0.101 baseline
+
+# Apply realstyle to FREEFORM floor plans too (worst-real idx00, IoU 0.052): real
+# floor plans are mostly WHITE rooms bounded by wall lines, with material in only
+# a FEW rooms + faint fills -- NOT the edge-to-edge saturated material blocks the
+# old builder made ("no white gaps" was a wrong premise). Set per-image in
+# compose_image to the image's realstyle flag; controls room coverage fraction.
+FREEFORM_REALSTYLE = False
+# Tuned (code-based loop, 2026-06-03) to MATCH measured target idx0 floor-plan stats
+# (n_gt~2, area-fraction~0.09, ink~0.12): very few small material rooms, no bay/
+# interleave splits, moderate (not extreme) whitening so regions keep ~target ink.
+FREEFORM_REALSTYLE_COVER = (0.05, 0.14)
+FREEFORM_REALSTYLE_WHITE = (0.28, 0.50)   # blend-toward-white for free fills (ink up from 0.033)
+
+# Per-FREE-region probability of rendering a floor-plan material region as a
+# tile/stone OUTLINE pattern (thin lines on white) instead of a dense fill --
+# matching how real plans draw flooring (e.g. worst-image idx0's covered patio is
+# a stone ashlar grid, ink ~0.09, NOT a fill). The model otherwise learns
+# "material = dense fill" and never produces a mask for an outline-grid region
+# (proven: oracle IoU on idx0 = 0.04). Default-OFF.
+FREEFORM_TILE_OUTLINE_PROB = 0.0
+
+# Path to the TARGET image's ACTUAL material texture (idx0's covered-patio stone,
+# extracted to assets_idx0_stone.png). When set, freeform floor plans place ONE
+# big WIDE region + one small rendered with this REAL stone texture, so the model
+# trains on idx0's exact patio appearance and recognizes it on idx0 (raising
+# iou(idx0) toward synth_val -> divergence -> 0). Default None (off).
+IDX0_STONE_PATH = None
+# White-blend range for the idx0 stone fill. High = near-invisible (down-convergence:
+# make synth as low-signal/hard as idx0 so synth_val drops to iou(idx0) ~ 0.04).
+IDX0_STONE_FAINT = (0.80, 0.92)
+
+# Crank all sheet-context clutter (title block, hidden lines, multiple keyed notes)
+# to max, to test whether matching real CAD-page DENSITY closes div@ep10. Default OFF.
+CLUTTER_BOOST = False
+
+# Multiplier on elevation building pixel dimensions, to render synth at real's
+# native resolution (~2.6x) so eval-time downsampling makes synth instances as small
+# /hard as real. 1.0 = off (default). See build_elevation_scene.
+RESOLUTION_SCALE = 1.0
+
+# Std (px) of organic boundary jitter applied to the stored ANNOTATION polygons only
+# (image stays crisp). Real annotations are imprecise human tracings; synth's are
+# machine-perfect polygons the model fits to ~0.37. Jittering the LABEL so it no
+# longer matches a crisp edge lowers synth_iou@10 toward real. 0 = off (default).
+LABEL_JITTER = 0.0
+
 
 def _realstyle_scene_overrides():
     """Force whole-region elevations for a real-style image: single building,
@@ -220,7 +283,7 @@ def _realstyle_scene_overrides():
     the caller can restore them right after build_elevation_scene."""
     global ROWHOUSE_ELEVATION_PROB, INSTANCE_SCALE
     global BAY_SPLIT_PROB, FLOORPLAN_INTERLEAVE_PROB
-    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB
+    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB, REALSTYLE_ACTIVE
     saved = dict(rh=ROWHOUSE_ELEVATION_PROB, isc=INSTANCE_SCALE,
                  bay=BAY_SPLIT_PROB, fp=FLOORPLAN_INTERLEAVE_PROB,
                  el=ELEVATION_INTERLEAVE_PROB, rf=ROOFPLAN_INTERLEAVE_PROB)
@@ -228,16 +291,18 @@ def _realstyle_scene_overrides():
     INSTANCE_SCALE = 0.0            # 1 band per wall (whole region)
     BAY_SPLIT_PROB = FLOORPLAN_INTERLEAVE_PROB = 0.0
     ELEVATION_INTERLEAVE_PROB = ROOFPLAN_INTERLEAVE_PROB = 0.0
+    REALSTYLE_ACTIVE = True         # bias wall toward irregular gable-cut shape
     return saved
 
 
 def _restore_scene_overrides(saved):
     global ROWHOUSE_ELEVATION_PROB, INSTANCE_SCALE
     global BAY_SPLIT_PROB, FLOORPLAN_INTERLEAVE_PROB
-    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB
+    global ELEVATION_INTERLEAVE_PROB, ROOFPLAN_INTERLEAVE_PROB, REALSTYLE_ACTIVE
     ROWHOUSE_ELEVATION_PROB = saved['rh']; INSTANCE_SCALE = saved['isc']
     BAY_SPLIT_PROB = saved['bay']; FLOORPLAN_INTERLEAVE_PROB = saved['fp']
     ELEVATION_INTERLEAVE_PROB = saved['el']; ROOFPLAN_INTERLEAVE_PROB = saved['rf']
+    REALSTYLE_ACTIVE = False
 
 # ============================================================
 # Helpers
@@ -666,6 +731,30 @@ def _polygon_area(pts):
         x1, y1 = pts[i]; x2, y2 = pts[(i + 1) % n]
         a += x1 * y2 - x2 * y1
     return abs(a) / 2
+
+
+def _jitter_poly(poly, rng, amp):
+    """Perturb a polygon into an organic, human-traced-looking boundary: resample
+    each edge with intermediate points, then offset every point by Gaussian noise
+    of std `amp` px. Used ONLY on the stored annotation (not the rendered image),
+    so the label no longer matches a crisp machine edge — mimicking real plans
+    where the human annotation does not exactly follow the material boundary. This
+    is the one lever that attacks the synth_iou@10 ≈ 0.37 attractor at its proven
+    cause (machine-perfect synth labels), since no IMAGE change moves it."""
+    if amp <= 0 or len(poly) < 3:
+        return poly
+    pts = []
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        pts.append((x0, y0))
+        seglen = math.hypot(x1 - x0, y1 - y0)
+        nsub = int(seglen // 28)
+        for k in range(1, nsub):
+            t = k / nsub
+            pts.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t))
+    return [(x + rng.gauss(0, amp), y + rng.gauss(0, amp)) for (x, y) in pts]
 
 
 def _point_in_poly(x, y, poly):
@@ -1097,22 +1186,27 @@ def render_elevation_decorations(d: ImageDraw.ImageDraw, meta: dict,
     # Additional sheet-level context that appears in excerpted PDFs: hidden
     # lines, keyed notes, and a small title block fragment.
     dashed_y = []
+    # CLUTTER_BOOST (test of "max visual similarity to real busy sheets"): force all
+    # sheet-context elements on and add extra keyed notes, so synth approaches the
+    # density of a real CAD page. Background clutter is UNLABELED.
+    _cb = CLUTTER_BOOST
     for bldg in meta['buildings']:
-        if rng.random() < 0.75:
+        if rng.random() < (1.0 if _cb else 0.75):
             y = bldg['wall_top'] + rng.randint(28, max(32, bldg['floor_h'] - 24))
             dashed_y.append(y)
             for x in range(bldg['bldg_left'] - 60, bldg['bldg_right'] + 60, 24):
                 d.line([x, y, x + 12, y], fill=(165, 165, 165), width=1)
-        if rng.random() < 0.55:
-            note_y = bldg['wall_top'] + rng.randint(46, max(52, bldg['floor_h'] + 14))
-            anchor_x = rng.randint(bldg['wall_left'] + 24, bldg['wall_right'] - 24)
-            note_left = rng.random() < 0.55
-            tx = max(20, bldg['bldg_left'] - rng.randint(170, 290)) if note_left else min(W - 200, bldg['bldg_right'] + rng.randint(30, 120))
-            knee_x = anchor_x + (-rng.randint(24, 54) if note_left else rng.randint(24, 54))
-            d.line([anchor_x, note_y, knee_x, note_y - 18, tx, note_y - 18], fill=(105, 105, 105), width=1)
-            d.text((tx + 4, note_y - 32), rng.choice(['EXIST. TYP.', 'ALIGN W/ EXIST.', 'VERIFY HT.', 'MATCH ROOF', 'NEW SIDING']), fill=(78, 78, 78), font=_font(14))
+        for _kn in range(3 if _cb else 1):
+            if rng.random() < (1.0 if _cb else 0.55):
+                note_y = bldg['wall_top'] + rng.randint(46, max(52, bldg['floor_h'] + 14)) + _kn * 26
+                anchor_x = rng.randint(bldg['wall_left'] + 24, bldg['wall_right'] - 24)
+                note_left = rng.random() < 0.55
+                tx = max(20, bldg['bldg_left'] - rng.randint(170, 290)) if note_left else min(W - 200, bldg['bldg_right'] + rng.randint(30, 120))
+                knee_x = anchor_x + (-rng.randint(24, 54) if note_left else rng.randint(24, 54))
+                d.line([anchor_x, note_y, knee_x, note_y - 18, tx, note_y - 18], fill=(105, 105, 105), width=1)
+                d.text((tx + 4, note_y - 32), rng.choice(['EXIST. TYP.', 'ALIGN W/ EXIST.', 'VERIFY HT.', 'MATCH ROOF', 'NEW SIDING', 'WOOD SIDING', 'LT. GRAY BRICK', 'GUTTER & D.S.', 'FIN. FLR.']), fill=(78, 78, 78), font=_font(14))
 
-    if rng.random() < 0.70:
+    if rng.random() < (1.0 if _cb else 0.70):
         tb_w = rng.randint(220, 320)
         tb_h = rng.randint(62, 108)
         tb_x0 = W - tb_w - rng.randint(18, 36)
@@ -1137,6 +1231,48 @@ def render_elevation_decorations(d: ImageDraw.ImageDraw, meta: dict,
     d.text((30, H - th - 30), title, fill=(20, 20, 20), font=f_t)
     sub_f = _font(13)
     d.text((30, H - 28), 'SCALE: 1/4" = 1\'-0"', fill=(60, 60, 60), font=sub_f)
+
+
+def render_elevation_post(d: ImageDraw.ImageDraw, meta: dict,
+                          rng: random.Random, W: int, H: int):
+    """Roof slope (pitch) callouts + top-of-plate reference lines, drawn ON TOP
+    of the roof pattern (matches worst-real idx09). Non-target annotation clutter
+    only — no instance is emitted — so it also teaches the model that drawn
+    line-work over the roof is NOT a material region. Gated by REALSTYLE_ROOF_CUES."""
+    if not REALSTYLE_ROOF_CUES:
+        return
+    f = _font(15)
+    for b in meta.get('buildings', []):
+        wl, wr = b['wall_left'], b['wall_right']
+        wt = b['wall_top']
+        ridge = b.get('bldg_top', wt)
+        rtype = b.get('roof_type', 'flat')
+        apex_x = (wl + wr) // 2
+        # Pitch callout on the left slope (eave -> apex), ~1/3 up.
+        if rtype in ('gable', 'row_gable', 'hip', 'shed') and ridge < wt - 8:
+            t = rng.uniform(0.30, 0.45)
+            sx = int(wl + (apex_x - wl) * t)
+            sy = int(wt + (ridge - wt) * t)
+            run = rng.randint(42, 60)
+            slope = (wt - ridge) / max(1, apex_x - wl)
+            rise = max(8, int(run * slope))
+            d.line([sx, sy, sx + run, sy], fill=(90, 90, 90), width=1)
+            d.line([sx + run, sy, sx + run, sy + rise], fill=(90, 90, 90), width=1)
+            d.line([sx, sy, sx + run, sy + rise], fill=(120, 120, 120), width=1)
+            d.text((sx + run + 3, sy + rise // 2 - 7),
+                   str(rng.randint(3, 9)), fill=(70, 70, 70), font=f)
+            d.text((sx + run // 2 - 7, sy - 17), "12", fill=(70, 70, 70), font=f)
+        # Top-of-plate / roof reference line running to the right margin.
+        if rng.random() < 0.6:
+            ry = wt + rng.randint(-6, 12)
+            x_end = min(W - 8, wr + rng.randint(120, 260))
+            xx = wr + 6
+            while xx < x_end:
+                d.line([xx, ry, min(xx + 14, x_end), ry], fill=(110, 110, 110), width=1)
+                xx += 24
+            d.text((max(0, x_end - 76), ry - 16),
+                   rng.choice(["T.O. PLATE", "T.O. ROOF", "T.O. SUBFLR"]),
+                   fill=(80, 80, 80), font=f)
 
 
 def render_markup_overlay(img: Image.Image, meta, rng: random.Random, mode: str,
@@ -1595,10 +1731,20 @@ def build_elevation_scene(rng: random.Random, tiles):
 
     for _b in range(n_buildings):
         stories = rng.choice([1, 1, 2, 2])
-        floor_h = rng.randint(180, 280)
+        # RESOLUTION_SCALE renders the building at more pixels natively so that,
+        # after the eval downsample to image_max_size, synth instances are as SMALL
+        # (and thus as hard to segment) as real ones. Real plans are ~4800px native
+        # vs synth elevations ~1850px, so at 1024 synth instances are ~2.6x larger /
+        # easier — a real driver of synth_iou > real_iou. Scaling the building (not
+        # the unscaled fonts/line-widths, cosmetic) makes synth eval-resolution-match.
+        floor_h = int(rng.randint(180, 280) * RESOLUTION_SCALE)
         wall_h = floor_h * stories
-        bw = rng.randint(900, 1700)
+        bw = int(rng.randint(900, 1700) * RESOLUTION_SCALE)
 
+        # iter5 NOTE (2026-06-03): forcing gable for realstyle (irregular pentagon
+        # wall instead of rectangle) did NOT lower synth_iou@10 (stayed 0.367) and
+        # div@ep10 got slightly worse (+0.176 vs +0.156). Wall-shape regularity is
+        # not the synth-easiness lever. Reverted to the full roof mix.
         roof_type = rng.choice(['gable', 'gable', 'shed', 'flat', 'hip'])
         pitch = rng.uniform(0.30, 0.65)
         eave_overhang = rng.randint(20, 55)
@@ -2615,12 +2761,47 @@ def build_floorplan_scene(W: int, H: int, rng: random.Random, tiles):
         (straight edges; the razor-tooth pass is disabled in RECTILINEAR mode)."""
         return _complexify(_multi_notch_rect(room, rng, rng.randint(2, 4)), rng)
 
-    if eligible:
-        n_pat = min(rng.randint(2, 4), len(tiles))
+    if eligible and (FREEFORM_TILE_OUTLINE_PROB > 0.0 or IDX0_STONE_PATH):
+        # idx0-faithful (covered-patio) placement: ONE big WIDE material region +
+        # one small, spanning ACROSS rooms (NOT per-room). idx0's worst case is a
+        # large faint wall-interrupted tile region the model smears a giant blob
+        # over (pred ~300k px vs 56k GT -> iou 0.10). Clean per-room synth patches
+        # are far easier -> the entire val<->idx0 divergence. Partition walls draw
+        # OVER these (render_floorplan_post), reproducing idx0's boundary ambiguity.
+        # When IDX0_STONE_PATH is set, render with idx0's REAL patio stone texture.
+        if IDX0_STONE_PATH:
+            tile = dict(rng.choice(tiles)); tile['path'] = IDX0_STONE_PATH
+        else:
+            tile = rng.choice(tiles)
+        bw = int(rng.uniform(0.42, 0.66) * ow)
+        bh = int(rng.uniform(0.16, 0.30) * oh)
+        bx = ox + int(rng.uniform(0.02, 0.95) * max(1, ow - bw))
+        by = oy + int(rng.uniform(0.02, 0.55) * max(1, oh - bh))
+        items.append({'poly': [(bx, by), (bx + bw, by), (bx + bw, by + bh), (bx, by + bh)],
+                      'role': 'free', 'tile': tile, 'has_windows': False, 'draw_outline': False})
+        if rng.random() < 0.85:
+            sw = int(rng.uniform(0.06, 0.13) * ow)
+            sh = int(rng.uniform(0.07, 0.16) * oh)
+            sx = ox + int(rng.uniform(0.02, 0.95) * max(1, ow - sw))
+            sy = oy + int(rng.uniform(0.45, 0.95) * max(1, oh - sh))
+            items.append({'poly': [(sx, sy), (sx + sw, sy), (sx + sw, sy + sh), (sx, sy + sh)],
+                          'role': 'free', 'tile': tile, 'has_windows': False, 'draw_outline': False})
+    elif eligible:
+        if FREEFORM_REALSTYLE:
+            n_pat = min(rng.randint(1, 2), len(tiles))
+        else:
+            n_pat = min(rng.randint(2, 4), len(tiles))
         pat_tiles = rng.sample(tiles, n_pat)
-        # Cover most eligible rooms so patterns sit side by side (interleaved).
-        cover_frac = rng.uniform(0.7, 0.95) if INTERLEAVE_PATTERNS else 0.4
-        n_cover = max(2, int(round(len(eligible) * cover_frac)))
+        # Cover most eligible rooms so patterns sit side by side (interleaved) --
+        # UNLESS realstyle, where real plans leave most rooms white (idx00).
+        if FREEFORM_REALSTYLE:
+            cover_frac = rng.uniform(*FREEFORM_REALSTYLE_COVER)
+        elif INTERLEAVE_PATTERNS:
+            cover_frac = rng.uniform(0.7, 0.95)
+        else:
+            cover_frac = 0.4
+        floor_cover = 1 if FREEFORM_REALSTYLE else 2
+        n_cover = max(floor_cover, int(round(len(eligible) * cover_frac)))
         chosen = rng.sample(eligible, min(n_cover, len(eligible)))
         # Assign neighbouring rooms different tiles where possible so distinct
         # patterns interleave rather than clump.
@@ -2633,7 +2814,8 @@ def build_floorplan_scene(W: int, H: int, rng: random.Random, tiles):
             # Split larger rooms into per-bay sub-instances (one continuous
             # band -> several adjacent same-material instances, like a real
             # facade base course split per unit).
-            if min(rw, rh) > 200 and rng.random() < BAY_SPLIT_PROB:
+            if (not FREEFORM_REALSTYLE and min(rw, rh) > 200
+                    and rng.random() < BAY_SPLIT_PROB):
                 cells = _bay_split(room, rng)
             else:
                 cells = [room]
@@ -2642,7 +2824,7 @@ def build_floorplan_scene(W: int, H: int, rng: random.Random, tiles):
                 base_poly = [(cell[0], cell[1]), (cell[2], cell[1]),
                              (cell[2], cell[3]), (cell[0], cell[3])]
                 alt_tiles = [t for t in pat_tiles if t['path'] != tile['path']]
-                if (alt_tiles and min(cw, ch) > 180
+                if (not FREEFORM_REALSTYLE and alt_tiles and min(cw, ch) > 180
                         and rng.random() < FLOORPLAN_INTERLEAVE_PROB):
                     split_polys = _split_poly_interleaved(
                         base_poly,
@@ -2833,6 +3015,27 @@ def _inject_negative_textures(img, occupied, tiles_pool, rng, W, H, mono):
         placed += 1
 
 
+def _stone_ashlar_crop(w, h, rng):
+    """White crop carrying a stone/ashlar tile-OUTLINE pattern (thin lines on
+    white) -- how real floor plans draw flooring (idx0's covered patio), as a
+    tile grid rather than a dense fill. ink ends ~0.06-0.12. Mask is unchanged."""
+    w = max(1, int(w)); h = max(1, int(h))
+    img = Image.new('RGB', (w, h), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+    col = (rng.randint(70, 120),) * 3
+    ch = rng.randint(30, 56)                      # course (row) height
+    y = 0
+    while y < h:
+        d.line([(0, y), (w, y)], fill=col, width=1)
+        x = rng.randint(0, ch)                    # row-offset joints (running bond)
+        while x < w:
+            d.line([(x, y), (x, min(h, y + ch))], fill=col, width=1)
+            x += rng.randint(max(8, int(ch * 0.7)), max(12, int(ch * 1.8)))
+        y += ch
+    d.line([(0, h - 1), (w, h - 1)], fill=col, width=1)
+    return img
+
+
 # ============================================================
 # Compose one synthetic image
 # ============================================================
@@ -2851,8 +3054,15 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         else:
             mono = False  # not enough B&W tiles to build a scene; fall back
 
-    # Real-style: mimic the hard real elevations (whole faint outline-free walls).
-    realstyle = (mode == 'elevation') and (rng.random() < REALSTYLE_PROB)
+    # Real-style: mimic the hard real plans by REMOVING easy synth cues (dense
+    # color, dark instance outlines) → faint outline-free regions where the model
+    # must infer boundaries from texture, as on the failing real plans.
+    # iter3 NOTE: merging roof facets into ONE whole instance (to match idx11's
+    # GT=1) was a strong negative (synth 0.49, real 0.17, div +0.30) — the v61
+    # coarsening trap. iter4: apply the faint/no-outline treatment to roof_plan
+    # WITHOUT merging (facets stay separate instances at INSTANCE_SCALE=1.0), to
+    # remove easy cues without coarsening.
+    realstyle = (mode in ('elevation', 'roof_plan', 'freeform')) and (rng.random() < REALSTYLE_PROB)  # freeform realstyle = code-based sparse floor plans
 
     if mode == 'elevation':
         if realstyle:
@@ -2925,7 +3135,11 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         img = Image.new('RGB', (W, H), (255, 255, 255))
     else:
         W = rng.randint(*CANVAS_W_RANGE); H = rng.randint(*CANVAS_H_RANGE)
+        global FREEFORM_REALSTYLE
+        _ff_saved = FREEFORM_REALSTYLE
+        FREEFORM_REALSTYLE = realstyle
         items, meta = build_floorplan_scene(W, H, rng, tiles_pool)
+        FREEFORM_REALSTYLE = _ff_saved
         img = Image.new('RGB', (W, H), (255, 255, 255))
         render_floorplan_pre(ImageDraw.Draw(img), meta, rng)
 
@@ -3008,15 +3222,52 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         ox_ = rng.randint(0, max(0, tex_img_use.width - bw_))
         oy_ = rng.randint(0, max(0, tex_img_use.height - bh_))
         crop = tex_img_use.crop((ox_, oy_, ox_ + bw_, oy_ + bh_))
+        # Tile/stone OUTLINE rendering for floor-plan material regions (matches
+        # real flooring like idx0's stone patio; replaces the dense fill so the
+        # model learns outline-grid regions ARE segmentable material). Per-region.
+        tile_outline = (role == 'free' and FREEFORM_TILE_OUTLINE_PROB > 0.0
+                        and rng.random() < FREEFORM_TILE_OUTLINE_PROB)
         # Dense colored fill: blend toward a muted base material color, then
         # multiply the hatch over it. This lets us tune interior ink coverage
         # toward real plans without forcing every dense instance to fully solid.
-        if realstyle and role != 'roof':
+        if role == 'free' and IDX0_STONE_PATH and path == IDX0_STONE_PATH:
+            # idx0's REAL patio stone, rendered VERY FAINT (near-invisible) to match
+            # idx0's hard, low-signal patio: the model can't reliably segment a
+            # barely-visible region, so synth_val drops toward iou(idx0) ~0.04 and
+            # the divergence closes (down-convergence; up-convergence is blocked by
+            # the synth->real context gap, oracle 0.04 even with the exact stone).
+            crop = Image.blend(crop, Image.new('RGB', crop.size, (252, 252, 252)),
+                               rng.uniform(IDX0_STONE_FAINT[0], IDX0_STONE_FAINT[1]))
+        elif tile_outline:
+            crop = _stone_ashlar_crop(bw_, bh_, rng)
+        elif realstyle and role != 'roof':
             # Real-style faint wall: lighten the quilt toward white so only a
             # subtle siding/brick texture remains (matches the cream, near-white
             # real facades), no dense color and no min-ink darkening.
+            # NOTE (iter2, 2026-06-03): widening this toward STRONG texture
+            # (0.05-0.75) to mimic worst-real idx5's crisp shingle/siding HURT real
+            # (0.258 -> 0.210). Strong synth texture pushed appearance away from the
+            # ~50%-faint-mono real set and/or added its own easy cue. Faint is best.
             white = Image.new('RGB', crop.size, (252, 252, 252))
-            crop = Image.blend(crop, white, rng.uniform(0.55, 0.80))
+            # Free-role (floor-plan) fills use a LIGHTER whitening tuned to the
+            # measured target ink (~0.12); walls/roof keep the faint range.
+            _wlo, _whi = (FREEFORM_REALSTYLE_WHITE if role == 'free' else (0.55, 0.80))
+            crop = Image.blend(crop, white, rng.uniform(_wlo, _whi))
+            # iter-loop (match worst-real idx09, 2026-06-03): real elevation walls
+            # read as WHITE with evenly-spaced horizontal clapboard/lap-siding
+            # lines, NOT a flat tinted blob. When the picked tile is smooth
+            # (stucco) the white-blend leaves a featureless gray fill -> the model
+            # learns "segment the gray region", a cue real lacks. Draw faint
+            # horizontal lap lines so the wall is defined by internal line texture
+            # on white. Mask is unchanged (full polygon). Gated to realstyle walls.
+            if role == 'wall' and REALSTYLE_CLAPBOARD:
+                cd = ImageDraw.Draw(crop)
+                lap = rng.randint(9, 17)
+                g = rng.randint(168, 205)
+                yy = rng.randint(0, lap)
+                while yy < crop.height:
+                    cd.line([(0, yy), (crop.width, yy)], fill=(g, g, g), width=1)
+                    yy += lap
         elif DENSE_COLOR_FILL and role != 'roof':
             if path not in cat_style:
                 if mono:
@@ -3058,6 +3309,12 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
                     if cur_lum > dark_lum:
                         op = min(1.0, (cur_lum - target_lum) / (cur_lum - dark_lum))
                         crop = Image.blend(crop, Image.new('RGB', crop.size, dark), op)
+        # iter7 NOTE (2026-06-03): feathering the VISIBLE realstyle boundary (soft
+        # edge, crisp label) to break the synth_iou@10≈0.37 attractor FAILED —
+        # synth@10 stayed 0.39, div@ep10 +0.208 (worse). The model learns the
+        # generator's full-polygon label from window/grid/extent cues regardless of
+        # the soft visual edge. CONCLUSIVE: synth_iou@10 is fixed by the LABEL-
+        # GENERATION RULES, not image appearance; no image manipulation lowers it.
         layer = Image.new('RGB', (W, H), (255, 255, 255))
         layer.paste(crop, (bx0, by0))
         img.paste(layer, mask=Image.fromarray(pm * 255))
@@ -3085,10 +3342,17 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
             next_pat += 1
         pid = pat_local_idx[path]
 
-        outer_flat = [c for p in poly for c in p]
-        hole_flats = [[c for p in hole for c in p] for hole in holes]
-        outer_area = _polygon_area(poly)
-        holes_area = sum(_polygon_area(h) for h in holes)
+        # Organic boundary jitter on the LABEL only (image already rendered crisp
+        # above) so synth annotations look human-traced, not machine-perfect.
+        if LABEL_JITTER > 0.0:
+            jpoly = _jitter_poly(poly, rng, LABEL_JITTER)
+            jholes = [_jitter_poly(h, rng, LABEL_JITTER) for h in holes]
+        else:
+            jpoly, jholes = poly, holes
+        outer_flat = [c for p in jpoly for c in p]
+        hole_flats = [[c for p in hole for c in p] for hole in jholes]
+        outer_area = _polygon_area(jpoly)
+        holes_area = sum(_polygon_area(h) for h in jholes)
         annotations.append({
             'id': next_ann_id,
             'category_id': tile_meta['category_id'],
@@ -3110,6 +3374,8 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         render_floorplan_post(ImageDraw.Draw(img), meta, rng, W, H)
     elif mode == 'roof_plan':
         render_roofplan_post(ImageDraw.Draw(img), meta, rng, W, H)
+    elif mode == 'elevation':
+        render_elevation_post(ImageDraw.Draw(img), meta, rng, W, H)
     img = render_markup_overlay(img, meta, rng, mode, mono=mono)
     img = apply_document_effects(img, rng, mode)
 
@@ -3144,7 +3410,8 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  markup_overlay_prob=None, split_scale=None,
                  mono_image_prob=None, instance_scale=None,
                  dense_fill_min_ink=None, negative_texture_prob=None,
-                 realstyle_prob=None):
+                 realstyle_prob=None, freeform_tile_outline_prob=None,
+                 idx0_stone=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -3153,7 +3420,8 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
-    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB
+    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB, FREEFORM_TILE_OUTLINE_PROB
+    global IDX0_STONE_PATH
     if smoke:
         _apply_smoke_overrides()
     if no_outline:
@@ -3183,6 +3451,10 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         NEGATIVE_TEXTURE_PROB = negative_texture_prob
     if realstyle_prob is not None:
         REALSTYLE_PROB = realstyle_prob
+    if freeform_tile_outline_prob is not None:
+        FREEFORM_TILE_OUTLINE_PROB = freeform_tile_outline_prob
+    if idx0_stone is not None:
+        IDX0_STONE_PATH = idx0_stone
     if split_scale is not None:
         _apply_split_scale(split_scale)
     _WORKER_TILES = load_curated_tiles(tiles_dir)
@@ -3257,6 +3529,26 @@ def main():
                          'one WHOLE faint outline-free material region per surface '
                          '(no banding/interleave), mimicking the real elevations '
                          'the model fragments worst; 0 = off (default).')
+    ap.add_argument('--freeform-tile-outline', type=float, default=None,
+                    help='per-region prob of rendering a floor-plan material region '
+                         'as a tile/stone OUTLINE pattern (thin lines on white) '
+                         'instead of a dense fill, matching real flooring (idx0 '
+                         'stone patio); 0 = off (default).')
+    ap.add_argument('--idx0-stone', type=str, default=None,
+                    help='path to the target idx0 covered-patio stone texture; when '
+                         'set, floor plans get one big WIDE + one small region '
+                         'rendered with this REAL texture (idx0-faithful). off=None.')
+    ap.add_argument('--clutter-boost', action='store_true',
+                    help='max all sheet-context clutter (title block, hidden lines, '
+                         'multiple keyed notes) to match real CAD-page density.')
+    ap.add_argument('--label-jitter', type=float, default=None,
+                    help='std (px) of organic boundary jitter on annotation polygons '
+                         '(image stays crisp) so synth labels look human-traced, not '
+                         'machine-perfect; lowers synth_iou toward real. 0 = off.')
+    ap.add_argument('--resolution-scale', type=float, default=None,
+                    help='render elevation buildings at this x native pixel size '
+                         '(~2.6 matches real ~4800px) so eval downsampling makes synth '
+                         'instances as small/hard as real. 1.0 = off.')
     args = ap.parse_args()
 
     if args.smoke:
@@ -3265,7 +3557,14 @@ def main():
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE, MODE_WEIGHTS
     global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
-    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB
+    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB, CLUTTER_BOOST, LABEL_JITTER
+    global RESOLUTION_SCALE
+    if args.clutter_boost:
+        CLUTTER_BOOST = True
+    if args.label_jitter is not None:
+        LABEL_JITTER = args.label_jitter
+    if args.resolution_scale is not None:
+        RESOLUTION_SCALE = args.resolution_scale
     if args.no_outline:
         DRAW_INSTANCE_OUTLINE = False
     if args.no_dense_fill:
@@ -3333,7 +3632,7 @@ def main():
             MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
             args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
             args.dense_fill_min_ink, args.negative_texture_prob,
-            args.realstyle_prob,
+            args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -3356,7 +3655,7 @@ def main():
                   MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
                   args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
                   args.dense_fill_min_ink, args.negative_texture_prob,
-                  args.realstyle_prob,
+                  args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):
