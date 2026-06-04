@@ -141,8 +141,12 @@ python scripts/probe_multiseed.py --local-data /tmp/<dataset> --seeds 0,1,2 --ep
 
 **The "best-of-both" parity setup** (where divergence ≈ 0, real ≈ 0.32): broad
 synth + ~10% augmented real (4 photometric augs/scene × the 14 train reals),
-merged. Reconstruct via the merge logic in `/tmp/run_10x.sh` (kept as a
-template) — synth500 + aug56 = `/tmp/mix_s500_k4`-style dir.
+merged. Build it reproducibly:
+```bash
+python scripts/build_mix.py --synth-dir /tmp/synth_500 --out /tmp/mix_best --aug-per-scene 4
+# prints the held-out 14 indices to pass to --real-eval-indices, and real_frac.
+# Real FRACTION scales with synth size: ~500 synth + 56 aug = ~10%% real.
+```
 
 **View images (your strength).** Files in the container aren't host-mounted;
 render to PNG and read them directly, or push to GitHub:
