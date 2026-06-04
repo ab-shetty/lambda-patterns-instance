@@ -119,6 +119,14 @@ def parse_args():
     p.add_argument("--dec-layers", type=int, default=9)
     p.add_argument("--nheads", type=int, default=8)
     p.add_argument("--no-pretrained", action="store_true")
+    p.add_argument("--backbone-stem-pool", choices=["max", "blur", "avg"],
+                   default="max",
+                   help="Stem stride-2 downsample. 'max' = stock ResNet50. "
+                        "'blur' = anti-aliased line-art variant: max-pool erases "
+                        "thin dark strokes (keeps the brightest=white pixel) at "
+                        "the first stride-4 step; a binomial blur-pool low-passes "
+                        "then subsamples so thin lines survive. 'avg' = average "
+                        "pool. Drop-in (strides unchanged, no new params).")
     p.add_argument("--data-parallel", action="store_true",
                    help="Wrap model in nn.DataParallel across all visible GPUs")
     # Loss weights
@@ -459,7 +467,8 @@ def main():
     model = RefMask2Former(
         num_queries=args.num_queries, hidden_dim=args.hidden_dim,
         mask_dim=args.mask_dim, ref_dim=args.ref_dim, nheads=args.nheads,
-        dec_layers=args.dec_layers, pretrained=not args.no_pretrained).to(device)
+        dec_layers=args.dec_layers, pretrained=not args.no_pretrained,
+        stem_pool=args.backbone_stem_pool).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
 

@@ -1341,3 +1341,40 @@ bound); extra synth just inflates synth_val and destroys the proxy. Real needs M
 a line-art backbone, or a different metric -- not more synth. Caveat: single seed (real noisy, peak
 0.378@ep5); conflates more-data with more-steps. BUG FIXED this run: load_local_records now lazy
 (stores image PATHS not bytes) -- loading all bytes OOM'd at 5560 imgs on 15GB RAM (12GB dataset).
+
+========================================================================
+LINE-ART BACKBONE (stem blur-pool) -- 2026-06-04 -- NEGATIVE RESULT (3-seed)
+========================================================================
+HYPOTHESIS: architectural plans are dark lines on white; the ResNet50 stem's
+3x3 stride-2 MAX-pool keeps the brightest pixel per window -> ERASES thin dark
+strokes at the very first stride-4 step. Replace it with an anti-aliased
+binomial BLUR-pool (low-pass + subsample) so line energy survives the stem.
+
+IMPLEMENTED (kept, flag-gated, default OFF):
+  refmask2former/backbone.py  -> BlurPool2d + ResNetBackbone(stem_pool=max|blur|avg)
+  refmask2former/model.py     -> RefMask2Former(stem_pool=...)
+  train.py                    -> --backbone-stem-pool {max,blur,avg} (default max)
+  TRUE DROP-IN: identical out shapes/channels/strides, ZERO new learnable params
+  (kernel is a fixed buffer), all ImageNet conv weights kept.
+
+NUMERICALLY VERIFIED the mechanism is real: thin 1px dark lines on white, ink
+fraction surviving a stride-4 downsample:  max=0.0000 (fully erased)  avg=0.1088
+blur=0.1250 (fully preserved, == input).
+
+EMPIRICAL A/B (10% best-of-both mix /tmp/mix_s500_k4, 556 imgs, eval held-out 14,
+3 seeds x 10 epochs), PLATEAU (last 3 epochs):
+              synth_iou          held-out real        divergence
+  max  :   0.3257 +/-0.0044   0.3174 +/-0.0191    +0.0083 +/-0.0156
+  blur :   0.3084 +/-0.0066   0.2894 +/-0.0095    +0.0190 +/-0.0105
+VERDICT: blur SLIGHTLY HURT held-out real (0.317->0.289, ~-0.028, intervals
+barely touch) and did NOT change divergence (~0 both). synth also dipped.
+
+WHY IT DIDN'T TRANSLATE (the lesson): the line-survival win is real but targets
+the wrong thing. Targets are FILLED material/pattern REGIONS (area objects), not
+1px lines; region IoU at stride-4 mask features doesn't reward stem stroke
+preservation -- the FPN recovers region extent either way. Swapping the pool op
+shifts the feature distribution ImageNet-pretrained layer1+ expect, costing mild
+adaptation that 10ep/556img can't recover.
+=> CLEAN CONFIRMATION of the OOD-coverage thesis: a principled, provably-correct
+FEATURE-LEVEL backbone improvement does NOT move held-out real. The ceiling is
+distribution coverage, not low-level features. Backbone is not the lever.

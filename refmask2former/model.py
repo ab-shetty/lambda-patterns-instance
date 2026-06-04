@@ -28,9 +28,10 @@ def _downsample_mask(padding_mask, size):
 
 class RefMask2Former(nn.Module):
     def __init__(self, num_queries=100, hidden_dim=256, mask_dim=256, ref_dim=128,
-                 nheads=8, dec_layers=9, dim_feedforward=2048, pretrained=True):
+                 nheads=8, dec_layers=9, dim_feedforward=2048, pretrained=True,
+                 stem_pool="max"):
         super().__init__()
-        self.backbone = ResNetBackbone(pretrained=pretrained)
+        self.backbone = ResNetBackbone(pretrained=pretrained, stem_pool=stem_pool)
         self.pixel_decoder = FPNPixelDecoder(
             self.backbone.out_channels, conv_dim=hidden_dim, mask_dim=mask_dim)
         self.transformer = TransformerDecoder(
