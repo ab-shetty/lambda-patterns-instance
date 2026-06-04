@@ -183,7 +183,12 @@ class InstanceSegDataset(Dataset):
 
     def _load(self, i):
         rec = self.records[self.indices[i]]
-        image = np.array(Image.open(io.BytesIO(rec["image"])).convert("RGB"))
+        if "image_path" in rec:
+            # Lazy local-data: decode from disk on demand (records hold only paths,
+            # not bytes) so large datasets don't load all image bytes into RAM.
+            image = np.array(Image.open(rec["image_path"]).convert("RGB"))
+        else:
+            image = np.array(Image.open(io.BytesIO(rec["image"])).convert("RGB"))
         # Training config stores annotations as a JSON string; the real-world-test
         # config stores them as an already-parsed list of structs.
         anns = rec["annotations"]
@@ -355,9 +360,9 @@ def load_local_records(root):
         with open(jf) as f:
             ann = json.load(f)
         img_path = os.path.join(root, "images", ann["image"]["file_name"])
-        with open(img_path, "rb") as f:
-            img_bytes = f.read()
-        recs.append({"image": img_bytes, "annotations": ann["annotations"]})
+        # Store the PATH, not the bytes: lazy decode in _load keeps RAM flat for
+        # large local datasets (loading all bytes OOMs at ~thousands of images).
+        recs.append({"image_path": img_path, "annotations": ann["annotations"]})
     return recs
 
 

@@ -1328,3 +1328,16 @@ held-out real climbs WITH synth (0.24->0.32) and div stays ~0 from ep2 on. FINAL
 ~10% augmented real (a few variants of a few representative real scenes) => synth is a faithful proxy
 for unseen real (div~0). Inverted-U over real fraction: 0%->0.24 ceiling, ~10%->0.32 parity, ->100%
 collapses to 0.24 (memorization). The minimum real needed is SMALL.
+
+## 10x-SCALE test (2026-06-04): scaling synth does NOT lift held-out real; BREAKS parity
+5000 broad synth + 560 aug (40/scene, same 10% ratio), single seed, eval HELD-OUT 14, 10ep:
+  ep0 synth 0.341/real 0.264; ep5 synth 0.642/real 0.378; ep9 synth 0.677/real 0.307, DIV +0.370.
+=> held-out real STUCK at ~0.31 (== 1x's 0.32, no lift from 10x synth: coverage SATURATED), while
+synth_val SOARED 0.32->0.68 (10x images @ 10ep = 10x gradient steps -> model fits synth far better),
+so DIV BLEW UP ~0 -> +0.37. The 1x parity (div~0 @ 0.32) was a LIGHTLY-TRAINED equilibrium (both
+undertrained at 0.32), FRAGILE to more compute -- synth pulls away with more steps (the OOD gap).
+IMPLICATION for 0.95: scaling synth is NOT the lever for held-out real (real ceiling ~0.31, model/task-
+bound); extra synth just inflates synth_val and destroys the proxy. Real needs MORE DISTINCT real,
+a line-art backbone, or a different metric -- not more synth. Caveat: single seed (real noisy, peak
+0.378@ep5); conflates more-data with more-steps. BUG FIXED this run: load_local_records now lazy
+(stores image PATHS not bytes) -- loading all bytes OOM'd at 5560 imgs on 15GB RAM (12GB dataset).
