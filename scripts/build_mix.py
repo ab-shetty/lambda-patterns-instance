@@ -23,6 +23,21 @@ tune. Example reproducing that mix:
 
 The held-out 14 indices are printed at the end (and are stable for a given
 --split-seed), so you can copy them straight into --real-eval-indices.
+
+EXTRA REAL POOLS (e.g. Roboflow-labelled plans). Pass one or more local-data
+dirs (images/ + annotations/, the format scripts/roboflow_to_local.py writes) via
+--real-extra-dir. They are folded into the TRAIN side only (augmented like the HF
+train reals); the HF held-out 14 stay a clean, untouched eval set. Because such
+pools can be at a different (often smaller, e.g. 640x640) resolution than the HF
+reals, each extra real is first resized so its long side == --real-extra-size
+(default 1024, polygons scaled to match) BEFORE augmentation. That matters: the
+photometric augmentation uses ABSOLUTE-pixel blur radius and noise sigma, so
+applied at native 640 it would hit far harder (relatively) than on a multi-thousand
+-px HF real — normalising to a common working resolution keeps augmentation
+strength comparable and stops the loader from blindly upscaling tiny squares.
+NOTE: more real shifts real_frac up; the established sweet spot is ~10% real
+(see synth_progress.md ratio sweep), so watch the printed real_frac and tune
+--aug-per-scene / --real-extra-aug-per-scene / synth size accordingly.
 """
 
 import argparse
@@ -51,17 +66,53 @@ def _norm_anns(anns):
         anns, default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o)))
 
 
-def augment_real(train_idx, recs, out_root, k_per_scene, seed):
-    """Write k_per_scene photometric augmentations of each train real."""
+def _scale_anns(anns, s):
+    """Scale every polygon coordinate (outer + holes) by s."""
+    return [{**a, "segmentation": [[c * s for c in poly] for poly in a["segmentation"]]}
+            for a in anns]
+
+
+def hf_scenes(train_idx, recs):
+    """Build augmentable scenes from the HF train reals (native resolution)."""
+    scenes = []
+    for ti in train_idx:
+        rec = recs[ti]
+        img = Image.open(io.BytesIO(rec["image"])).convert("RGB")
+        scenes.append({"image": img, "anns": _norm_anns(rec["annotations"]),
+                       "name": f"hf{ti}"})
+    return scenes
+
+
+def extra_scenes(extra_dir, target_long):
+    """Load an extra real pool (local-data dir) as augmentable scenes, resized so
+    each long side == target_long (polygons scaled with it) for resolution parity."""
+    scenes = []
+    for jf in sorted(glob.glob(f"{extra_dir}/annotations/*.json")):
+        ann = json.load(open(jf))
+        fn = ann["image"]["file_name"]
+        img = Image.open(f"{extra_dir}/images/{fn}").convert("RGB")
+        W, H = img.size
+        anns = _norm_anns(ann["annotations"])
+        if target_long and max(W, H) != target_long:
+            s = target_long / max(W, H)
+            img = img.resize((max(1, round(W * s)), max(1, round(H * s))), Image.LANCZOS)
+            anns = _scale_anns(anns, s)
+        scenes.append({"image": img, "anns": anns,
+                       "name": os.path.splitext(os.path.basename(jf))[0]})
+    return scenes
+
+
+def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0):
+    """Write k_per_scene photometric augmentations of each scene; returns count.
+    start_n continues the aug_NNNNNN filename numbering across multiple calls."""
     os.makedirs(f"{out_root}/images", exist_ok=True)
     os.makedirs(f"{out_root}/annotations", exist_ok=True)
     rng = np.random.RandomState(seed)
-    n = 0
-    for ti in train_idx:
-        rec = recs[ti]
-        base = Image.open(io.BytesIO(rec["image"])).convert("RGB")
+    n = start_n
+    for sc in scenes:
+        base = sc["image"]
         W, H = base.size
-        anns = _norm_anns(rec["annotations"])
+        anns = sc["anns"]
         for _ in range(k_per_scene):
             img = base
             img = ImageEnhance.Brightness(img).enhance(0.90 + 0.20 * rng.rand())
@@ -84,7 +135,7 @@ def augment_real(train_idx, recs, out_root, k_per_scene, seed):
                        "mode": "freeform", "annotations": cur},
                       open(f"{out_root}/annotations/aug_{n:06d}.json", "w"))
             n += 1
-    return n
+    return n - start_n
 
 
 def merge_dirs(src_dirs, dst):
@@ -113,9 +164,21 @@ def main():
                     help="broad synth local-data dir (images/ + annotations/)")
     ap.add_argument("--out", required=True, help="output mix dir")
     ap.add_argument("--aug-per-scene", type=int, default=4,
-                    help="photometric augmentations per train real (total aug = "
-                         "this x 14). Real fraction depends on synth-dir size; "
+                    help="photometric augmentations per HF train real (total HF aug "
+                         "= this x 14). Real fraction depends on synth-dir size; "
                          "~500 synth + 4/scene -> ~10%% real. Check printed real_frac.")
+    ap.add_argument("--real-extra-dir", action="append", default=[],
+                    help="extra real pool as a local-data dir (images/ + "
+                         "annotations/, e.g. from scripts/roboflow_to_local.py). "
+                         "Folded into the TRAIN side only; HF held-out 14 stay clean. "
+                         "Repeatable.")
+    ap.add_argument("--real-extra-aug-per-scene", type=int, default=None,
+                    help="augmentations per extra real (default: same as "
+                         "--aug-per-scene). Tune to keep real_frac near ~10%%.")
+    ap.add_argument("--real-extra-size", type=int, default=1024,
+                    help="resize each extra real so its long side == this (polygons "
+                         "scaled to match) before augmentation, for resolution parity "
+                         "with the HF reals. 0 = keep native resolution.")
     ap.add_argument("--hf-repo", default="abshetty/floz-synth-v5")
     ap.add_argument("--cache-dir", default="./data")
     ap.add_argument("--split-seed", type=int, default=1234,
@@ -136,15 +199,34 @@ def main():
     aug_tmp = args.aug_tmp or f"{args.out}_augtmp"
     if os.path.exists(aug_tmp):
         shutil.rmtree(aug_tmp)
-    n_aug = augment_real(train_idx, recs, aug_tmp, args.aug_per_scene, args.aug_seed)
+
+    # HF train reals (native resolution) -> aug_000000.. (byte-identical to before
+    # when no extra pools are given, so the established parity mix reproduces).
+    n_hf = augment_scenes(hf_scenes(train_idx, recs), aug_tmp,
+                          args.aug_per_scene, args.aug_seed, start_n=0)
+    print(f"augmented HF reals: {n_hf}  ({args.aug_per_scene}/scene x {len(train_idx)})")
+
+    # Extra real pools (resolution-normalised) -> continue the aug numbering.
+    n_extra = 0
+    k_extra = args.real_extra_aug_per_scene or args.aug_per_scene
+    for ei, ed in enumerate(args.real_extra_dir):
+        sc = extra_scenes(ed, args.real_extra_size)
+        added = augment_scenes(sc, aug_tmp, k_extra, args.aug_seed + 1 + ei,
+                               start_n=n_hf + n_extra)
+        n_extra += added
+        sz = "native" if not args.real_extra_size else f"long-side {args.real_extra_size}"
+        print(f"augmented extra reals [{ed}]: {added}  "
+              f"({k_extra}/scene x {len(sc)}, {sz})")
+
+    n_aug = n_hf + n_extra
     n_synth = len(glob.glob(f"{args.synth_dir}/images/*.png"))
-    print(f"augmented reals: {n_aug}  ({args.aug_per_scene}/scene x {len(train_idx)})")
 
     total = merge_dirs([args.synth_dir, aug_tmp], args.out)
     shutil.rmtree(aug_tmp)
     real_frac = n_aug / total if total else 0.0
     print(f"merged {total} items into {args.out}  "
-          f"(synth={n_synth}, aug={n_aug}, real_frac={real_frac:.1%})")
+          f"(synth={n_synth}, real_aug={n_aug} [HF {n_hf} + extra {n_extra}], "
+          f"real_frac={real_frac:.1%})")
     print("HELD-OUT indices for --real-eval-indices:")
     print("  " + ",".join(str(i) for i in held_idx))
 
