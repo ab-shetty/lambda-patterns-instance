@@ -1378,3 +1378,38 @@ adaptation that 10ep/556img can't recover.
 => CLEAN CONFIRMATION of the OOD-coverage thesis: a principled, provably-correct
 FEATURE-LEVEL backbone improvement does NOT move held-out real. The ceiling is
 distribution coverage, not low-level features. Backbone is not the lever.
+
+## 2026-06-18 — Roboflow real pool added (26 new labelled reals) — POSITIVE
+New data: 26 real plans labelled in Roboflow (perceive-ai/floz-real-pool, 374
+still unannotated). Extracted via scripts/roboflow_to_local.py (pattern* -> generic
+instances; `remove` polygons -> holes on the containing instance). These reals are
+natively 640x640 (resized pre-upload, aspect distorted, not recoverable), so
+build_mix.py gained --real-extra-dir + --real-extra-size (default 1024, scales
+polygons) to fold them into the TRAIN side at a resolution comparable to the HF
+reals; HF held-out 14 stay the clean eval. All runs: 500 synth (canonical seed
+5858), --domain-random, 1024/bs4, 3 seeds x 10ep, held-out 14, plateau = last 3ep.
+
+| config       | real% | real_iou        | synth_iou | divergence       |
+|--------------|-------|-----------------|-----------|------------------|
+| baseline     | 10.1% | 0.2750 ± 0.0164 | 0.3521    | +0.0771 ± 0.0212 |
+| robomatched  |  9.7% | 0.2687 ± 0.0020 | 0.3438    | +0.0751 ± 0.0045 |
+| roboheavy    | 24.2% | 0.3075 ± 0.0138 | 0.3411    | +0.0337 ± 0.0136 |
+
+- baseline = HF reals only (4 aug/scene). robomatched = HF 2/scene + 26 robo
+  1/scene (SAME ~10% real, more DISTINCT reals, volume-matched). roboheavy =
+  HF 4/scene + robo 4/scene (more real volume).
+- robomatched vs baseline: real -0.006, INSIDE noise. At fixed real fraction,
+  swapping in distinct new reals for HF augmentation buys NOTHING. Diversity alone
+  is not the lever.
+- roboheavy vs baseline: real +0.033 (CLEARS the ±0.016 band), divergence roughly
+  HALVED (+0.077 -> +0.034), synth_iou flat. Genuine real-side gain.
+- READ: the new reals help as REAL-FRACTION HEADROOM, not per-image magic. The
+  prior "~10% real saturates / 100% memorizes" inverted-U ceiling was set by having
+  only 14 distinct reals; with 40 distinct reals you can spend ~24% real
+  productively. So MORE LABELLED REAL is the active lever now (not generator
+  tweaks, not diversity at fixed volume). roboheavy real_iou was still RISING at
+  ep9 (0.307, peaked nowhere) while baseline peaked ep6 then declined -> roboheavy
+  is underfit; more epochs likely lifts it further.
+- NEXT: (1) sweep real fraction with the 40-real pool (15/20/30%) to find the new
+  peak; (2) train roboheavy longer (15-20ep) since it had not plateaued;
+  (3) label more of the 374 unannotated floz-real-pool images — that is the lever.
