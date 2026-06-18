@@ -1413,3 +1413,37 @@ reals; HF held-out 14 stay the clean eval. All runs: 500 synth (canonical seed
 - NEXT: (1) sweep real fraction with the 40-real pool (15/20/30%) to find the new
   peak; (2) train roboheavy longer (15-20ep) since it had not plateaued;
   (3) label more of the 374 unannotated floz-real-pool images — that is the lever.
+
+### 2026-06-18 (cont.) — fraction sweep + longer training
+REAL-FRACTION SWEEP (40-real pool, 500 synth, 10ep, 3 seeds, held-out 14):
+
+| real% | real_iou        | synth_iou | divergence       |
+|-------|-----------------|-----------|------------------|
+| 10.1% | 0.2750 ± 0.0164 | 0.3521    | +0.0771 ± 0.0212 |
+| 13.8% | 0.2752 ± 0.0071 | 0.3390    | +0.0638 ± 0.0077 |
+| 19.4% | 0.2923 ± 0.0082 | 0.3427    | +0.0504 ± 0.0082 |
+| 24.2% | 0.3075 ± 0.0138 | 0.3411    | +0.0337 ± 0.0136 |
+| 28.6% | 0.3190 ± 0.0217 | 0.3334    | +0.0144 ± 0.0157 |
+
+- MONOTONIC across 10->29%: real_iou rises 0.275 -> 0.319, divergence falls
+  +0.077 -> +0.014, synth_iou flat ~0.33-0.35. NO inverted-U peak yet in this
+  range with 40 distinct reals — the memorization downturn the 14-real pool hit
+  at ~10% has moved past 29%. Best point: 28.6% real -> real 0.319, div +0.014
+  (near parity). Push fraction higher to find the turnover (or, better, label
+  more distinct real to lift the whole curve).
+- These supersede nothing; they extend the 10%/24% points above into a curve.
+
+LONGER TRAINING (roboheavy, 24% real, 20ep vs 10ep):
+  10ep: real 0.3075, synth 0.341, div +0.034.
+  20ep: real 0.3194 ± 0.0206, synth 0.4107, div +0.0913. real peaks ~ep13 (0.334)
+  then flat; synth_iou keeps climbing (0.34 -> 0.41) so DIVERGENCE REOPENS.
+=> Training longer does NOT improve parity — it lets the model re-exploit synth
+  shortcuts (synth runs away, real caps ~0.32). Keep the epoch budget short (~10).
+  Tell: sweep_k5 (29% real, 10ep) and roboheavy20 (24%, 20ep) reach the SAME real
+  0.319, but k5 has div +0.014 vs +0.091 — higher-real/short-training strictly
+  dominates more-epochs for held-out parity.
+
+CONCLUSION: the operating recipe is broad synth + as-high-as-tolerable real
+fraction (>=~29% with 40 reals) at ~10 epochs. The single lever to go further is
+MORE DISTINCT LABELLED REAL (the 374 unannotated floz-real-pool images), which
+both raises real_iou and pushes the memorization ceiling out.
