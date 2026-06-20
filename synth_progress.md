@@ -1482,3 +1482,34 @@ a hard ceiling: distinct labelled real. 14 reals capped ~10% / real 0.275; 40
 reals cap ~36% / real 0.325. To beat 0.325, LABEL MORE of the 374 unannotated
 floz-real-pool images and re-run the sweep — predict the ceiling rises and the
 optimal fraction shifts down (less re-augmentation needed per real).
+
+### 2026-06-20 — textured-negatives lever TESTED, NEGATIVE
+Motivated by a real-vs-synth visual diff (synth too sparse/clean, no unlabeled
+textured clutter -> model over-fires "pattern" on every textured real region, the
+v61b fragmentation failure) and the per-image analysis's own untried suggestion
+"synth needs textured NEGATIVES". The generator already had `--negative-texture-prob`
+(_inject_negative_textures, default-OFF): pastes unlabeled textured patches into
+unoccupied background, optionally bordered to look like candidate instances.
+
+Test (one variable, best operating point): synth_neg500 = canonical seed-5858
+recipe + --negative-texture-prob 0.7; same 36% real mix (k7), 3 seeds, 10ep,
+held-out 14. vs sweep_k7 baseline.
+
+| config (36% real)  | real_iou        | synth_iou | divergence       |
+|--------------------|-----------------|-----------|------------------|
+| sweep_k7 baseline  | 0.3256 ± 0.0074 | 0.3427    | +0.0172 ± 0.0045 |
+| neg_k7 (neg 0.7)   | 0.3027 ± 0.0107 | 0.3379    | +0.0352 ± 0.0170 |
+
+- real_iou DROPPED -0.023 (clears noise), divergence ~DOUBLED +0.017 -> +0.035.
+  Textured negatives HURT held-out real.
+- LIKELY CAUSE: _negative_patch draws from the SAME tile pool as labeled
+  instances, so identical material textures appear both labeled and unlabeled ->
+  AMBIGUOUS supervision. Model becomes cautious, loses recall on real (real plans
+  have no such ambiguity: a material is consistently labeled). It taught "this
+  texture is unreliable", not "texture != instance".
+- Joins the dead-end family (appearance/clutter manipulations of synth don't move
+  the gap). Confirms again: the lever is DISTINCT LABELLED REAL, not generator
+  edits. Untested refinements if ever revisited (low priority): negatives drawn
+  from textures DISJOINT from the labeled material pool; lower prob (~0.2); or kill
+  the floating colored lollipop markup (#1 visual tell, render_markup_overlay) as
+  its own one-variable test. None expected to beat the real-data lever.
