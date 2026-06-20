@@ -1447,3 +1447,38 @@ CONCLUSION: the operating recipe is broad synth + as-high-as-tolerable real
 fraction (>=~29% with 40 reals) at ~10 epochs. The single lever to go further is
 MORE DISTINCT LABELLED REAL (the 374 unannotated floz-real-pool images), which
 both raises real_iou and pushes the memorization ceiling out.
+
+### 2026-06-20 — higher-fraction sweep COMPLETES the curve (turnover found)
+Extended the sweep to 36/44/60% (40-real pool, 500 synth, 10ep, 3 seeds, held-out
+14). Full curve now:
+
+| real% | real_iou        | synth_iou | divergence       |
+|-------|-----------------|-----------|------------------|
+| 10.1% | 0.2750 ± 0.0164 | 0.3521    | +0.0771 ± 0.0212 |
+| 13.8% | 0.2752 ± 0.0071 | 0.3390    | +0.0638 ± 0.0077 |
+| 19.4% | 0.2923 ± 0.0082 | 0.3427    | +0.0504 ± 0.0082 |
+| 24.2% | 0.3075 ± 0.0138 | 0.3411    | +0.0337 ± 0.0136 |
+| 28.6% | 0.3190 ± 0.0217 | 0.3334    | +0.0144 ± 0.0157 |
+| 35.9% | 0.3256 ± 0.0074 | 0.3427    | +0.0172 ± 0.0045 |  <- best point
+| 44.4% | 0.3235 ± 0.0093 | 0.3404    | +0.0170 ± 0.0098 |
+| 60.3% | 0.3260 ± 0.0130 | 0.4073    | +0.0814 ± 0.0047 |  <- turnover
+
+- real_iou SATURATES at ~0.325 from ~29% on (0.319/0.326/0.324/0.326 across
+  29-60%); the 40-real pool's held-out ceiling is ~0.325. More fraction past ~36%
+  buys no real_iou.
+- divergence bottoms at ~+0.015-0.017 in the 29-44% band, then at 60% REOPENS to
+  +0.081 while synth_iou jumps 0.34 -> 0.41: the model memorizes the heavily
+  re-augmented reals (only 40 distinct, 19 augs each). Memorization shows as synth
+  running away, NOT real collapsing — at 10ep real holds 0.326.
+- BEST OPERATING POINT: ~36% real (k7), real 0.326 ± 0.007, div +0.017 ± 0.005.
+  60% is strictly worse (same real, 5x the divergence, more compute).
+- NOTE: k19/60% seed1 hit a transient `CUDA error: unknown error` on the first
+  pass (WSL2 box slept, lost CUDA context); clean re-run with --skip-existing
+  reproduced the turnover at 3 seeds. Config is fine, not OOM.
+
+FINAL READ FOR NEXT SESSION: synth realism / generator tweaks / training schedule
+are all exhausted as levers. The whole synth->real story reduces to ONE knob with
+a hard ceiling: distinct labelled real. 14 reals capped ~10% / real 0.275; 40
+reals cap ~36% / real 0.325. To beat 0.325, LABEL MORE of the 374 unannotated
+floz-real-pool images and re-run the sweep — predict the ceiling rises and the
+optimal fraction shifts down (less re-augmentation needed per real).
