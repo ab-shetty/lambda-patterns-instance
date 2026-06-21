@@ -1539,3 +1539,43 @@ artifact). One variable vs sweep_k7: regenerate seed-5858 canonical recipe with
   same-material ambiguity — dense construction floorplans (real has them; synth is
   65% elevation/30% roof/5% sparse freeform) and disjoint line-work clutter
   (dimension strings / text / leaders, NEVER a labeled material, so no ambiguity).
+
+### 2026-06-21 — COVERAGE BATCH: floorplan-heavy is a GENERATOR-SIDE WIN (breaks the ceiling)
+All markup-off base, 36% real (k7), 10ep, held-out 14 (same eval set => real_iou
+directly comparable; synth_iou is NOT comparable across mode-weight changes since
+the synth_val distribution itself shifts).
+
+| config (markup-off, 36% real) | seeds | real_iou        | synth_iou | divergence       |
+|-------------------------------|-------|-----------------|-----------|------------------|
+| base (markup .35, sweep_k7)   | 3     | 0.3256 ± 0.0074 | 0.3427    | +0.0172 ± 0.0045 |
+| base markup-off               | 5     | 0.3195 ± 0.0206 | 0.3420    | +0.0226 ± 0.0188 |
+| + clutter-boost               | 3     | 0.3243 ± 0.0175 | 0.3383    | +0.0140 ± 0.0143 |
+| + floorplan-heavy (40,40,20)  | 3     | 0.3329 ± 0.0156 | 0.3189    | -0.0140 ± 0.0098 |
+| + COMBO (cb + floorheavy)     | 3     | 0.3389 ± 0.0049 | 0.3247    | -0.0142 ± 0.0041 |
+
+- MARKUP-OFF IS NOISE: 3-seed 0.333 -> 5-seed 0.3195 ± 0.021 = same as markup-on
+  base. The +0.008 lollipop "win" did not survive 2 more seeds. Markup = NEUTRAL.
+  (Textbook example of why we run >=3, ideally 5, seeds.)
+- CLUTTER-BOOST alone: neutral on real (0.324), slightly tighter div. Disjoint
+  sheet clutter doesn't hurt (no same-material ambiguity, unlike negatives) but
+  doesn't move real by itself.
+- FLOORPLAN-HEAVY is the driver: weighting modes 65/5/30 -> 40/40/20 (floorplans
+  5%->40%, matching real's ~half-floorplan mix) made synth_val HARDER (0.342->0.319)
+  and pushed DIVERGENCE NEGATIVE (-0.014): real now EXCEEDS synth, the north-star
+  ideal. real_iou 0.333 (up from ~0.32).
+- COMBO = floorplan-heavy + clutter-boost: BEST EVER held-out real 0.3389 ± 0.0049
+  (tight!), div -0.0142 ± 0.0041. Clears the ~0.325 base (combo [0.334,0.344] vs
+  base [0.318,0.333]); the negative-divergence shift is decisive and low-variance.
+- MECHANISM: synth was too EASY partly because it was 95% elevations/roofs (sparse,
+  few-instance, easy to segment) while half the real set is DENSE floorplans (many
+  instances, busy). Covering that real image-TYPE made synth harder in the right
+  way -> real transfers better. This is COVERAGE done right (a real distribution
+  hole), NOT appearance (the dead-end). Validates "make synth like real" *when the
+  target is a coverage/structure gap, not style*.
+- SUPERSEDES the earlier "generator edits exhausted, ceiling 0.325, only real data
+  helps" claim. Generator-coverage and real-data are COMPLEMENTARY: 0.325 (real
+  only) -> 0.339 (real + floorplan-heavy synth). New recommended recipe base:
+  --mode-weights 40,40,20 --clutter-boost (markup optional/neutral).
+- NEXT (batch 2, running): confirm combo at 5 seeds; push floorplan weight further
+  (25,55,20); re-run real-fraction interaction with the combo recipe (does the
+  ceiling rise again / optimal fraction shift down now that synth is harder?).
