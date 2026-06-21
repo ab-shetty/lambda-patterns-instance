@@ -1540,6 +1540,24 @@ artifact). One variable vs sweep_k7: regenerate seed-5858 canonical recipe with
   65% elevation/30% roof/5% sparse freeform) and disjoint line-work clutter
   (dimension strings / text / leaders, NEVER a labeled material, so no ambiguity).
 
+### 2026-06-21 — CORRECTION: the floorplan-heavy "win" was 3-seed NOISE
+The COMBO result below (0.3389 ± 0.0049, "breaks the ceiling") DID NOT survive 5
+seeds. Re-run with seeds 0-4: combo real **0.3241 ± 0.0189**, div +0.0021 — i.e.
+TIED with the ~0.32 base. The tight 3-seed ±0.005 was a fluke; true band is ±0.02.
+Batch-2 fraction/floorplan interactions (all 3-seed) confirm real is FLAT:
+  combo_k7 36% (5s) real 0.3241 | combo_fp55 36% (55% floorplans) real 0.3147 |
+  combo_k10 44% real 0.3106 | combo_k4 24% real 0.3055.
+Every point sits in 0.305-0.324 = the ~0.32 noise floor. NOTHING beat base.
+ROBUST part: floorplan-heavy genuinely lowers synth_iou (0.342->0.32) => divergence
+falls to ~0 — but that is synth getting HARDER, not the model getting better on
+real (the "lightly-trained equilibrium" the doc warns about). real_iou is unmoved.
+LESSON (re-learned, now hard): at real~0.32 the instrument's 3-seed noise is ±0.02;
+TWO false positives this session (markup +0.008, combo +0.014) both evaporated at
+5 seeds. RULE GOING FORWARD: trust no real_iou delta < ~0.03, require >=5 seeds,
+compare real_iou directly (not divergence). Generator-coverage edits do NOT move
+the real ceiling; distinct labelled real remains the only lever that has. The
+entry below is kept for the record but is SUPERSEDED by this correction.
+
 ### 2026-06-21 — COVERAGE BATCH: floorplan-heavy is a GENERATOR-SIDE WIN (breaks the ceiling)
 All markup-off base, 36% real (k7), 10ep, held-out 14 (same eval set => real_iou
 directly comparable; synth_iou is NOT comparable across mode-weight changes since
