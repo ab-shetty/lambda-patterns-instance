@@ -102,9 +102,36 @@ def extra_scenes(extra_dir, target_long):
     return scenes
 
 
-def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0):
-    """Write k_per_scene photometric augmentations of each scene; returns count.
-    start_n continues the aug_NNNNNN filename numbering across multiple calls."""
+def _rotate_img_and_polys(img, anns, deg):
+    """Rotate image about its center by `deg` (CCW, white fill, no expand) and
+    apply the MATCHING transform to every polygon coordinate so masks stay
+    aligned. Verified by scripts overlay (see build_mix --real-aug-strong)."""
+    W, H = img.size
+    cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
+    rimg = img.rotate(deg, resample=Image.BICUBIC, expand=False,
+                      fillcolor=(255, 255, 255))
+    th = np.deg2rad(deg)
+    cos, sin = np.cos(th), np.sin(th)
+    # image y is DOWN, so a visually-CCW PIL rotation maps a point as below.
+    def _tx(poly):
+        out = []
+        for j in range(0, len(poly), 2):
+            x, y = poly[j] - cx, poly[j + 1] - cy
+            out.append(cx + x * cos + y * sin)
+            out.append(cy - x * sin + y * cos)
+        return out
+    rot = [{**a, "segmentation": [_tx(p) for p in a["segmentation"]]} for a in anns]
+    return rimg, rot
+
+
+def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False):
+    """Write k_per_scene augmentations of each scene; returns count.
+    start_n continues the aug_NNNNNN filename numbering across multiple calls.
+    strong=False: the established mild photometric+flip recipe (byte-identical to
+    before). strong=True: RICHER per-real augmentation (wider brightness/contrast,
+    color+sharpness jitter, stronger blur/noise, occasional grayscale, and a small
+    rotation with matching polygon transform) -- tests whether augmentation DIVERSITY
+    (not copy count) can squeeze more from the fixed real pool."""
     os.makedirs(f"{out_root}/images", exist_ok=True)
     os.makedirs(f"{out_root}/annotations", exist_ok=True)
     rng = np.random.RandomState(seed)
@@ -115,19 +142,38 @@ def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0):
         anns = sc["anns"]
         for _ in range(k_per_scene):
             img = base
-            img = ImageEnhance.Brightness(img).enhance(0.90 + 0.20 * rng.rand())
-            img = ImageEnhance.Contrast(img).enhance(0.90 + 0.20 * rng.rand())
-            if rng.rand() < 0.5:
-                img = img.filter(ImageFilter.GaussianBlur(radius=0.3 + 0.6 * rng.rand()))
-            if rng.rand() < 0.5:
-                img = img.transpose(Image.FLIP_LEFT_RIGHT)
-                cur = [{**a, "segmentation": [
-                    [(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(p)]
-                    for p in a["segmentation"]]} for a in anns]
+            cur = anns
+            if strong:
+                # small rotation first (transforms polygons too)
+                if rng.rand() < 0.7:
+                    img, cur = _rotate_img_and_polys(img, cur,
+                                                     float(rng.uniform(-8, 8)))
+                img = ImageEnhance.Brightness(img).enhance(0.75 + 0.50 * rng.rand())
+                img = ImageEnhance.Contrast(img).enhance(0.75 + 0.50 * rng.rand())
+                img = ImageEnhance.Color(img).enhance(0.6 + 0.8 * rng.rand())
+                img = ImageEnhance.Sharpness(img).enhance(0.5 + 1.5 * rng.rand())
+                if rng.rand() < 0.5:
+                    img = img.filter(ImageFilter.GaussianBlur(radius=0.3 + 1.2 * rng.rand()))
+                if rng.rand() < 0.15:
+                    img = img.convert("L").convert("RGB")
+                if rng.rand() < 0.5:
+                    img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                    cur = [{**a, "segmentation": [
+                        [(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(p)]
+                        for p in a["segmentation"]]} for a in cur]
+                noise = rng.normal(0, 3 + 9 * rng.rand(), (H, W, 3))
             else:
-                cur = anns
-            arr = np.asarray(img).astype(np.float32) + \
-                rng.normal(0, 2 + 5 * rng.rand(), (H, W, 3))
+                img = ImageEnhance.Brightness(img).enhance(0.90 + 0.20 * rng.rand())
+                img = ImageEnhance.Contrast(img).enhance(0.90 + 0.20 * rng.rand())
+                if rng.rand() < 0.5:
+                    img = img.filter(ImageFilter.GaussianBlur(radius=0.3 + 0.6 * rng.rand()))
+                if rng.rand() < 0.5:
+                    img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                    cur = [{**a, "segmentation": [
+                        [(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(p)]
+                        for p in a["segmentation"]]} for a in anns]
+                noise = rng.normal(0, 2 + 5 * rng.rand(), (H, W, 3))
+            arr = np.asarray(img).astype(np.float32) + noise
             img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
             fn = f"aug_{n:06d}.png"
             img.save(f"{out_root}/images/{fn}")
@@ -185,6 +231,12 @@ def main():
                     help="seed for the 14/14 real train/held split (keep at 1234 "
                          "to match the established setup)")
     ap.add_argument("--aug-seed", type=int, default=5858)
+    ap.add_argument("--real-aug-strong", action="store_true",
+                    help="richer per-real augmentation (color/sharpness jitter, "
+                         "wider brightness/contrast, stronger blur/noise, occasional "
+                         "grayscale, small rotation w/ matching polygon transform) "
+                         "instead of the mild default. Tests augmentation DIVERSITY "
+                         "as a lever vs. the fixed real pool.")
     ap.add_argument("--aug-tmp", default=None,
                     help="scratch dir for the augmented reals (default <out>_augtmp)")
     args = ap.parse_args()
@@ -203,7 +255,8 @@ def main():
     # HF train reals (native resolution) -> aug_000000.. (byte-identical to before
     # when no extra pools are given, so the established parity mix reproduces).
     n_hf = augment_scenes(hf_scenes(train_idx, recs), aug_tmp,
-                          args.aug_per_scene, args.aug_seed, start_n=0)
+                          args.aug_per_scene, args.aug_seed, start_n=0,
+                          strong=args.real_aug_strong)
     print(f"augmented HF reals: {n_hf}  ({args.aug_per_scene}/scene x {len(train_idx)})")
 
     # Extra real pools (resolution-normalised) -> continue the aug numbering.
@@ -212,7 +265,7 @@ def main():
     for ei, ed in enumerate(args.real_extra_dir):
         sc = extra_scenes(ed, args.real_extra_size)
         added = augment_scenes(sc, aug_tmp, k_extra, args.aug_seed + 1 + ei,
-                               start_n=n_hf + n_extra)
+                               start_n=n_hf + n_extra, strong=args.real_aug_strong)
         n_extra += added
         sz = "native" if not args.real_extra_size else f"long-side {args.real_extra_size}"
         print(f"augmented extra reals [{ed}]: {added}  "

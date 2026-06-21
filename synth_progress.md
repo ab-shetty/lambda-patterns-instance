@@ -1597,3 +1597,39 @@ the synth_val distribution itself shifts).
 - NEXT (batch 2, running): confirm combo at 5 seeds; push floorplan weight further
   (25,55,20); re-run real-fraction interaction with the combo recipe (does the
   ceiling rise again / optimal fraction shift down now that synth is harder?).
+
+### 2026-06-21 — VOLUME / RESOLUTION / AUGMENTATION / BN: all null at 5 seeds
+Answering "can we beat 0.32 NOW by more images (not more distinct real)?" — tested
+every volume/model knob, 5 seeds, 1024, 36% real (mix_sweep_k7), held-out 14.
+Firm 5-seed bs4 baseline: real **0.3197 ± 0.0164**.
+
+| lever                                   | real_iou        | note |
+|-----------------------------------------|-----------------|------|
+| baseline (bs4, normal BN, mild aug)     | 0.3197 ± 0.0164 | ref  |
+| richer real augmentation (--real-aug-strong) | 0.3125 ± 0.0133 | NULL (-0.007) |
+| resolution 1024 (bs1/ga4/freeze-bn)     | 0.3460 ± 0.0189 | see below |
+| resolution 2048 (bs1/ga4/freeze-bn)     | 0.3519 ± 0.0137 | 1024 vs 2048 = +0.006 NULL |
+| freeze-backbone-bn ALONE (bs4)          | 0.3297 ± 0.0189 | neutral real, but synth->0.41, div +0.084 (WORSE) |
+
+- VOLUME (recap, prior entries): more synth = dead-end #2; more real COPIES = the
+  fraction sweep (plateau 0.32, memorize at 60%); scale-both = longer-training
+  (div reopens). ALL null. Now + richer AUGMENTATION = also null. Conclusively:
+  no count/augmentation knob beats ~0.32. The ceiling is distinct-real COVERAGE.
+- RESOLUTION: 1024 vs 2048 (matched bs1/ga4/freeze-bn) = +0.006, NULL. Tiny real
+  instances are NOT a resolution problem. codex_doc's top model-side lever closed.
+- FREEZE-BN: the +0.02 seen in the bs1/ga4 runs is NOT from freeze-bn — isolated at
+  bs4 it gives real 0.330 (within noise) AND inflates synth_iou to 0.414 /
+  divergence to +0.084 (model overfits synth harder). So freeze-bn alone is
+  neutral-to-harmful. The res1024/2048 bump (0.346/0.352, +0.026/+0.032 over the
+  0.320 baseline) comes from the bs1+grad-accum micro-batch dynamics, which can't
+  be cleanly isolated (bs1 requires frozen BN to be valid). BORDERLINE and
+  unattributed; treat as unconfirmed until the 10-seed check below.
+- NEW CODE: build_mix.py --real-aug-strong (richer per-real aug: color/sharpness
+  jitter, wider brightness/contrast, stronger blur/noise, occasional grayscale,
+  small rotation w/ verified polygon transform). Default OFF; mild path unchanged.
+- BOTTOM LINE after a full day of autonomous search: NO generator, volume,
+  augmentation, resolution, or BN lever reliably beats real ~0.32 at 5-seed rigor
+  (two 3-seed "wins" — markup, floorplan-combo — both evaporated at 5 seeds). The
+  ONLY confirmed lever remains DISTINCT LABELLED REAL (14 reals -> 0.275; 40 ->
+  0.32). Recommended action: label more of the 374 unannotated floz-real-pool
+  images. Open thread: 10-seed confirm of the bs1/ga4 micro-batch regime (running).
