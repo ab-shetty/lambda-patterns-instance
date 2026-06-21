@@ -1513,3 +1513,29 @@ held-out 14. vs sweep_k7 baseline.
   from textures DISJOINT from the labeled material pool; lower prob (~0.2); or kill
   the floating colored lollipop markup (#1 visual tell, render_markup_overlay) as
   its own one-variable test. None expected to beat the real-data lever.
+
+### 2026-06-21 — kill the lollipop markup: marginal POSITIVE, safe
+Tested the #1 visual tell (floating colored lollipop markers = synth-only
+artifact). One variable vs sweep_k7: regenerate seed-5858 canonical recipe with
+--markup-overlay-prob 0.0 (was 0.35); same 36% real mix (k7), 3 seeds, 10ep.
+
+| config (36% real)    | real_iou        | synth_iou | divergence       |
+|----------------------|-----------------|-----------|------------------|
+| sweep_k7 (markup .35)| 0.3256 ± 0.0074 | 0.3427    | +0.0172 ± 0.0045 |
+| nomarkup_k7 (markup 0)| 0.3334 ± 0.0135| 0.3451    | +0.0116 ± 0.0132 |
+
+- real +0.0078, divergence -0.006 (real beat synth eps1-7). DID NOT HURT.
+- BUT +0.008 is at the EDGE of the noise band (intervals overlap); directionally
+  positive + safe, NOT a clean confirmed win. Needs +2 seeds to call decisively.
+- KEY CONTRAST that organizes all the synth-edit results: removing a SYNTH-ONLY
+  ARTIFACT (lollipops) is safe / maybe helps; adding SAME-MATERIAL clutter
+  (negatives, -0.023) or COSMETIC realism (clapboard, -0.05) HURTS. Usable rule:
+  act on visible differences that are artifacts or COVERAGE holes, never on
+  appearance/style. ("Claude can tell synth from real" is true and points at the
+  right targets, but only the artifact/coverage subset survives the instrument.)
+- Provisional recipe tweak: markup-overlay-prob 0 (or low) — costs nothing, removes
+  the #1 tell, edges real up. Confirm with more seeds before adopting.
+- NOT YET TESTED (the bigger lever this implies): real-COVERAGE gaps done WITHOUT
+  same-material ambiguity — dense construction floorplans (real has them; synth is
+  65% elevation/30% roof/5% sparse freeform) and disjoint line-work clutter
+  (dimension strings / text / leaders, NEVER a labeled material, so no ambiguity).
