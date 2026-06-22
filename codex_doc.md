@@ -112,8 +112,10 @@ python -c "from huggingface_hub import snapshot_download; print(snapshot_downloa
 ```
 
 Hardware we ran on: **RTX 5070 12GB, 28 vCPU, 15GB RAM, WSL2.** Constraints:
-- 12GB GPU → train at `--image-max-size 1024 --batch-size 4` (or 2048/bs1 +
-  `--grad-accum`). bf16 autocast on by default.
+- 12GB GPU → train at `--image-max-size 1024` with the default regime
+  (`--batch-size 1 --grad-accum 4 --freeze-backbone-bn`, all on by default as of
+  2026-06-22) — also the confirmed-best recipe for real_iou, not just a memory
+  workaround (+0.03-0.08 vs batch-8; see synth_progress.md). bf16 autocast on by default.
 - **15GB RAM is the tight one.** Local-data loading is lazy (stores image PATHS,
   decodes per-item) — keep it that way or you OOM at a few thousand images.
 

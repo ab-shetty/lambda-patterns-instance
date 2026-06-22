@@ -84,19 +84,26 @@ def parse_args():
     p.add_argument("--max-records", type=int, default=0,
                    help="Limit number of records (0 = all). Useful for quick runs.")
     # Training
-    p.add_argument("--batch-size", type=int, default=8)
-    p.add_argument("--grad-accum", type=int, default=1,
-                   help="accumulate grads over N micro-batches before stepping; "
-                        "effective batch = batch-size * grad-accum. Lets a 12GB "
-                        "GPU train at 2048px/bs1 with an effective batch of 8.")
+    p.add_argument("--batch-size", type=int, default=1,
+                   help="DEFAULT 1: the bs1/grad-accum-4/freeze-backbone-bn regime "
+                        "is the confirmed-best recipe (real_iou +0.03-0.08 vs bs8, "
+                        "t=4.4; see synth_progress.md 2026-06-22). Raise for a "
+                        "throughput/quality trade on large GPUs.")
+    p.add_argument("--grad-accum", type=int, default=4,
+                   help="DEFAULT 4: accumulate grads over N micro-batches before "
+                        "stepping; effective batch = batch-size * grad-accum. With "
+                        "the default bs1 this gives an effective batch of 4 and lets "
+                        "a 12GB GPU train at 2048px.")
     p.add_argument("--freeze-backbone", action="store_true",
                    help="Freeze the entire backbone at ImageNet weights so it never "
                         "specializes to synth; decoder segments from generic features "
                         "identical for synth and real (targets the real_iou ceiling).")
-    p.add_argument("--freeze-backbone-bn", action="store_true",
-                   help="freeze backbone BatchNorm (eval running stats, no grad). "
-                        "Standard for detection; required for valid bs1/grad-accum "
-                        "since per-forward BN over 1 image is noise.")
+    p.add_argument("--freeze-backbone-bn", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="DEFAULT ON: freeze backbone BatchNorm (eval running stats, "
+                        "no grad). Standard for detection; required for valid "
+                        "bs1/grad-accum since per-forward BN over 1 image is noise. "
+                        "Pass --no-freeze-backbone-bn to disable.")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)

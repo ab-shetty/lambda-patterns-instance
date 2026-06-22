@@ -93,10 +93,16 @@ pip install -r requirements.txt
 ## Train
 
 ```bash
-./run_training.sh                      # 2048px, bf16, batch 8, 15 epochs, single GPU
-# or
-python train.py --image-max-size 2048 --batch-size 8 --epochs 15 --num-workers 16
+python train.py --image-max-size 2048 --epochs 15 --num-workers 16
 ```
+
+**Default recipe is `--batch-size 1 --grad-accum 4 --freeze-backbone-bn`** (all on by
+default as of 2026-06-22). This is the confirmed-best regime: it lifts held-out
+real_iou **+0.03–0.08 vs the old batch-8 setup** (t=4.4, replicated at 1024 and
+2048; see `synth_progress.md`). The gain is a regularization effect, not just a
+12GB-GPU memory workaround — keep it on a big GPU too. On large GPUs you can raise
+throughput with a bigger micro-batch (`--batch-size 4 --grad-accum 1`) at a small
+quality cost, or pass `--no-freeze-backbone-bn` to revert backbone BN behaviour.
 
 Quick local run on a slice of the data:
 
@@ -157,7 +163,9 @@ Saves `predictions.png`: image · reference · GT target instances · predicted 
 | `--hf-repo` | `abshetty/floz-synth-v5` | HuggingFace dataset repo |
 | `--image-max-size` | 1024 | Longest side after aspect-preserving resize (`run_training.sh` uses 2048) |
 | `--ref-size` | 224 | Reference patch size |
-| `--batch-size` | 8 | Batch size |
+| `--batch-size` | 1 | Micro-batch size (confirmed-best regime; effective batch = batch-size × grad-accum) |
+| `--grad-accum` | 4 | Grad accumulation steps before optimizer step |
+| `--freeze-backbone-bn` | on | Freeze backbone BatchNorm; `--no-freeze-backbone-bn` to disable |
 | `--epochs` | 50 | Epochs (`run_training.sh` uses 15) |
 | `--no-amp` | off | Disable bf16 autocast (train in full fp32) |
 | `--num-workers` | 4 | Dataloader workers (`run_training.sh` uses 16) |
