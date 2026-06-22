@@ -1669,3 +1669,42 @@ separated (regime 0.32-0.38 vs baseline 0.29-0.33). Independently replicated at
 - NEXT: (1) re-run real-fraction sweep in the new regime (does ceiling rise / does
   more real now stack higher?); (2) isolate mechanism (bs2/ga2; head GroupNorm;
   freeze-all-bn); (3) it stacks with labelling — both levers compound.
+
+---
+
+## 2026-06-22 — REGIME real-fraction sweep: ceiling rose 0.32 → ~0.35, and the curve FLATTENED
+
+Re-ran the real-fraction curve in the new regime (bs1 / grad-accum 4 /
+freeze-backbone-bn, res1024, --domain-random, held-out 14). Fraction varied by
+upsampling the SAME ~40 reals (aug-per-scene k), same as the original bs4 curve,
+so this is fraction-at-fixed-coverage. 5 seeds/point; bs4 column from prior runs.
+
+| real frac | bs4 real_iou | REGIME real_iou (n=5) | regime synth | regime div |
+|-----------|--------------|------------------------|--------------|------------|
+| 10% (base)| 0.2750±0.016 | **0.3506 ± 0.0096**    | 0.3870       | +0.036     |
+| 36% (k7)  | 0.3152±0.015 | **0.3489 ± 0.0194** (n=10)| 0.3718    | +0.023     |
+| 44% (k10) | 0.318        | **0.3427 ± 0.0079**    | 0.3831       | +0.040     |
+| 60% (k19) | memorizes    | ~0.337 (2/5 seeds, prelim) | 0.46     | +0.12      |
+
+FINDINGS:
+- **Ceiling rose 0.32 → ~0.35.** The regime real_iou sits at ~0.35 across the
+  whole 10–44% band, clearing the old bs4 ~0.32 plateau at EVERY fraction.
+- **The curve FLATTENED.** bs4 climbed 0.275(10%) → 0.32(36-44%) as you added real
+  (+0.045 slope). The regime is ~FLAT: 0.351 → 0.349 → 0.343. You reach ~0.35 with
+  as little as 10% real, and raising the same reals' fraction does NOT stack past it.
+- **The regime lift is FRONT-LOADED** (biggest where real is scarce): +0.076 at 10%,
+  +0.034 at 36%, +0.025 at 44%. Better training helps most when real data is thin.
+- **60% no longer collapses — it diverges instead.** In bs4, 60% real MEMORIZED
+  (real dropped). In the regime, real HOLDS ~0.337 but synth runs to 0.46
+  (div +0.12). The regime trades real-collapse for synth-overfit; real still gets
+  no benefit from the higher fraction. (2/5 seeds; finalize when k19 completes.)
+- **CRITICAL CAVEAT — what this does NOT test:** fraction was raised by upsampling
+  the SAME ~40 real plans, not by adding DISTINCT real plans. So this measures
+  fraction-at-fixed-coverage. It says nothing about the coverage lever: labelling
+  NEW real plans is still the untested, live hypothesis for breaking ~0.35. The
+  flat curve is fully consistent with "you've extracted all the signal these 40
+  plans contain by ~10% fraction; more *distinct* plans is the only way up."
+- TAKEAWAY: regime is a one-time ~+0.03–0.08 lift that resets the floor to ~0.35
+  and makes the model data-efficient (reaches ceiling with little real). It does
+  NOT change that more of the SAME real is flat. Next real gains must come from
+  COVERAGE (label new plans), now measured in the regime.
