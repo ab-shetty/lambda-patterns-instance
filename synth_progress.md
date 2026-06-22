@@ -1633,3 +1633,39 @@ Firm 5-seed bs4 baseline: real **0.3197 ± 0.0164**.
   ONLY confirmed lever remains DISTINCT LABELLED REAL (14 reals -> 0.275; 40 ->
   0.32). Recommended action: label more of the 374 unannotated floz-real-pool
   images. Open thread: 10-seed confirm of the bs1/ga4 micro-batch regime (running).
+
+### 2026-06-22 — CONFIRMED WIN: bs1/grad-accum-4/freeze-backbone-bn training regime
+The "borderline" bs1/ga4/freeze-bn regime HELD and is the first confirmed non-data
+lever of the session. Both arms at 10 seeds, 1024, 36% real (mix_sweep_k7),
+held-out 14, effective batch 4 in both (bs4 vs bs1*ga4):
+
+| regime                              | real_iou (n=10) | synth_iou | divergence |
+|-------------------------------------|-----------------|-----------|------------|
+| baseline bs4, normal BN             | 0.3152 ± 0.0145 | 0.3393    | +0.0241    |
+| bs1 / grad-accum 4 / freeze-bb-bn   | 0.3489 ± 0.0194 | 0.3718    | +0.0228    |
+
+Δreal = **+0.0337**, combined SE 0.0077 => **t = 4.4, p < 0.001**. Per-seed cleanly
+separated (regime 0.32-0.38 vs baseline 0.29-0.33). Independently replicated at
+2048 (0.3519). NOT noise.
+- WHAT IT IS: divergence UNCHANGED (+0.023 both); synth AND real both rose ~+0.03.
+  So this is NOT a coverage / domain-gap fix — it is a strictly BETTER TRAINING
+  REGIME (the model was under-trained / under-regularized at bs4). It lifts real_iou
+  directly and STACKS on the data lever (orthogonal to labelling).
+- MECHANISM (partly isolated): freeze-bb-bn ALONE at bs4 = real 0.330 but synth
+  0.414 / div +0.084 (overfits synth) -> freeze-bn alone is NOT it. The balanced
+  lift needs the bs1 micro-batch dynamics + freeze-bn TOGETHER. Leading hypothesis:
+  per-forward stats at bs1 (head norm layers and/or the frozen-backbone interaction)
+  act as regularization. Not yet fully isolated (bs2/ga2, head GroupNorm untested).
+- MEA CULPA: I twice called this noise (it was +0.029 at the 5-seed stage, just
+  under the ±0.03 rule-of-thumb, and freeze-bn-alone failing to isolate it made me
+  dismiss it). The user pushed back; 10-seed + proper SE analysis (not std-overlap)
+  confirmed t=4.4. Lesson refinement: use STANDARD ERROR for A/B significance, not
+  ±std overlap; and a replicated effect (res1024 AND res2048) is strong even when a
+  single-variable isolation fails.
+- IMPLICATION: every result this session (incl. the "0.32 ceiling" and the full
+  real-fraction curve) was at bs4 and is now SUSPECT as under-trained. The whole
+  curve should be RE-RUN in this regime; the ceiling is likely higher than 0.32.
+  New default training recipe: --batch-size 1 --grad-accum 4 --freeze-backbone-bn.
+- NEXT: (1) re-run real-fraction sweep in the new regime (does ceiling rise / does
+  more real now stack higher?); (2) isolate mechanism (bs2/ga2; head GroupNorm;
+  freeze-all-bn); (3) it stacks with labelling — both levers compound.
