@@ -1684,7 +1684,7 @@ so this is fraction-at-fixed-coverage. 5 seeds/point; bs4 column from prior runs
 | 10% (base)| 0.2750±0.016 | **0.3506 ± 0.0096**    | 0.3870       | +0.036     |
 | 36% (k7)  | 0.3152±0.015 | **0.3489 ± 0.0194** (n=10)| 0.3718    | +0.023     |
 | 44% (k10) | 0.318        | **0.3427 ± 0.0079**    | 0.3831       | +0.040     |
-| 60% (k19) | memorizes    | ~0.337 (2/5 seeds, prelim) | 0.46     | +0.12      |
+| 60% (k19) | memorizes    | **0.3391 ± 0.0127**    | 0.4523       | +0.113     |
 
 FINDINGS:
 - **Ceiling rose 0.32 → ~0.35.** The regime real_iou sits at ~0.35 across the
@@ -1695,9 +1695,9 @@ FINDINGS:
 - **The regime lift is FRONT-LOADED** (biggest where real is scarce): +0.076 at 10%,
   +0.034 at 36%, +0.025 at 44%. Better training helps most when real data is thin.
 - **60% no longer collapses — it diverges instead.** In bs4, 60% real MEMORIZED
-  (real dropped). In the regime, real HOLDS ~0.337 but synth runs to 0.46
-  (div +0.12). The regime trades real-collapse for synth-overfit; real still gets
-  no benefit from the higher fraction. (2/5 seeds; finalize when k19 completes.)
+  (real dropped). In the regime (n=5), real HOLDS 0.3391±0.0127 but synth runs to
+  0.4523 (div +0.113). The regime trades bs4's real-collapse for synth-overfit;
+  real gets no benefit from the higher fraction (statistically flat vs 44%/36%).
 - **CRITICAL CAVEAT — what this does NOT test:** fraction was raised by upsampling
   the SAME ~40 real plans, not by adding DISTINCT real plans. So this measures
   fraction-at-fixed-coverage. It says nothing about the coverage lever: labelling
