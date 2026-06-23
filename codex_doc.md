@@ -14,6 +14,53 @@ the Claude memory dir referenced at the bottom.
 
 ---
 
+## 0. UPDATE 2026-06-22 — READ FIRST (supersedes §3-bottom, §4 hypotheses, §7 ceiling)
+
+A full autonomous search ran 2026-06-18→22. Net result for anyone trying to make
+synth better: **no generator edit has moved held-out real at 5-seed rigor.** The
+two confirmed levers are (a) more DISTINCT labelled real, (b) a better TRAINING
+regime — neither is a generator change. Specifics:
+
+- **The real lever is distinct-plan COVERAGE, not image count.** 14 distinct real
+  plans → real ≈ 0.275; 40 distinct → ≈ 0.32. Adding COPIES/augs of the same
+  plans, scaling synth, or richer augmentation are all NULL (the old "~10% real →
+  0.32" framing was about fraction-of-the-same-reals and is misleading — it's the
+  *number of distinct plans* that matters). New real arrives via Roboflow now:
+  `scripts/roboflow_to_local.py` → `scripts/build_mix.py --real-extra-dir …`
+  (handles the different resolution). **Labelling more of the 374 unannotated
+  `floz-real-pool` images is the single highest-value action.**
+- **CONFIRMED TRAINING-REGIME WIN (now the repo default):**
+  `--batch-size 1 --grad-accum 4 --freeze-backbone-bn` lifts real **+0.03–0.08**
+  vs batch-8 (t=4.4, 10 seeds, replicated at 1024 & 2048). It is a regularization
+  effect, not a domain fix (raises synth AND real equally; divergence unchanged).
+  It **raised the real ceiling 0.32 → ~0.35** and FLATTENED the real-fraction curve
+  (you reach ~0.35 with as little as 10% real; more of the same real doesn't stack).
+  Every pre-06-22 number in this doc was measured at the old batch-8 regime and is
+  ~0.03 low. This regime STACKS with the data lever.
+- **Generator edits TESTED this session and all NULL-or-HARMFUL at ≥5 seeds:**
+  floorplan-heavy mode-weights + clutter "combo" (looked like a +0.014 win at 3
+  seeds, **washed out to 0.324±0.019 = tied with base** at 5); kill-the-lollipop
+  markup (`--markup-overlay-prob 0`, +0.008 at 3 seeds, **neutral** at 5);
+  clutter-boost (neutral); textured negatives (`--negative-texture-prob`, **HURT**
+  −0.023 — same-material ambiguity); resolution 1024 vs 2048 (NULL, closes the
+  doc's "tiny instances" model-side lever); LLM/eyeball appearance realism (HURT,
+  see §3-#1). Making synth "harder / cover floorplans" lowers synth_iou and drives
+  divergence→0 **without moving real** — that is the lightly-trained-equilibrium
+  trap (§2), not a win.
+- **Hardened rigor rule (two false-positive "wins" this session forced it):**
+  trust no real_iou delta < ~0.03; use ≥5 seeds (10 to confirm); judge by
+  real_iou DIRECTLY via STANDARD ERROR of the two arms, not ±std-overlap and not
+  divergence. 3-seed reads at real≈0.32 have a true ±0.02 band and have fooled us
+  twice.
+
+**If you still want to try generator improvements (the §4 vision job):** it's not
+forbidden — but the bar is the rigor rule above, the target must be a genuine
+COVERAGE hole (an image-type/structure real has and synth never generates), never
+appearance/style, and you are competing against a lever (label more real) that is
+known to work. Gate every change on held-out real at 5 seeds before believing it.
+
+---
+
 ## 1. The model & the task
 
 `RefMask2Former` (`refmask2former/`): a Mask2Former variant with a
@@ -63,9 +110,11 @@ stone/tile fills), *not* 1px lines.
    seeds, and only trust an effect that clears the reported ± band.** Single-run
    reads have repeatedly fooled us.
 
-What *did* move held-out real: **adding genuinely distinct real images.**
-0% real → 0.24 ceiling; ~10% real (best-of-both mix) → 0.32 with divergence ≈ 0;
-100% real → memorization. Inverted-U; ~10% distinct real saturates the gain.
+What *did* move held-out real: **adding genuinely distinct real PLANS** (count of
+distinct plans, not image volume). 0 real → 0.24 ceiling; 14 distinct → 0.275; 40
+distinct → 0.32; 100% real → memorization. (Superseded detail in §0: the ceiling
+is ~0.35 under the new default training regime, and adding copies/augs of the
+*same* plans does NOT help — only distinct plans do.)
 
 ## 4. The current visual gap (your vision job)
 
@@ -93,10 +142,13 @@ in §6). The tells that currently give synth away, ranked by impact:
    callout leaders everywhere). This is a *coverage* gap (matters most per the
    thesis), not a cosmetic one.
 
-Hypothesis worth testing first: **#7 (cover dense floorplans) and #1 (kill the
-lollipops)** are the changes most likely to be real coverage wins rather than
-cosmetic; #2–#6 are appearance and may fall into the Dead-End-#1 trap — gate
-them hard on divergence.
+**STATUS (2026-06-22, see §0): #1 and #7 have now BOTH been tested at 5 seeds and
+are NULL.** Killing the lollipops (`--markup-overlay-prob 0`) is neutral; dense
+floorplans (`--mode-weights 40,40,20`, ±clutter) looked like a win at 3 seeds but
+washed out to tied-with-base at 5. They lower synth_iou and zero divergence
+without moving real (the §2 trap). #2–#6 are appearance → expect Dead-End-#1.
+Treat the list below as catalogued tells, not an open to-do list — anything you
+retry here must clear the §0 rigor bar on held-out real.
 
 ## 5. Environment setup (fresh container)
 
@@ -166,15 +218,21 @@ real-vs-synth folder with GT overlays.
 
 ## 7. The loop to run
 
-1. Pick ONE coverage hypothesis from §4 (start with #7 floorplans or #1 markers).
+1. Pick ONE genuine COVERAGE hypothesis (an image-type/structure real has that
+   synth never generates) — NOT #1/#7 (tested null, §0) and NOT appearance (§3-#1).
 2. Implement it in `generate_synthetic_v5.py` behind a default-OFF flag.
-3. Generate ~500 synth with the change; build the best-of-both 10% mix.
-4. `probe_multiseed.py`, 3 seeds, 10 epochs, eval held-out 14.
-5. **Accept only if held-out real improves beyond the ± band AND divergence
-   doesn't worsen.** Otherwise it's noise or a Dead-End-#1 cosmetic. Record the
-   result (pos or neg) in `synth_progress.md`.
-6. Repeat. The win condition is held-out real climbing toward 0.95 with
-   divergence staying near 0.
+3. Generate ~500 synth with the change; build the mix (`build_mix.py`, include the
+   Roboflow reals via `--real-extra-dir`).
+4. `probe_multiseed.py`, **≥5 seeds**, 10 epochs, eval held-out 14, in the default
+   regime (bs1/ga4/freeze-bn — now train.py's default).
+5. **Accept only if held-out real_iou improves by ≥0.03 with the two arms' STANDARD
+   ERROR separating them** (judge real_iou DIRECTLY, not divergence — a change that
+   only shrinks divergence by making synth harder is the §2 trap, not a win).
+   Record the result (pos or neg) in `synth_progress.md`.
+6. Reality check: as of 2026-06-22 NO generator edit has cleared this bar; the
+   working levers are labelling more distinct real and the training regime (§0).
+   If you can't clear it, that's the expected outcome — say so and stop, don't
+   chase noise.
 
 ## 8. Pointers
 
