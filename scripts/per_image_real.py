@@ -15,8 +15,8 @@ import torch
 from functools import partial
 from torch.utils.data import DataLoader
 
-from refmask2former import (RefMask2Former, collate_fn, load_parquet_records,
-                            InstanceSegDataset)
+from evaluate import load_model
+from refmask2former import collate_fn, load_parquet_records, InstanceSegDataset
 from train import move_batch
 
 
@@ -41,10 +41,7 @@ def main():
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
                         collate_fn=partial(collate_fn, size_divisible=32))
 
-    model = RefMask2Former().to(device)
-    ck = torch.load(args.ckpt, map_location=device)
-    model.load_state_dict(ck["model"])
-    model.eval()
+    model, _ = load_model(args.ckpt, device)
 
     rows = []
     tot_iou = tot_gt = tot_pred = 0.0

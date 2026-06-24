@@ -204,6 +204,7 @@ DENSE_FILL_MIN_INK = 0.35
 # carry texture but no annotation, teaching that texture alone is insufficient.
 # 0.0 = off (default; preserves the canonical recipe).
 NEGATIVE_TEXTURE_PROB = 0.0
+NEGATIVE_MATERIAL_FRAC = 0.50
 
 # Per-elevation probability of rendering a "real-style" excerpt that mimics the
 # real plans the model fails HARDEST on (Las Huertas / Ceilhunt elevations): one
@@ -275,6 +276,39 @@ RESOLUTION_SCALE = 1.0
 # machine-perfect polygons the model fits to ~0.37. Jittering the LABEL so it no
 # longer matches a crisp edge lowers synth_iou@10 toward real. 0 = off (default).
 LABEL_JITTER = 0.0
+
+# Per-freeform probability of replacing the legacy room-fill floorplan with a
+# construction-sheet floorplan: labeled material is a few large floor/deck finish
+# regions drawn UNDER dense walls, fixtures, notes, leaders, and dashed service
+# linework. This targets plan grammar/label semantics rather than surface style.
+CONSTRUCTION_SHEET_PROB = 0.0
+
+# Per-roof_plan probability of labelling a roof as 1-2 large contiguous fields
+# rather than per-facet instances. Real roof-plan GT often spans many ridge/hip
+# lines as one large material field; the linework is context, not boundaries.
+ROOF_FIELD_PROB = 0.0
+
+# Per-elevation probability of adding labelled long-skinny trim/material
+# objects: fascia/eave bands, belt courses, porch slabs, and small rectangular
+# trim blocks. Several hard real elevations annotate exactly these objects,
+# while the base generator mostly labels large wall/roof fields.
+ELEVATION_TRIM_PROB = 0.0
+
+# Per-construction-sheet probability of adding thin exterior/perimeter slab or
+# walk annotations. Hard real floorplans often label exterior finish/walk areas
+# around the building while similar interior flooring remains unlabeled.
+CONSTRUCTION_PERIMETER_SLAB_PROB = 0.0
+
+# Per-construction-sheet probability of drawing unlabeled room finish/hatch
+# fields under walls and fixtures. Real construction sheets often contain floor
+# textures, gray poche, cabinets, and finish fields that are context rather than
+# the queried target. This is a targeted alternative to global hard negatives.
+CONSTRUCTION_ROOM_NEGATIVE_PROB = 0.0
+
+# Per-elevation probability of using a clean banded facade schema: few large
+# horizontal material bands with windows as holes/negatives. Targets elevations
+# where the model over-fills broad wall chunks instead of respecting band edges.
+ELEVATION_CLEAN_BAND_PROB = 0.0
 
 
 def _realstyle_scene_overrides():
@@ -1060,6 +1094,372 @@ def render_floorplan_post(d: ImageDraw.ImageDraw, meta: dict, rng: random.Random
         d.text((tx, ey - 12), text, fill=(70, 70, 70), font=f_co)
 
 
+def _line_rect(d, box, fill=(35, 35, 35), width=2):
+    x0, y0, x1, y1 = [int(v) for v in box]
+    d.rectangle([x0, y0, x1, y1], outline=fill, width=width)
+
+
+def _draw_dashed_line(d, pts, fill=(145, 145, 145), width=1, dash=18, gap=12):
+    if len(pts) < 2:
+        return
+    for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:]):
+        dx, dy = x1 - x0, y1 - y0
+        dist = max(1.0, math.hypot(dx, dy))
+        ux, uy = dx / dist, dy / dist
+        t = 0.0
+        while t < dist:
+            t2 = min(dist, t + dash)
+            d.line([(x0 + ux * t, y0 + uy * t), (x0 + ux * t2, y0 + uy * t2)],
+                   fill=fill, width=width)
+            t += dash + gap
+
+
+def _make_finish_holes(poly, rng, max_holes=4):
+    xs = [p[0] for p in poly]; ys = [p[1] for p in poly]
+    x0, x1 = min(xs), max(xs); y0, y1 = min(ys), max(ys)
+    holes = []
+    for _ in range(rng.randint(0, max_holes)):
+        if x1 - x0 < 260 or y1 - y0 < 180:
+            break
+        hw = rng.randint(34, max(36, min(120, int((x1 - x0) * 0.16))))
+        hh = rng.randint(34, max(36, min(110, int((y1 - y0) * 0.18))))
+        hx = rng.randint(int(x0 + 30), max(int(x0 + 31), int(x1 - hw - 30)))
+        hy = rng.randint(int(y0 + 30), max(int(y0 + 31), int(y1 - hh - 30)))
+        holes.append([(hx, hy), (hx + hw, hy), (hx + hw, hy + hh), (hx, hy + hh)])
+    return holes
+
+
+def build_construction_sheet_scene(W: int, H: int, rng: random.Random, tiles):
+    """Real-plan-like construction floorplan sheet.
+
+    The key semantic difference from build_floorplan_scene is that labeled
+    material is NOT the clean room object. It is a small number of finish/deck
+    regions that continue under walls and are visually interrupted by thick
+    architectural context drawn later. Most ink on the sheet is unlabeled.
+    """
+    items = []
+    m = rng.randint(90, 170)
+    ox, oy = m, m + rng.randint(10, 80)
+    ow, oh = W - 2 * m, H - 2 * m - rng.randint(0, 90)
+    ox2, oy2 = ox + ow, oy + oh
+
+    # Irregular outer footprint, frequently with a porch/deck wing.
+    cut_w = rng.randint(int(ow * 0.18), int(ow * 0.34))
+    cut_h = rng.randint(int(oh * 0.16), int(oh * 0.32))
+    corner = rng.choice(['tl', 'tr', 'bl', 'br', 'none'])
+    if corner == 'tl':
+        outer_poly = [(ox + cut_w, oy), (ox2, oy), (ox2, oy2), (ox, oy2),
+                      (ox, oy + cut_h), (ox + cut_w, oy + cut_h)]
+    elif corner == 'tr':
+        outer_poly = [(ox, oy), (ox2 - cut_w, oy), (ox2 - cut_w, oy + cut_h),
+                      (ox2, oy + cut_h), (ox2, oy2), (ox, oy2)]
+    elif corner == 'bl':
+        outer_poly = [(ox, oy), (ox2, oy), (ox2, oy2), (ox + cut_w, oy2),
+                      (ox + cut_w, oy2 - cut_h), (ox, oy2 - cut_h)]
+    elif corner == 'br':
+        outer_poly = [(ox, oy), (ox2, oy), (ox2, oy2 - cut_h),
+                      (ox2 - cut_w, oy2 - cut_h), (ox2 - cut_w, oy2), (ox, oy2)]
+    else:
+        outer_poly = [(ox, oy), (ox2, oy), (ox2, oy2), (ox, oy2)]
+
+    rooms = [(ox + 18, oy + 18, ox2 - 18, oy2 - 18)]
+    partitions, doors = [], []
+    for _ in range(rng.randint(10, 18)):
+        rooms.sort(key=lambda r: -(r[2] - r[0]) * (r[3] - r[1]))
+        rx0, ry0, rx1, ry1 = rooms.pop(0)
+        rw, rh = rx1 - rx0, ry1 - ry0
+        if rw < 190 or rh < 160:
+            rooms.append((rx0, ry0, rx1, ry1))
+            continue
+        if rw > rh * rng.uniform(0.85, 1.15):
+            sx = rng.randint(rx0 + 90, rx1 - 90)
+            partitions.append(('v', sx, ry0, ry1))
+            gy = rng.randint(ry0 + 24, ry1 - 62)
+            doors.append(('v', sx, gy, gy + rng.randint(34, 58)))
+            rooms += [(rx0, ry0, sx, ry1), (sx, ry0, rx1, ry1)]
+        else:
+            sy = rng.randint(ry0 + 82, ry1 - 82)
+            partitions.append(('h', sy, rx0, rx1))
+            gx = rng.randint(rx0 + 26, rx1 - 70)
+            doors.append(('h', sy, gx, gx + rng.randint(38, 68)))
+            rooms += [(rx0, ry0, rx1, sy), (rx0, sy, rx1, ry1)]
+    rooms = [r for r in rooms
+             if _point_in_poly((r[0] + r[2]) / 2, (r[1] + r[3]) / 2, outer_poly)]
+
+    pat_tiles = rng.sample(tiles, min(len(tiles), rng.randint(1, 3)))
+    if pat_tiles:
+        def add_finish(poly, tile, max_holes=3, dense_bias=-0.15, opacity=-0.25):
+            items.append({
+                'poly': poly, 'holes': _make_finish_holes(poly, rng, max_holes=max_holes),
+                'role': 'free', 'tile': tile, 'has_windows': False,
+                'draw_outline': False, 'dense_bias': dense_bias,
+                'dense_opacity_boost': opacity,
+            })
+
+        # One large floor-finish polygon spanning several rooms; walls will later
+        # occlude it, which matches real flooring/deck labels better than per-room
+        # clean fills.
+        rw = int(ow * rng.uniform(0.32, 0.58))
+        rh = int(oh * rng.uniform(0.18, 0.36))
+        rx = rng.randint(ox + 28, max(ox + 29, ox2 - rw - 28))
+        ry = rng.randint(oy + 28, max(oy + 29, oy2 - rh - 28))
+        finish = [(rx, ry), (rx + rw, ry), (rx + rw, ry + rh), (rx, ry + rh)]
+        add_finish(finish, pat_tiles[0], max_holes=3, dense_bias=-0.15, opacity=-0.25)
+        if rng.random() < 0.75:
+            # Exterior porch/deck/patio field, often outside the primary footprint.
+            side = rng.choice(['top', 'bottom', 'left', 'right'])
+            if side in ('top', 'bottom'):
+                pw = rng.randint(int(ow * 0.28), int(ow * 0.62))
+                ph = rng.randint(70, max(85, int(oh * 0.22)))
+                px = rng.randint(ox, max(ox + 1, ox2 - pw))
+                py = oy - ph + rng.randint(-20, 28) if side == 'top' else oy2 - rng.randint(28, 70)
+            else:
+                pw = rng.randint(80, max(95, int(ow * 0.20)))
+                ph = rng.randint(int(oh * 0.25), int(oh * 0.58))
+                px = ox - pw + rng.randint(-16, 35) if side == 'left' else ox2 - rng.randint(35, 72)
+                py = rng.randint(oy, max(oy + 1, oy2 - ph))
+            patio = [(px, py), (px + pw, py), (px + pw, py + ph), (px, py + ph)]
+            add_finish(patio, rng.choice(pat_tiles), max_holes=5,
+                       dense_bias=-0.25, opacity=-0.35)
+        if (CONSTRUCTION_PERIMETER_SLAB_PROB > 0.0
+                and rng.random() < CONSTRUCTION_PERIMETER_SLAB_PROB):
+            # Thin exterior slabs/walks that wrap plan edges. These match hard
+            # cases where the annotation is a perimeter/exterior finish, while
+            # interior rooms with similar floor texture are negatives.
+            slab_tile = rng.choice(pat_tiles)
+            t = rng.randint(22, 54)
+            side = rng.choice(['bottom_l', 'bottom_u', 'top_l', 'left_l', 'right_l'])
+            if side == 'bottom_l':
+                y0 = oy2 - rng.randint(10, 34)
+                x0 = ox - rng.randint(8, 42)
+                x1 = ox2 - rng.randint(20, 90)
+                leg_w = rng.randint(42, 90)
+                leg_h = rng.randint(120, max(135, int(oh * 0.38)))
+                poly = [(x0, y0), (x1, y0), (x1, y0 + t), (x0 + leg_w, y0 + t),
+                        (x0 + leg_w, y0 + leg_h), (x0, y0 + leg_h)]
+            elif side == 'bottom_u':
+                y0 = oy2 - rng.randint(4, 28)
+                x0 = ox + rng.randint(0, 60)
+                x1 = ox2 - rng.randint(0, 60)
+                leg_w = rng.randint(36, 74)
+                notch_x = rng.randint(x0 + 80, max(x0 + 81, x1 - 120))
+                leg_h = rng.randint(95, 190)
+                poly = [(x0, y0), (x1, y0), (x1, y0 + t),
+                        (notch_x + leg_w, y0 + t),
+                        (notch_x + leg_w, y0 + leg_h),
+                        (notch_x, y0 + leg_h),
+                        (notch_x, y0 + t), (x0, y0 + t)]
+            elif side == 'top_l':
+                y1 = oy + rng.randint(4, 28)
+                x0 = ox + rng.randint(0, 70)
+                x1 = ox2 - rng.randint(0, 70)
+                leg_w = rng.randint(38, 82)
+                leg_h = rng.randint(95, 180)
+                poly = [(x0, y1 - t), (x1, y1 - t), (x1, y1),
+                        (x0 + leg_w, y1), (x0 + leg_w, y1 + leg_h),
+                        (x0, y1 + leg_h)]
+            elif side == 'left_l':
+                x1 = ox + rng.randint(6, 34)
+                y0 = oy + rng.randint(0, 80)
+                y1 = oy2 - rng.randint(0, 80)
+                leg_h = rng.randint(38, 82)
+                leg_w = rng.randint(120, 260)
+                poly = [(x1 - t, y0), (x1, y0), (x1, y1),
+                        (x1 + leg_w, y1),
+                        (x1 + leg_w, y1 + leg_h),
+                        (x1 - t, y1 + leg_h)]
+            else:
+                x0 = ox2 - rng.randint(6, 34)
+                y0 = oy + rng.randint(0, 80)
+                y1 = oy2 - rng.randint(0, 80)
+                leg_h = rng.randint(38, 82)
+                leg_w = rng.randint(120, 260)
+                poly = [(x0, y0), (x0 + t, y0), (x0 + t, y1 + leg_h),
+                        (x0 - leg_w, y1 + leg_h),
+                        (x0 - leg_w, y1), (x0, y1)]
+            add_finish(poly, slab_tile, max_holes=1, dense_bias=-0.35, opacity=-0.40)
+        if rng.random() < 0.55 and len(rooms) >= 2:
+            room = rng.choice([r for r in rooms if r[2] - r[0] > 150 and r[3] - r[1] > 130] or rooms)
+            inset = rng.randint(10, 28)
+            poly = [(room[0] + inset, room[1] + inset), (room[2] - inset, room[1] + inset),
+                    (room[2] - inset, room[3] - inset), (room[0] + inset, room[3] - inset)]
+            add_finish(poly, rng.choice(pat_tiles), max_holes=2,
+                       dense_bias=-0.10, opacity=-0.20)
+
+    meta = {
+        'construction_sheet': True,
+        'outer_poly': outer_poly,
+        'outer_bbox': (ox, oy, ox2, oy2),
+        'rooms': rooms,
+        'partitions': partitions,
+        'doors': doors,
+        'wall_t': rng.randint(8, 16),
+        'pattern_rooms': set(),
+        'non_pat_rooms': rooms,
+        'merged_clusters': [],
+    }
+    return items, meta
+
+
+def render_construction_sheet_pre(d: ImageDraw.ImageDraw, meta: dict,
+                                  rng: random.Random, W: int, H: int):
+    """Very light underlay before material; most context draws after material."""
+    ox, oy, ox2, oy2 = meta['outer_bbox']
+    if (CONSTRUCTION_ROOM_NEGATIVE_PROB > 0.0
+            and rng.random() < CONSTRUCTION_ROOM_NEGATIVE_PROB):
+        rooms = [r for r in meta.get('rooms', []) if r[2] - r[0] > 90 and r[3] - r[1] > 70]
+        if rooms:
+            n = max(1, min(len(rooms), int(round(len(rooms) * rng.uniform(0.18, 0.42)))))
+            for rx0, ry0, rx1, ry1 in rng.sample(rooms, n):
+                inset = rng.randint(4, 14)
+                x0, y0 = rx0 + inset, ry0 + inset
+                x1, y1 = rx1 - inset, ry1 - inset
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                if rng.random() < 0.55:
+                    g = rng.randint(218, 242)
+                    d.rectangle([x0, y0, x1, y1], fill=(g, g, g))
+                line = (rng.randint(135, 190),) * 3
+                kind = rng.random()
+                if kind < 0.45:
+                    step = rng.randint(14, 32)
+                    for yy in range(y0 + rng.randint(0, step), y1, step):
+                        d.line([x0, yy, x1, yy], fill=line, width=1)
+                elif kind < 0.80:
+                    step = rng.randint(12, 28)
+                    for off in range(x0 - (y1 - y0), x1, step):
+                        d.line([off, y1, off + (y1 - y0), y0], fill=line, width=1)
+                else:
+                    step = rng.randint(18, 40)
+                    for xx in range(x0 + rng.randint(0, step), x1, step):
+                        d.line([xx, y0, xx, y1], fill=line, width=1)
+                    for yy in range(y0 + rng.randint(0, step), y1, step):
+                        d.line([x0, yy, x1, yy], fill=line, width=1)
+    # Faint neighboring building/roof/deck ghosts outside the main plan.
+    for _ in range(rng.randint(2, 5)):
+        bw = rng.randint(120, 420); bh = rng.randint(55, 180)
+        bx = rng.choice([rng.randint(10, max(10, ox - 50)),
+                         rng.randint(min(W - bw - 10, ox2 - 80), max(min(W - bw - 10, ox2 + 80), 11))])
+        by = rng.randint(20, max(21, H - bh - 20))
+        col = rng.randint(185, 220)
+        d.rectangle([bx, by, bx + bw, by + bh], outline=(col, col, col), width=1)
+        step = rng.randint(12, 24)
+        for yy in range(by + step, by + bh, step):
+            d.line([bx, yy, bx + bw, yy], fill=(col + 10, col + 10, col + 10), width=1)
+
+
+def render_construction_sheet_post(d: ImageDraw.ImageDraw, meta: dict,
+                                   rng: random.Random, W: int, H: int):
+    ox, oy, ox2, oy2 = meta['outer_bbox']
+    rooms = meta['rooms']
+
+    # Thick exterior/interior wall hierarchy.
+    pts = meta['outer_poly']
+    d.line(pts + [pts[0]], fill=(18, 18, 18), width=rng.randint(5, 7))
+    d.line(pts + [pts[0]], fill=(82, 82, 82), width=1)
+    for room in rooms:
+        rx0, ry0, rx1, ry1 = room
+        d.rectangle([rx0, ry0, rx1, ry1], outline=(55, 55, 55), width=1)
+    for kind, pos, a, b in meta['partitions']:
+        if kind == 'v':
+            d.line([pos, a, pos, b], fill=(25, 25, 25), width=rng.randint(3, 5))
+            d.line([pos + 5, a, pos + 5, b], fill=(130, 130, 130), width=1)
+        else:
+            d.line([a, pos, b, pos], fill=(25, 25, 25), width=rng.randint(3, 5))
+            d.line([a, pos + 5, b, pos + 5], fill=(130, 130, 130), width=1)
+    for kind, pos, a, b in meta['doors']:
+        if kind == 'v':
+            d.rectangle([pos - 4, a, pos + 8, b], fill=(255, 255, 255))
+            _draw_door_arc(d, pos, b, max(24, b - a), rng.choice([0, 1, 2, 3]))
+        else:
+            d.rectangle([a, pos - 4, b, pos + 8], fill=(255, 255, 255))
+            _draw_door_arc(d, b, pos, max(24, b - a), rng.choice([0, 1, 2, 3]))
+
+    # Fixtures, stairs, cabinets, appliances. These are unlabeled context.
+    for room in rooms:
+        rx0, ry0, rx1, ry1 = room
+        rw, rh = rx1 - rx0, ry1 - ry0
+        if rng.random() < 0.75:
+            _draw_fixture(d, room, rng)
+        if rw > 230 and rh > 190 and rng.random() < 0.45:
+            _draw_fixture(d, room, rng)
+        if rw > 170 and rh > 130 and rng.random() < 0.8:
+            n = rng.randint(1, 4)
+            for _ in range(n):
+                cw = rng.randint(36, max(42, min(130, rw // 2)))
+                ch = rng.randint(26, max(32, min(95, rh // 2)))
+                cx = rng.randint(rx0 + 10, max(rx0 + 11, rx1 - cw - 10))
+                cy = rng.randint(ry0 + 10, max(ry0 + 11, ry1 - ch - 10))
+                _line_rect(d, (cx, cy, cx + cw, cy + ch),
+                           fill=(rng.randint(70, 120),) * 3, width=1)
+        if rw > 190 and rh > 130 and rng.random() < 0.65:
+            label = rng.choice(_ROOM_LABELS)
+            f = _font(rng.randint(10, 15))
+            try:
+                bb = d.textbbox((0, 0), label, font=f); tw, th = bb[2] - bb[0], bb[3] - bb[1]
+            except Exception:
+                tw, th = len(label) * 6, 12
+            d.text(((rx0 + rx1 - tw) // 2, (ry0 + ry1 - th) // 2),
+                   label, fill=(95, 95, 95), font=f)
+
+    # Dashed MEP/service routing curves across rooms, a major real-plan cue.
+    for _ in range(rng.randint(5, 10)):
+        y = rng.randint(oy + 40, oy2 - 40)
+        x0 = rng.randint(ox + 10, ox + max(20, (ox2 - ox) // 3))
+        x3 = rng.randint(ox + (ox2 - ox) // 2, ox2 - 10)
+        amp = rng.randint(-80, 80)
+        pts = []
+        for k in range(22):
+            t = k / 21
+            x = x0 + (x3 - x0) * t
+            yy = y + math.sin(t * math.pi * rng.uniform(1.0, 2.5)) * amp
+            pts.append((x, yy))
+        _draw_dashed_line(d, pts, fill=(145, 145, 145), width=1,
+                          dash=rng.randint(14, 26), gap=rng.randint(8, 18))
+
+    # Dense leaders and notes, clipped/overlapping the plan like construction PDFs.
+    phrases = ['refer to structural', 'slope 1/4" / ft', 'verify in field',
+               'not in contract', 'align finish edge', 'covered porch',
+               'wood soffit, typ.', 'see finish schedule', 'drain to daylight',
+               'wall supply', 'mech chase above', 'existing wall to remain']
+    f_note = _font(10)
+    for _ in range(rng.randint(18, 34)):
+        sx = rng.randint(ox - 50, ox2 + 50)
+        sy = rng.randint(oy - 25, oy2 + 25)
+        ex = sx + rng.randint(-170, 170)
+        ey = sy + rng.randint(-95, 95)
+        d.line([sx, sy, ex, ey], fill=(105, 105, 105), width=1)
+        if rng.random() < 0.35:
+            d.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], outline=(65, 65, 65), width=1)
+        txt = rng.choice(phrases)
+        d.text((ex + 3, ey - 7), txt, fill=(75, 75, 75), font=f_note)
+
+    # Dimension strings and title/detail blocks.
+    for edge in ('top', 'bottom', 'left', 'right'):
+        if rng.random() < 0.85:
+            off = rng.randint(24, 72)
+            if edge == 'top':
+                _draw_dimension_strip(d, ox, oy - off, ox2, oy - off, rng)
+            elif edge == 'bottom':
+                _draw_dimension_strip(d, ox, oy2 + off, ox2, oy2 + off, rng)
+            elif edge == 'left':
+                _draw_dimension_strip(d, ox - off, oy, ox - off, oy2, rng)
+            else:
+                _draw_dimension_strip(d, ox2 + off, oy, ox2 + off, oy2, rng)
+
+    if rng.random() < 0.9:
+        tbw, tbh = rng.randint(230, 390), rng.randint(70, 135)
+        tbx = rng.choice([20, max(20, W - tbw - 24)])
+        tby = max(20, H - tbh - rng.randint(18, 60))
+        d.rectangle([tbx, tby, tbx + tbw, tby + tbh], outline=(45, 45, 45), width=2)
+        for k in range(1, 4):
+            d.line([tbx, tby + k * tbh // 4, tbx + tbw, tby + k * tbh // 4],
+                   fill=(92, 92, 92), width=1)
+        d.text((tbx + 8, tby + 6), rng.choice(['A-101 FLOOR PLAN', 'ENLARGED PLAN',
+                                                'FINISH PLAN', 'REFLECTED PLAN']),
+               fill=(45, 45, 45), font=_font(13))
+
+
 def render_elevation_decorations(d: ImageDraw.ImageDraw, meta: dict,
                                   rng: random.Random, W: int, H: int):
     """Grade line + hatch, column grid with bubble tags, dim chains, title.
@@ -1182,6 +1582,16 @@ def render_elevation_decorations(d: ImageDraw.ImageDraw, meta: dict,
             pts = feat.get('points', [])
             if len(pts) >= 2:
                 d.line(pts, fill=(135, 135, 135), width=2)
+        elif kind == 'window_outline':
+            x0, y0, x1, y1 = feat['bbox']
+            d.rectangle([x0, y0, x1, y1], fill=(245, 245, 240),
+                        outline=(45, 45, 50), width=2)
+            if x1 - x0 > 34:
+                cx = (x0 + x1) // 2
+                d.line([cx, y0 + 2, cx, y1 - 2], fill=(90, 90, 95), width=1)
+            if y1 - y0 > 34:
+                cy = (y0 + y1) // 2
+                d.line([x0 + 2, cy, x1 - 2, cy], fill=(90, 90, 95), width=1)
 
     # Additional sheet-level context that appears in excerpted PDFs: hidden
     # lines, keyed notes, and a small title block fragment.
@@ -1461,6 +1871,186 @@ def _translate_elevation_feature(feat, dx, dy):
     return out
 
 
+def _add_elevation_trim_items(items, layout, tiles, rng):
+    """Add labelled thin elevation material objects.
+
+    Real elevation GT often contains long fascia/belt-course strips and small
+    trim blocks instead of only broad siding/roof fields. These objects are hard
+    because their extent is implied by architectural linework and they are close
+    to the model's resolution floor after resizing.
+    """
+    if ELEVATION_TRIM_PROB <= 0.0 or rng.random() >= ELEVATION_TRIM_PROB:
+        return
+    wl, wr = layout['wall_left'], layout['wall_right']
+    wt, gy = layout['wall_top'], layout['grade_y']
+    floor_h = max(80, layout.get('floor_h', 180))
+    eave = layout.get('eave_overhang', 28)
+    trim_tile = pick_wall_tile(tiles, rng, min_ink=0.02)
+
+    def add_rect(x0, y0, x1, y1, role='wall', opacity=-0.15):
+        if x1 - x0 < 20 or y1 - y0 < 5:
+            return
+        items.append({
+            'poly': [(int(x0), int(y1)), (int(x1), int(y1)),
+                     (int(x1), int(y0)), (int(x0), int(y0))],
+            'role': role, 'tile': trim_tile, 'has_windows': False,
+            'draw_outline': False, 'force_dense': True,
+            'dense_opacity_boost': opacity, 'no_bay_split': True,
+        })
+
+    # Eave/fascia strips. Keep them outside the wall field so annotations do not
+    # overlap broad siding masks.
+    for y in [wt - rng.randint(8, 18), wt - rng.randint(22, 38)]:
+        h = rng.randint(8, 22)
+        add_rect(wl - eave, y - h, wr + eave, y, role='roof', opacity=-0.25)
+
+    # Low water-table/base strips just below the wall field.
+    if rng.random() < 0.75:
+        h = rng.randint(14, 34)
+        add_rect(wl - rng.randint(0, 12), gy, wr + rng.randint(0, 12), gy + h,
+                 role='wall', opacity=-0.05)
+
+    # Porch/deck slab strips attached below the elevation, another real thin
+    # material class that does not overlap siding.
+    if rng.random() < 0.55:
+        sw = rng.randint(max(80, int((wr - wl) * 0.18)),
+                         max(90, int((wr - wl) * 0.55)))
+        sx = rng.randint(int(wl), max(int(wl + 1), int(wr - sw)))
+        sy = gy + rng.randint(20, 70)
+        add_rect(sx, sy, sx + sw, sy + rng.randint(12, 32),
+                 role='wall', opacity=-0.10)
+
+
+def build_clean_banded_elevation_scene(rng: random.Random, tiles):
+    """Clean real-like elevation with broad horizontal material bands.
+
+    This targets hard elevation excerpts where GT is a few large facade/roof
+    bands with windows cut out, not noisy per-bay wall fragments.
+    """
+    items = []
+    context_features = []
+    n_buildings = 1 if rng.random() < 0.72 else 2
+    cur_x = 0
+    bldg_layouts = []
+    overall_top = 0
+
+    def rect_poly(x0, y0, x1, y1):
+        return [(int(x0), int(y1)), (int(x1), int(y1)),
+                (int(x1), int(y0)), (int(x0), int(y0))]
+
+    def add_item(poly, role, tile, holes=None, opacity=-0.20):
+        items.append({
+            'poly': poly,
+            'holes': holes or [],
+            'role': role,
+            'tile': tile,
+            'has_windows': False,
+            'draw_outline': False,
+            'dense_bias': -0.12,
+            'dense_opacity_boost': opacity,
+            'no_bay_split': True,
+        })
+
+    for _ in range(n_buildings):
+        bw = int(rng.randint(900, 1500) * RESOLUTION_SCALE)
+        floor_h = int(rng.randint(170, 245) * RESOLUTION_SCALE)
+        stories = rng.choice([1, 2, 2])
+        wall_h = stories * floor_h
+        bx = cur_x
+        grade_y = 0
+        wall_top = -wall_h
+        roof_h = int(bw * rng.uniform(0.12, 0.22))
+        ridge_y = wall_top - roof_h
+        eave = rng.randint(22, 52)
+        band_tiles = rng.sample(tiles, min(len(tiles), 4))
+        while len(band_tiles) < 4:
+            band_tiles.append(rng.choice(tiles))
+
+        # Bottom-to-top bands, intentionally clean and long.
+        if stories == 1:
+            breaks = [grade_y, grade_y - int(wall_h * rng.uniform(0.25, 0.38)), wall_top]
+        else:
+            breaks = [grade_y, grade_y - int(floor_h * rng.uniform(0.32, 0.55)),
+                      grade_y - floor_h, wall_top]
+        for bi in range(len(breaks) - 1):
+            y_bot, y_top = breaks[bi], breaks[bi + 1]
+            holes = []
+            if y_bot - y_top > 90:
+                n_win = rng.randint(2, 5)
+                slot_w = bw / (n_win + 1)
+                for wi in range(n_win):
+                    ww = int(min(slot_w * rng.uniform(0.32, 0.55), 95 * RESOLUTION_SCALE))
+                    wh = int(min((y_bot - y_top) * rng.uniform(0.32, 0.58), 95 * RESOLUTION_SCALE))
+                    cx = int(bx + slot_w * (wi + 1) + rng.randint(-18, 18))
+                    wx0 = max(bx + 24, cx - ww // 2)
+                    wx1 = min(bx + bw - 24, wx0 + ww)
+                    wy0 = int(y_top + (y_bot - y_top - wh) * rng.uniform(0.28, 0.62))
+                    wy1 = wy0 + wh
+                    hole = rect_poly(wx0, wy0, wx1, wy1)
+                    holes.append(hole)
+                    context_features.append({'kind': 'window_outline',
+                                             'bbox': (wx0, wy0, wx1, wy1)})
+            add_item(rect_poly(bx, y_top, bx + bw, y_bot), 'wall',
+                     band_tiles[bi % len(band_tiles)], holes=holes,
+                     opacity=-0.18)
+
+        # Thin separator / fascia bands that should be positives, not broad blobs.
+        sep_tile = band_tiles[-1]
+        for y in breaks[1:-1]:
+            h = rng.randint(8, 18)
+            add_item(rect_poly(bx - 8, y - h // 2, bx + bw + 8, y + h // 2),
+                     'wall', sep_tile, opacity=-0.10)
+
+        roof_tile = rng.choice(tiles)
+        if rng.random() < 0.65:
+            left_roof = [(bx - eave, wall_top + 12), (bx + bw // 2, ridge_y + 12),
+                         (bx + bw // 2, ridge_y), (bx - eave, wall_top)]
+            right_roof = [(bx + bw // 2, ridge_y), (bx + bw + eave, wall_top),
+                          (bx + bw + eave, wall_top + 12), (bx + bw // 2, ridge_y + 12)]
+            add_item(left_roof, 'roof', roof_tile, opacity=-0.28)
+            add_item(right_roof, 'roof', roof_tile, opacity=-0.28)
+        else:
+            h = rng.randint(18, 34)
+            add_item(rect_poly(bx - eave, wall_top - h, bx + bw + eave, wall_top),
+                     'roof', roof_tile, opacity=-0.26)
+
+        if rng.random() < 0.6:
+            slab_w = rng.randint(int(bw * 0.22), int(bw * 0.55))
+            sx0 = rng.randint(bx, max(bx + 1, bx + bw - slab_w))
+            add_item(rect_poly(sx0, grade_y + rng.randint(18, 44),
+                               sx0 + slab_w, grade_y + rng.randint(44, 82)),
+                     'wall', sep_tile, opacity=-0.14)
+
+        layout = {
+            'bldg_left': bx,
+            'bldg_right': bx + bw,
+            'bldg_top': ridge_y,
+            'bldg_bot': grade_y,
+            'wall_left': bx,
+            'wall_right': bx + bw,
+            'wall_top': wall_top,
+            'grade_y': grade_y,
+            'floor_h': floor_h,
+            'stories': stories,
+            'eave_overhang': eave,
+            'band_ys': breaks,
+            'roof_type': 'gable',
+        }
+        bldg_layouts.append(layout)
+        overall_top = min(overall_top, ridge_y - 10)
+        cur_x = bx + bw + rng.randint(90, 220)
+
+    overall_left = bldg_layouts[0]['bldg_left'] - 50
+    overall_right = bldg_layouts[-1]['bldg_right'] + 50
+    meta = {
+        'overall_bbox': (overall_left, overall_top, overall_right, 0),
+        'grade_y': 0,
+        'buildings': bldg_layouts,
+        'context_features': context_features,
+    }
+    return items, meta
+
+
 def build_rowhouse_elevation_scene(rng: random.Random, tiles):
     """Repeated townhouse / rowhouse elevation with shared roofline, garages,
     and optional dormers. This matches the multi-unit real excerpts better
@@ -1700,6 +2290,7 @@ def build_rowhouse_elevation_scene(rng: random.Random, tiles):
         'band_ys': [grade_y, band_break, podium_break, wall_top],
         'roof_type': 'row_gable',
     }]
+    _add_elevation_trim_items(items, bldg_layouts[0], tiles, rng)
     meta = {
         'overall_bbox': (bx - 40, overall_top - 6, bx + bw + 40, 0),
         'grade_y': 0,
@@ -1970,7 +2561,7 @@ def build_elevation_scene(rng: random.Random, tiles):
                 min_piece_area=18_000,
             ))
 
-        bldg_layouts.append({
+        layout = {
             'bldg_left': bx, 'bldg_right': bx + bw,
             'bldg_top': bldg_top, 'bldg_bot': grade_y,
             'wall_left': wall_left, 'wall_right': wall_right,
@@ -1979,7 +2570,9 @@ def build_elevation_scene(rng: random.Random, tiles):
             'eave_overhang': eave_overhang,
             'band_ys': band_ys,
             'roof_type': roof_type,
-        })
+        }
+        bldg_layouts.append(layout)
+        _add_elevation_trim_items(items, layout, tiles, rng)
         overall_top = min(overall_top, bldg_top - 6)
         cur_x = bx + bw + SEPARATOR
 
@@ -1992,7 +2585,8 @@ def build_elevation_scene(rng: random.Random, tiles):
     if NO_MERGE_SAME_MATERIAL:
         split_items = []
         for it in items:
-            if (it['role'] == 'wall' and _is_axis_rect(it['poly'])
+            if (it['role'] == 'wall' and not it.get('no_bay_split')
+                    and _is_axis_rect(it['poly'])
                     and rng.random() < 0.8):
                 split_items.extend(_bay_items(it, rng))
             else:
@@ -2226,6 +2820,46 @@ def build_roofplan_scene(W: int, H: int, rng: random.Random, tiles):
         facets, ridge_seg = _wing_facets(wing, neighbors)
         all_facets.extend(facets)
         ridges.append(ridge_seg)
+
+    if ROOF_FIELD_PROB > 0.0 and rng.random() < ROOF_FIELD_PROB:
+        # Large-field roof-plan labels: split the full roof footprint into one
+        # or two coarse regions while keeping ridge/facet linework as context.
+        # This matches real annotations where a material field spans many roof
+        # construction lines, unlike synth's easy per-facet labels.
+        primary_tile = pick_wall_tile(tiles, rng, min_ink=0.02)
+        items = []
+        geoms = [_ShPoly(outer_poly).buffer(0)]
+        if rng.random() < 0.70:
+            bx0, by0, bx1, by1 = geoms[0].bounds
+            if (bx1 - bx0) >= (by1 - by0):
+                x = rng.uniform(bx0 + 0.38 * (bx1 - bx0), bx0 + 0.62 * (bx1 - bx0))
+                cutter = _ShLineString([(x, by0 - 1000), (x, by1 + 1000)])
+            else:
+                y = rng.uniform(by0 + 0.38 * (by1 - by0), by0 + 0.62 * (by1 - by0))
+                cutter = _ShLineString([(bx0 - 1000, y), (bx1 + 1000, y)])
+            try:
+                split_geoms = list(_sh_split(geoms[0], cutter).geoms)
+                if len(split_geoms) >= 2:
+                    geoms = sorted(split_geoms, key=lambda g: -g.area)[:2]
+            except Exception:
+                pass
+        for geom in geoms:
+            if geom.area < 18_000:
+                continue
+            coords = list(geom.exterior.coords)
+            if coords and coords[0] == coords[-1]:
+                coords = coords[:-1]
+            poly_int = [(int(round(x)), int(round(y))) for x, y in coords]
+            items.append({'poly': poly_int, 'role': 'roof_plan',
+                          'tile': primary_tile, 'has_windows': False,
+                          'draw_outline': False, 'dense_bias': -0.20,
+                          'dense_opacity_boost': -0.25})
+        bx0 = min(p[0] for p in outer_poly); by0 = min(p[1] for p in outer_poly)
+        bx1 = max(p[0] for p in outer_poly); by1 = max(p[1] for p in outer_poly)
+        meta = {'outer_poly': outer_poly, 'ridges': ridges,
+                'outer_bbox': (bx0, by0, bx1, by1),
+                'facets': all_facets}
+        return items, meta
 
     # Primary pattern fills most facets; 0-2 facets get a secondary tile.
     primary_tile = pick_wall_tile(tiles, rng, min_ink=0.02)
@@ -2944,7 +3578,7 @@ def _negative_patch(pw, ph, tiles_pool, rng, mono):
     instances), dimension/furniture grid, and section hatching. Lines are
     drawn on the patch canvas so they clip to the patch."""
     kind = rng.random()
-    if kind < 0.5 and tiles_pool:
+    if kind < NEGATIVE_MATERIAL_FRAC and tiles_pool:
         # Hard negative: same quilted material texture as labeled instances,
         # but no label. Forces the model to use context, not just "texture".
         tile_meta = rng.choice(tiles_pool)
@@ -2968,18 +3602,40 @@ def _negative_patch(pw, ph, tiles_pool, rng, mono):
     d = ImageDraw.Draw(patch)
     shade = rng.randint(60, 150)
     col = (shade, shade, shade)
-    if kind < 0.8:
+    patch = Image.blend(patch, Image.new('RGB', (pw, ph), (rng.randint(220, 248),) * 3),
+                        rng.uniform(0.08, 0.22))
+    if kind < 0.65:
         # Dimension / furniture grid
         step = rng.randint(14, 40)
         for x in range(0, pw, step):
             d.line([(x, 0), (x, ph)], fill=col, width=1)
         for y in range(0, ph, step):
             d.line([(0, y), (pw, y)], fill=col, width=1)
-    else:
+    elif kind < 0.88:
         # 45-degree section hatching
         step = rng.randint(8, 22)
         for off in range(-ph, pw, step):
             d.line([(off, ph), (off + ph, 0)], fill=col, width=1)
+    else:
+        # Broad faint CAD poche/finish field with sparse internal marks. This is
+        # intentionally not a reference material tile: it teaches that filled
+        # CAD regions can be context, not necessarily target instances.
+        if not mono:
+            c = rng.choice(FILL_PALETTE)
+            fill = tuple(int(0.72 * 255 + 0.28 * v) for v in c)
+        else:
+            g = rng.randint(205, 238)
+            fill = (g, g, g)
+        d.rectangle([0, 0, pw, ph], fill=fill)
+        step = rng.randint(18, 42)
+        for y in range(rng.randint(0, step), ph, step):
+            d.line([(0, y), (pw, y)], fill=(rng.randint(130, 190),) * 3, width=1)
+        for _ in range(rng.randint(2, 8)):
+            x0 = rng.randint(0, max(0, pw - 16))
+            y0 = rng.randint(0, max(0, ph - 12))
+            d.rectangle([x0, y0, min(pw - 1, x0 + rng.randint(14, 70)),
+                         min(ph - 1, y0 + rng.randint(8, 28))],
+                        outline=(rng.randint(110, 175),) * 3, width=1)
     return patch
 
 
@@ -3065,7 +3721,11 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
     realstyle = (mode in ('elevation', 'roof_plan', 'freeform')) and (rng.random() < REALSTYLE_PROB)  # freeform realstyle = code-based sparse floor plans
 
     if mode == 'elevation':
-        if realstyle:
+        use_clean_band = (ELEVATION_CLEAN_BAND_PROB > 0.0
+                          and rng.random() < ELEVATION_CLEAN_BAND_PROB)
+        if use_clean_band:
+            items, meta = build_clean_banded_elevation_scene(rng, tiles_pool)
+        elif realstyle:
             _rs_saved = _realstyle_scene_overrides()
             items, meta = build_elevation_scene(rng, tiles_pool)
             _restore_scene_overrides(_rs_saved)
@@ -3138,10 +3798,18 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         global FREEFORM_REALSTYLE
         _ff_saved = FREEFORM_REALSTYLE
         FREEFORM_REALSTYLE = realstyle
-        items, meta = build_floorplan_scene(W, H, rng, tiles_pool)
+        use_construction = (not realstyle and CONSTRUCTION_SHEET_PROB > 0.0
+                            and rng.random() < CONSTRUCTION_SHEET_PROB)
+        if use_construction:
+            items, meta = build_construction_sheet_scene(W, H, rng, tiles_pool)
+        else:
+            items, meta = build_floorplan_scene(W, H, rng, tiles_pool)
         FREEFORM_REALSTYLE = _ff_saved
         img = Image.new('RGB', (W, H), (255, 255, 255))
-        render_floorplan_pre(ImageDraw.Draw(img), meta, rng)
+        if meta.get('construction_sheet'):
+            render_construction_sheet_pre(ImageDraw.Draw(img), meta, rng, W, H)
+        else:
+            render_floorplan_pre(ImageDraw.Draw(img), meta, rng)
 
     occupied = np.zeros((H, W), dtype=np.uint8)
     annotations = []
@@ -3163,12 +3831,20 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         tile_meta = item['tile']
         role = item['role']
         poly = [(max(0, min(W - 1, px)), max(0, min(H - 1, py))) for px, py in poly]
+        pre_holes = [
+            [(max(0, min(W - 1, px)), max(0, min(H - 1, py))) for px, py in hole]
+            for hole in item.get('holes', [])
+        ]
         # v5.1: lower floor so small per-unit instances (real plans have a long
         # small-instance tail) survive, while still dropping degenerate slivers.
         min_area = 38 * 38 if role == 'roof_plan' else 48 * 48
         if _polygon_area(poly) < min_area:
             continue
         pm = _polygon_to_mask(poly, W, H)
+        if pre_holes:
+            for hole in pre_holes:
+                hm = _polygon_to_mask(hole, W, H)
+                pm = np.where(hm > 0, 0, pm).astype(np.uint8)
         pm_area = int(pm.sum())
         # Allow up to 3% overlap (covers shared edges between stacked wall bands)
         if pm_area > 0 and int((occupied & pm).sum()) > max(64, int(0.03 * pm_area)):
@@ -3330,6 +4006,8 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
             holes = place_windows_in_polygon(img, poly, rng)
         elif role == 'garage':
             holes = [place_garage_door(img, poly, rng)]
+        elif pre_holes:
+            holes = pre_holes
         else:
             # Floor-plan patterns carry no holes: fixtures are never drawn
             # inside pattern rooms, so the flooring fills the whole region.
@@ -3371,7 +4049,10 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
     _inject_negative_textures(img, occupied, tiles_pool, rng, W, H, mono)
 
     if mode == 'freeform':
-        render_floorplan_post(ImageDraw.Draw(img), meta, rng, W, H)
+        if meta.get('construction_sheet'):
+            render_construction_sheet_post(ImageDraw.Draw(img), meta, rng, W, H)
+        else:
+            render_floorplan_post(ImageDraw.Draw(img), meta, rng, W, H)
     elif mode == 'roof_plan':
         render_roofplan_post(ImageDraw.Draw(img), meta, rng, W, H)
     elif mode == 'elevation':
@@ -3410,8 +4091,13 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  markup_overlay_prob=None, split_scale=None,
                  mono_image_prob=None, instance_scale=None,
                  dense_fill_min_ink=None, negative_texture_prob=None,
-                 realstyle_prob=None, freeform_tile_outline_prob=None,
-                 idx0_stone=None):
+                 negative_material_frac=None, realstyle_prob=None,
+                 freeform_tile_outline_prob=None,
+                 idx0_stone=None, construction_sheet_prob=None,
+                 roof_field_prob=None, elevation_trim_prob=None,
+                 construction_perimeter_slab_prob=None,
+                 construction_room_negative_prob=None,
+                 elevation_clean_band_prob=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -3420,8 +4106,11 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
-    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB, FREEFORM_TILE_OUTLINE_PROB
-    global IDX0_STONE_PATH
+    global NEGATIVE_TEXTURE_PROB, NEGATIVE_MATERIAL_FRAC, REALSTYLE_PROB
+    global FREEFORM_TILE_OUTLINE_PROB
+    global IDX0_STONE_PATH, CONSTRUCTION_SHEET_PROB, ROOF_FIELD_PROB
+    global ELEVATION_TRIM_PROB, CONSTRUCTION_PERIMETER_SLAB_PROB
+    global CONSTRUCTION_ROOM_NEGATIVE_PROB, ELEVATION_CLEAN_BAND_PROB
     if smoke:
         _apply_smoke_overrides()
     if no_outline:
@@ -3449,12 +4138,26 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         DENSE_FILL_MIN_INK = dense_fill_min_ink
     if negative_texture_prob is not None:
         NEGATIVE_TEXTURE_PROB = negative_texture_prob
+    if negative_material_frac is not None:
+        NEGATIVE_MATERIAL_FRAC = negative_material_frac
     if realstyle_prob is not None:
         REALSTYLE_PROB = realstyle_prob
     if freeform_tile_outline_prob is not None:
         FREEFORM_TILE_OUTLINE_PROB = freeform_tile_outline_prob
     if idx0_stone is not None:
         IDX0_STONE_PATH = idx0_stone
+    if construction_sheet_prob is not None:
+        CONSTRUCTION_SHEET_PROB = construction_sheet_prob
+    if roof_field_prob is not None:
+        ROOF_FIELD_PROB = roof_field_prob
+    if elevation_trim_prob is not None:
+        ELEVATION_TRIM_PROB = elevation_trim_prob
+    if construction_perimeter_slab_prob is not None:
+        CONSTRUCTION_PERIMETER_SLAB_PROB = construction_perimeter_slab_prob
+    if construction_room_negative_prob is not None:
+        CONSTRUCTION_ROOM_NEGATIVE_PROB = construction_room_negative_prob
+    if elevation_clean_band_prob is not None:
+        ELEVATION_CLEAN_BAND_PROB = elevation_clean_band_prob
     if split_scale is not None:
         _apply_split_scale(split_scale)
     _WORKER_TILES = load_curated_tiles(tiles_dir)
@@ -3524,6 +4227,10 @@ def main():
                          '(material swatches, dimension grids, hatching) into '
                          'background. Teaches that texture alone != instance, to '
                          'cut real over-prediction; 0 = off (default).')
+    ap.add_argument('--negative-material-frac', type=float, default=None,
+                    help='fraction of unlabeled negative patches that reuse real '
+                         'material tiles. Lower values make negatives CAD hatch/'
+                         'poche distractors instead of same-material hard negatives.')
     ap.add_argument('--realstyle-prob', type=float, default=None,
                     help='per-elevation prob of rendering a "real-style" excerpt: '
                          'one WHOLE faint outline-free material region per surface '
@@ -3541,6 +4248,29 @@ def main():
     ap.add_argument('--clutter-boost', action='store_true',
                     help='max all sheet-context clutter (title block, hidden lines, '
                          'multiple keyed notes) to match real CAD-page density.')
+    ap.add_argument('--construction-sheet-prob', type=float, default=None,
+                    help='per-freeform probability of using the construction-sheet '
+                         'floorplan schema: few large finish/deck material regions '
+                         'under dense unlabeled walls, fixtures, leaders, and notes. '
+                         '0 = off (default).')
+    ap.add_argument('--roof-field-prob', type=float, default=None,
+                    help='per-roof_plan probability of labelling the roof as 1-2 '
+                         'large contiguous material fields with ridge/facet linework '
+                         'drawn over them as context. 0 = off (default).')
+    ap.add_argument('--elevation-trim-prob', type=float, default=None,
+                    help='per-elevation probability of adding labelled long-skinny '
+                         'trim/material objects: fascia/eave bands, belt courses, '
+                         'porch slabs, and small trim rectangles. 0 = off.')
+    ap.add_argument('--construction-perimeter-slab-prob', type=float, default=None,
+                    help='per-construction-sheet probability of adding labelled '
+                         'thin exterior slab/walk/perimeter finish regions around '
+                         'the footprint while interior floor texture is context.')
+    ap.add_argument('--construction-room-negative-prob', type=float, default=None,
+                    help='per-construction-sheet probability of drawing unlabeled '
+                         'room finish/hatch fields under walls and fixtures.')
+    ap.add_argument('--elevation-clean-band-prob', type=float, default=None,
+                    help='per-elevation probability of using a clean broad-band '
+                         'facade schema with windows as holes/negatives.')
     ap.add_argument('--label-jitter', type=float, default=None,
                     help='std (px) of organic boundary jitter on annotation polygons '
                          '(image stays crisp) so synth labels look human-traced, not '
@@ -3557,8 +4287,11 @@ def main():
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE, MODE_WEIGHTS
     global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
-    global NEGATIVE_TEXTURE_PROB, REALSTYLE_PROB, CLUTTER_BOOST, LABEL_JITTER
-    global RESOLUTION_SCALE
+    global NEGATIVE_TEXTURE_PROB, NEGATIVE_MATERIAL_FRAC, REALSTYLE_PROB
+    global CLUTTER_BOOST, LABEL_JITTER
+    global RESOLUTION_SCALE, CONSTRUCTION_SHEET_PROB, ROOF_FIELD_PROB
+    global ELEVATION_TRIM_PROB, CONSTRUCTION_PERIMETER_SLAB_PROB
+    global CONSTRUCTION_ROOM_NEGATIVE_PROB, ELEVATION_CLEAN_BAND_PROB
     if args.clutter_boost:
         CLUTTER_BOOST = True
     if args.label_jitter is not None:
@@ -3600,10 +4333,38 @@ def main():
         NEGATIVE_TEXTURE_PROB = args.negative_texture_prob
     if not 0.0 <= NEGATIVE_TEXTURE_PROB <= 1.0:
         raise ValueError('--negative-texture-prob must be in [0, 1]')
+    if args.negative_material_frac is not None:
+        NEGATIVE_MATERIAL_FRAC = args.negative_material_frac
+    if not 0.0 <= NEGATIVE_MATERIAL_FRAC <= 1.0:
+        raise ValueError('--negative-material-frac must be in [0, 1]')
     if args.realstyle_prob is not None:
         REALSTYLE_PROB = args.realstyle_prob
     if not 0.0 <= REALSTYLE_PROB <= 1.0:
         raise ValueError('--realstyle-prob must be in [0, 1]')
+    if args.construction_sheet_prob is not None:
+        CONSTRUCTION_SHEET_PROB = args.construction_sheet_prob
+    if not 0.0 <= CONSTRUCTION_SHEET_PROB <= 1.0:
+        raise ValueError('--construction-sheet-prob must be in [0, 1]')
+    if args.roof_field_prob is not None:
+        ROOF_FIELD_PROB = args.roof_field_prob
+    if not 0.0 <= ROOF_FIELD_PROB <= 1.0:
+        raise ValueError('--roof-field-prob must be in [0, 1]')
+    if args.elevation_trim_prob is not None:
+        ELEVATION_TRIM_PROB = args.elevation_trim_prob
+    if not 0.0 <= ELEVATION_TRIM_PROB <= 1.0:
+        raise ValueError('--elevation-trim-prob must be in [0, 1]')
+    if args.construction_perimeter_slab_prob is not None:
+        CONSTRUCTION_PERIMETER_SLAB_PROB = args.construction_perimeter_slab_prob
+    if not 0.0 <= CONSTRUCTION_PERIMETER_SLAB_PROB <= 1.0:
+        raise ValueError('--construction-perimeter-slab-prob must be in [0, 1]')
+    if args.construction_room_negative_prob is not None:
+        CONSTRUCTION_ROOM_NEGATIVE_PROB = args.construction_room_negative_prob
+    if not 0.0 <= CONSTRUCTION_ROOM_NEGATIVE_PROB <= 1.0:
+        raise ValueError('--construction-room-negative-prob must be in [0, 1]')
+    if args.elevation_clean_band_prob is not None:
+        ELEVATION_CLEAN_BAND_PROB = args.elevation_clean_band_prob
+    if not 0.0 <= ELEVATION_CLEAN_BAND_PROB <= 1.0:
+        raise ValueError('--elevation-clean-band-prob must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_FRAC <= 1.0:
         raise ValueError('--dense-fill-frac must be in [0, 1]')
     if not 0.0 <= DENSE_FILL_OPACITY <= 1.0:
@@ -3632,7 +4393,12 @@ def main():
             MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
             args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
             args.dense_fill_min_ink, args.negative_texture_prob,
+            args.negative_material_frac,
             args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
+            args.construction_sheet_prob, args.roof_field_prob,
+            args.elevation_trim_prob, args.construction_perimeter_slab_prob,
+            args.construction_room_negative_prob,
+            args.elevation_clean_band_prob,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -3655,7 +4421,12 @@ def main():
                   MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
                   args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
                   args.dense_fill_min_ink, args.negative_texture_prob,
+                  args.negative_material_frac,
                   args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
+                  args.construction_sheet_prob, args.roof_field_prob,
+                  args.elevation_trim_prob, args.construction_perimeter_slab_prob,
+                  args.construction_room_negative_prob,
+                  args.elevation_clean_band_prob,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):
