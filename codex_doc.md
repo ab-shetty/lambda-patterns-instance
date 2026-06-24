@@ -165,6 +165,23 @@ crosses `real_iou >= 0.45`.
   This is the current best pure-synth result and satisfies the user's fast
   validation rule. The next synth work should generate this broad-mask/high-area
   distribution directly instead of relying on selection from finite pools.
+- Scaling the same top-area idea to 5000 images answered the user's data-size
+  question. Generated two 5000-image source pools:
+  `/workspace/synth_faintcad5000` and `/workspace/synth_cadneg5000`, then built
+  `/workspace/synth_toparea5000` by selecting the top 5000 labelled-area-fraction
+  examples across both pools. Distribution: `3079 elevation / 1509 roof_plan /
+  412 freeform`; source split `2506 faint / 2494 cadneg`; area mean `0.3504`,
+  median `0.2617`; zero off-canvas coords. Seed 0, same q200/maskdice10/eos03
+  recipe:
+  - epoch 0: synth `0.5046`, real `0.4369`, div `+0.0677`
+  - epoch 1: synth `0.6369`, real `0.4937`, div `+0.1432`
+  - epoch 2: synth `0.6721`, real `0.5242`, div `+0.1479`
+  - epoch 4 peak: synth `0.7673`, real `0.5698`, div `+0.1975`
+  - last-3 plateau: synth `0.8063`, real `0.5553`, div `+0.2510`
+  Interpretation: scaling selected high-area synth from 900 to 5000 clearly
+  raises real IoU into the mid/high `0.55` range, but it also makes synth much
+  easier and increases divergence. User explicitly stopped the seed-1
+  confirmation as unnecessary for this scaling question.
 
 ---
 
