@@ -41,7 +41,9 @@ from glob import glob
 
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from shapely.geometry import GeometryCollection as _ShGeometryCollection
 from shapely.geometry import LineString as _ShLineString
+from shapely.geometry import MultiPolygon as _ShMultiPolygon
 from shapely.geometry import Polygon as _ShPoly
 from shapely.ops import split as _sh_split
 from shapely.ops import unary_union as _sh_union
@@ -309,6 +311,104 @@ CONSTRUCTION_ROOM_NEGATIVE_PROB = 0.0
 # horizontal material bands with windows as holes/negatives. Targets elevations
 # where the model over-fills broad wall chunks instead of respecting band edges.
 ELEVATION_CLEAN_BAND_PROB = 0.0
+
+# Post-render excerpt crops. Real eval images are PDF excerpts, not complete
+# centered scenes; broad target masks often touch crop edges and continue beyond
+# the visible page fragment. Cropping after rendering keeps the visual context
+# realistic, while clipping annotations makes the label semantics match excerpts.
+REAL_HARD_CROP_PROB = 0.0
+REAL_HARD_CROP_MIN_KEEP = 0.58
+REAL_HARD_CROP_MAX_KEEP = 0.86
+
+
+def _apply_recipe(name):
+    """Named generator schemas for reproducible experiment screens."""
+    global DRAW_INSTANCE_OUTLINE, DENSE_FILL_FRAC, DENSE_FILL_OPACITY
+    global DENSE_FILL_SCOPE, MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC
+    global ELEVATION_PARTIAL_CROP_PROB, ELEVATION_PARTIAL_CROP_FRAC
+    global MARKUP_OVERLAY_PROB, MONO_IMAGE_PROB, INSTANCE_SCALE
+    global DENSE_FILL_MIN_INK, NEGATIVE_TEXTURE_PROB, NEGATIVE_MATERIAL_FRAC
+    global REALSTYLE_PROB, FREEFORM_TILE_OUTLINE_PROB, CLUTTER_BOOST
+    global LABEL_JITTER, CONSTRUCTION_SHEET_PROB, ROOF_FIELD_PROB
+    global ELEVATION_TRIM_PROB, CONSTRUCTION_PERIMETER_SLAB_PROB
+    global CONSTRUCTION_ROOM_NEGATIVE_PROB, ELEVATION_CLEAN_BAND_PROB
+    global REAL_HARD_CROP_PROB, REAL_HARD_CROP_MIN_KEEP, REAL_HARD_CROP_MAX_KEEP
+    if name in (None, '', 'none'):
+        return
+    if name not in ('realhard-v1', 'realhard-v2'):
+        raise ValueError(f'unknown --recipe {name!r}')
+    if name == 'realhard-v2':
+        # Closer to the proven faintcad/cadneg/top-area direction. This variant
+        # prioritizes real IoU recovery, then adds only mild hardness so synth
+        # does not immediately outrun real. Use this after v1 over-hardens.
+        MODE_WEIGHTS = {'elevation': 56, 'freeform': 28, 'roof_plan': 16}
+        CONSTRUCTION_SHEET_PROB = 1.0
+        ROOF_FIELD_PROB = 0.58
+        ELEVATION_CLEAN_BAND_PROB = 0.46
+        ELEVATION_TRIM_PROB = 0.08
+        CONSTRUCTION_PERIMETER_SLAB_PROB = 0.70
+        CONSTRUCTION_ROOM_NEGATIVE_PROB = 0.0
+
+        DRAW_INSTANCE_OUTLINE = False
+        MARKUP_OVERLAY_PROB = 0.0
+        CLUTTER_BOOST = True
+        MONO_IMAGE_PROB = 0.50
+        REALSTYLE_PROB = 0.35
+        FREEFORM_TILE_OUTLINE_PROB = 0.45
+
+        DENSE_FILL_SCOPE = 'instance'
+        DENSE_FILL_FRAC = 0.45
+        DENSE_FILL_OPACITY = 0.35
+        DENSE_FILL_MIN_INK = 0.08
+        INSTANCE_SCALE = 0.78
+        _apply_split_scale(INSTANCE_SCALE)
+
+        NEGATIVE_TEXTURE_PROB = 0.0
+        NEGATIVE_MATERIAL_FRAC = 0.0
+        LABEL_JITTER = 1.5
+        ELEVATION_EXCERPT_SHIFT_FRAC = 0.22
+        ELEVATION_PARTIAL_CROP_PROB = 0.24
+        ELEVATION_PARTIAL_CROP_FRAC = 0.10
+        REAL_HARD_CROP_PROB = 0.18
+        REAL_HARD_CROP_MIN_KEEP = 0.72
+        REAL_HARD_CROP_MAX_KEEP = 0.90
+        return
+
+    # Starting point: the top-area pure-synth result showed that large masks are
+    # the right direction. This preset generates those broad masks directly, but
+    # removes easy synthetic cues and adds real-excerpt difficulty so synth IoU
+    # should not run far ahead as it did for selected toparea5000.
+    MODE_WEIGHTS = {'elevation': 52, 'freeform': 18, 'roof_plan': 30}
+    CONSTRUCTION_SHEET_PROB = 1.0
+    ROOF_FIELD_PROB = 0.78
+    ELEVATION_CLEAN_BAND_PROB = 0.46
+    ELEVATION_TRIM_PROB = 0.16
+    CONSTRUCTION_PERIMETER_SLAB_PROB = 0.72
+    CONSTRUCTION_ROOM_NEGATIVE_PROB = 0.18
+
+    DRAW_INSTANCE_OUTLINE = False
+    MARKUP_OVERLAY_PROB = 0.0
+    CLUTTER_BOOST = True
+    MONO_IMAGE_PROB = 0.62
+    REALSTYLE_PROB = 0.34
+    FREEFORM_TILE_OUTLINE_PROB = 0.38
+
+    DENSE_FILL_SCOPE = 'instance'
+    DENSE_FILL_FRAC = 0.42
+    DENSE_FILL_OPACITY = 0.34
+    DENSE_FILL_MIN_INK = 0.08
+    INSTANCE_SCALE = 0.42
+    _apply_split_scale(INSTANCE_SCALE)
+
+    NEGATIVE_TEXTURE_PROB = 0.18
+    NEGATIVE_MATERIAL_FRAC = 0.0
+    LABEL_JITTER = 5.5
+    ELEVATION_EXCERPT_SHIFT_FRAC = 0.32
+    ELEVATION_PARTIAL_CROP_PROB = 0.46
+    ELEVATION_PARTIAL_CROP_FRAC = 0.16
+    REAL_HARD_CROP_PROB = 0.56
+    REAL_HARD_CROP_MIN_KEEP = 0.60
+    REAL_HARD_CROP_MAX_KEEP = 0.84
 
 
 def _realstyle_scene_overrides():
@@ -3692,6 +3792,118 @@ def _stone_ashlar_crop(w, h, rng):
     return img
 
 
+def _flat_to_points(flat):
+    return [(float(flat[i]), float(flat[i + 1])) for i in range(0, len(flat), 2)]
+
+
+def _points_to_flat(points):
+    return [int(round(c)) for p in points for c in p]
+
+
+def _clamp_poly_to_canvas(poly, W, H):
+    return [(max(0, min(W - 1, x)), max(0, min(H - 1, y))) for x, y in poly]
+
+
+def _geom_polygons(geom):
+    if geom.is_empty:
+        return []
+    if isinstance(geom, _ShPoly):
+        return [geom]
+    if isinstance(geom, _ShMultiPolygon):
+        return list(geom.geoms)
+    if isinstance(geom, _ShGeometryCollection):
+        out = []
+        for g in geom.geoms:
+            out.extend(_geom_polygons(g))
+        return out
+    return []
+
+
+def _clip_annotations_to_crop(annotations, crop_box, crop_w, crop_h):
+    """Clip outer-with-holes polygons to an excerpt crop rectangle."""
+    x0, y0, x1, y1 = crop_box
+    crop_geom = _ShPoly([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+    clipped = []
+    next_id = 1
+    for ann in annotations:
+        seg = ann.get('segmentation') or []
+        if not seg or len(seg[0]) < 6:
+            continue
+        try:
+            outer = _flat_to_points(seg[0])
+            holes = [_flat_to_points(h) for h in seg[1:] if len(h) >= 6]
+            inter = _ShPoly(outer, holes).buffer(0).intersection(crop_geom)
+        except Exception:
+            continue
+        for piece in _geom_polygons(inter):
+            if piece.area < 48 * 48:
+                continue
+            ext = [(x - x0, y - y0) for x, y in list(piece.exterior.coords)[:-1]]
+            ext = [(max(0, min(crop_w - 1, x)), max(0, min(crop_h - 1, y)))
+                   for x, y in ext]
+            if len(ext) < 3 or _polygon_area(ext) < 48 * 48:
+                continue
+            hole_polys = []
+            for ring in piece.interiors:
+                pts = [(x - x0, y - y0) for x, y in list(ring.coords)[:-1]]
+                pts = [(max(0, min(crop_w - 1, x)), max(0, min(crop_h - 1, y)))
+                       for x, y in pts]
+                if len(pts) >= 3 and _polygon_area(pts) >= 16 * 16:
+                    hole_polys.append(pts)
+            xs = [p[0] for p in ext]
+            ys = [p[1] for p in ext]
+            new_ann = dict(ann)
+            new_ann['id'] = next_id
+            new_ann['segmentation'] = [_points_to_flat(ext)] + [
+                _points_to_flat(h) for h in hole_polys
+            ]
+            new_ann['num_holes'] = len(hole_polys)
+            new_ann['bbox'] = [
+                int(round(min(xs))), int(round(min(ys))),
+                int(round(max(xs) - min(xs))), int(round(max(ys) - min(ys))),
+            ]
+            new_ann['area'] = float(_polygon_area(ext) - sum(_polygon_area(h) for h in hole_polys))
+            clipped.append(new_ann)
+            next_id += 1
+    return clipped
+
+
+def _maybe_crop_real_hard_excerpt(img, ann, rng):
+    if REAL_HARD_CROP_PROB <= 0.0 or rng.random() >= REAL_HARD_CROP_PROB:
+        return img, ann
+    anns = ann.get('annotations', [])
+    if not anns:
+        return img, ann
+    W, H = img.size
+    keep = rng.uniform(REAL_HARD_CROP_MIN_KEEP, REAL_HARD_CROP_MAX_KEEP)
+    cw = max(640, min(W, int(round(W * rng.uniform(keep, min(0.96, keep + 0.12))))))
+    ch = max(640, min(H, int(round(H * rng.uniform(keep, min(0.96, keep + 0.12))))))
+    if cw >= W and ch >= H:
+        return img, ann
+
+    target = max(anns, key=lambda a: float(a.get('area', 0.0)))
+    bx, by, bw, bh = target.get('bbox', [W // 4, H // 4, W // 2, H // 2])
+    cx = bx + bw * rng.uniform(0.35, 0.65)
+    cy = by + bh * rng.uniform(0.35, 0.65)
+    if rng.random() < 0.65:
+        cx += rng.choice([-1, 1]) * cw * rng.uniform(0.12, 0.28)
+    if rng.random() < 0.55:
+        cy += rng.choice([-1, 1]) * ch * rng.uniform(0.10, 0.24)
+    x0 = int(round(max(0, min(W - cw, cx - cw / 2))))
+    y0 = int(round(max(0, min(H - ch, cy - ch / 2))))
+    crop_box = (x0, y0, x0 + cw, y0 + ch)
+    clipped = _clip_annotations_to_crop(anns, crop_box, cw, ch)
+    if not clipped:
+        return img, ann
+    cropped = img.crop(crop_box)
+    new_ann = dict(ann)
+    new_ann['image'] = dict(ann['image'])
+    new_ann['image']['width'] = cw
+    new_ann['image']['height'] = ch
+    new_ann['annotations'] = clipped
+    return cropped, new_ann
+
+
 # ============================================================
 # Compose one synthetic image
 # ============================================================
@@ -4023,8 +4235,9 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         # Organic boundary jitter on the LABEL only (image already rendered crisp
         # above) so synth annotations look human-traced, not machine-perfect.
         if LABEL_JITTER > 0.0:
-            jpoly = _jitter_poly(poly, rng, LABEL_JITTER)
-            jholes = [_jitter_poly(h, rng, LABEL_JITTER) for h in holes]
+            jpoly = _clamp_poly_to_canvas(_jitter_poly(poly, rng, LABEL_JITTER), W, H)
+            jholes = [_clamp_poly_to_canvas(_jitter_poly(h, rng, LABEL_JITTER), W, H)
+                      for h in holes]
         else:
             jpoly, jholes = poly, holes
         outer_flat = [c for p in jpoly for c in p]
@@ -4060,11 +4273,13 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
     img = render_markup_overlay(img, meta, rng, mode, mono=mono)
     img = apply_document_effects(img, rng, mode)
 
-    return img, {
+    ann = {
         'image': {'file_name': f'synth_{image_id:06d}.png', 'width': W, 'height': H},
         'mode': mode,
         'annotations': annotations,
     }
+    img, ann = _maybe_crop_real_hard_excerpt(img, ann, rng)
+    return img, ann
 
 
 # ============================================================
@@ -4097,7 +4312,11 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  roof_field_prob=None, elevation_trim_prob=None,
                  construction_perimeter_slab_prob=None,
                  construction_room_negative_prob=None,
-                 elevation_clean_band_prob=None):
+                 elevation_clean_band_prob=None, recipe=None,
+                 clutter_boost=False, label_jitter=None,
+                 resolution_scale=None, real_hard_crop_prob=None,
+                 real_hard_crop_min_keep=None,
+                 real_hard_crop_max_keep=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -4111,8 +4330,17 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global IDX0_STONE_PATH, CONSTRUCTION_SHEET_PROB, ROOF_FIELD_PROB
     global ELEVATION_TRIM_PROB, CONSTRUCTION_PERIMETER_SLAB_PROB
     global CONSTRUCTION_ROOM_NEGATIVE_PROB, ELEVATION_CLEAN_BAND_PROB
+    global CLUTTER_BOOST, LABEL_JITTER, RESOLUTION_SCALE
+    global REAL_HARD_CROP_PROB, REAL_HARD_CROP_MIN_KEEP, REAL_HARD_CROP_MAX_KEEP
     if smoke:
         _apply_smoke_overrides()
+    _apply_recipe(recipe)
+    if clutter_boost:
+        CLUTTER_BOOST = True
+    if label_jitter is not None:
+        LABEL_JITTER = label_jitter
+    if resolution_scale is not None:
+        RESOLUTION_SCALE = resolution_scale
     if no_outline:
         DRAW_INSTANCE_OUTLINE = False
     if no_dense_fill:
@@ -4158,6 +4386,12 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         CONSTRUCTION_ROOM_NEGATIVE_PROB = construction_room_negative_prob
     if elevation_clean_band_prob is not None:
         ELEVATION_CLEAN_BAND_PROB = elevation_clean_band_prob
+    if real_hard_crop_prob is not None:
+        REAL_HARD_CROP_PROB = real_hard_crop_prob
+    if real_hard_crop_min_keep is not None:
+        REAL_HARD_CROP_MIN_KEEP = real_hard_crop_min_keep
+    if real_hard_crop_max_keep is not None:
+        REAL_HARD_CROP_MAX_KEEP = real_hard_crop_max_keep
     if split_scale is not None:
         _apply_split_scale(split_scale)
     _WORKER_TILES = load_curated_tiles(tiles_dir)
@@ -4186,6 +4420,13 @@ def main():
                     help='path to reference_tiles_curated directory (with manifest.json)')
     ap.add_argument('--workers', type=int, default=(os.cpu_count() or 1),
                     help='number of parallel worker processes')
+    ap.add_argument('--recipe', type=str, default=None,
+                    choices=('realhard-v1', 'realhard-v2'),
+                    help='named generator schema. realhard-v1 targets high real '
+                         'IoU with harder synth: broad high-area masks, excerpt '
+                         'crops, construction/roof fields, label jitter, no '
+                         'lollipop markup, and disjoint CAD negatives. realhard-v2 '
+                         'backs off hardness toward the proven faint/top-area mix.')
     ap.add_argument('--smoke', action='store_true', help='small canvas/few instances for fast verify')
     ap.add_argument('--no-outline', action='store_true',
                     help='ablate the per-instance boundary line (suspected synth shortcut)')
@@ -4279,6 +4520,14 @@ def main():
                     help='render elevation buildings at this x native pixel size '
                          '(~2.6 matches real ~4800px) so eval downsampling makes synth '
                          'instances as small/hard as real. 1.0 = off.')
+    ap.add_argument('--real-hard-crop-prob', type=float, default=None,
+                    help='post-render probability of cropping to a real-like PDF '
+                         'excerpt and clipping annotations. Creates partial broad '
+                         'masks that touch crop edges; 0 = off.')
+    ap.add_argument('--real-hard-crop-min-keep', type=float, default=None,
+                    help='minimum width/height fraction kept by real-hard crop.')
+    ap.add_argument('--real-hard-crop-max-keep', type=float, default=None,
+                    help='maximum width/height fraction kept by real-hard crop.')
     args = ap.parse_args()
 
     if args.smoke:
@@ -4292,12 +4541,19 @@ def main():
     global RESOLUTION_SCALE, CONSTRUCTION_SHEET_PROB, ROOF_FIELD_PROB
     global ELEVATION_TRIM_PROB, CONSTRUCTION_PERIMETER_SLAB_PROB
     global CONSTRUCTION_ROOM_NEGATIVE_PROB, ELEVATION_CLEAN_BAND_PROB
+    global REAL_HARD_CROP_PROB, REAL_HARD_CROP_MIN_KEEP, REAL_HARD_CROP_MAX_KEEP
     if args.clutter_boost:
         CLUTTER_BOOST = True
     if args.label_jitter is not None:
         LABEL_JITTER = args.label_jitter
     if args.resolution_scale is not None:
         RESOLUTION_SCALE = args.resolution_scale
+    if args.real_hard_crop_prob is not None:
+        REAL_HARD_CROP_PROB = args.real_hard_crop_prob
+    if args.real_hard_crop_min_keep is not None:
+        REAL_HARD_CROP_MIN_KEEP = args.real_hard_crop_min_keep
+    if args.real_hard_crop_max_keep is not None:
+        REAL_HARD_CROP_MAX_KEEP = args.real_hard_crop_max_keep
     if args.no_outline:
         DRAW_INSTANCE_OUTLINE = False
     if args.no_dense_fill:
@@ -4313,6 +4569,7 @@ def main():
         if len(vals) != 3:
             raise ValueError('--mode-weights must have 3 comma-separated values')
         MODE_WEIGHTS = dict(zip(('elevation', 'freeform', 'roof_plan'), vals))
+    mode_weights_arg = MODE_WEIGHTS if args.mode_weights is not None else None
     if args.elevation_excerpt_shift is not None:
         ELEVATION_EXCERPT_SHIFT_FRAC = args.elevation_excerpt_shift
     if args.markup_overlay_prob is not None:
@@ -4375,6 +4632,10 @@ def main():
         raise ValueError('--markup-overlay-prob must be in [0, 1]')
     if args.split_scale is not None and not 0.0 <= args.split_scale <= 1.0:
         raise ValueError('--split-scale must be in [0, 1]')
+    if not 0.0 <= REAL_HARD_CROP_PROB <= 1.0:
+        raise ValueError('--real-hard-crop-prob must be in [0, 1]')
+    if not 0.0 < REAL_HARD_CROP_MIN_KEEP <= REAL_HARD_CROP_MAX_KEEP <= 1.0:
+        raise ValueError('--real-hard-crop keep fractions must satisfy 0 < min <= max <= 1')
 
     img_dir = os.path.join(args.out, 'images')
     ann_dir = os.path.join(args.out, 'annotations')
@@ -4390,8 +4651,8 @@ def main():
             args.tiles, img_dir, ann_dir, args.smoke, args.no_outline,
             args.dense_fill_frac, args.dense_fill_opacity,
             args.dense_fill_scope, args.no_dense_fill,
-            MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
-            args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
+            mode_weights_arg, args.elevation_excerpt_shift, args.markup_overlay_prob,
+            args.split_scale, args.mono_image_prob, args.instance_scale,
             args.dense_fill_min_ink, args.negative_texture_prob,
             args.negative_material_frac,
             args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
@@ -4399,6 +4660,9 @@ def main():
             args.elevation_trim_prob, args.construction_perimeter_slab_prob,
             args.construction_room_negative_prob,
             args.elevation_clean_band_prob,
+            args.recipe, args.clutter_boost, args.label_jitter,
+            args.resolution_scale, args.real_hard_crop_prob,
+            args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -4418,8 +4682,8 @@ def main():
                   args.tiles, img_dir, ann_dir, args.smoke, args.no_outline,
                   args.dense_fill_frac, args.dense_fill_opacity,
                   args.dense_fill_scope, args.no_dense_fill,
-                  MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB,
-                  args.split_scale, MONO_IMAGE_PROB, args.instance_scale,
+                  mode_weights_arg, args.elevation_excerpt_shift, args.markup_overlay_prob,
+                  args.split_scale, args.mono_image_prob, args.instance_scale,
                   args.dense_fill_min_ink, args.negative_texture_prob,
                   args.negative_material_frac,
                   args.realstyle_prob, args.freeform_tile_outline, args.idx0_stone,
@@ -4427,6 +4691,9 @@ def main():
                   args.elevation_trim_prob, args.construction_perimeter_slab_prob,
                   args.construction_room_negative_prob,
                   args.elevation_clean_band_prob,
+                  args.recipe, args.clutter_boost, args.label_jitter,
+                  args.resolution_scale, args.real_hard_crop_prob,
+                  args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):
