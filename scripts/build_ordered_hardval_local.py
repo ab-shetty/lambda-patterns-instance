@@ -42,6 +42,18 @@ def _rows(root: Path):
     return out
 
 
+def _parse_quotas(text: str | None):
+    if not text:
+        return None
+    quotas = {}
+    for part in text.split(","):
+        if not part.strip():
+            continue
+        mode, count = part.split("=", 1)
+        quotas[mode.strip()] = int(count)
+    return quotas
+
+
 def _copy(src_ann: Path, src_img: Path, out: Path, index: int, src_root: Path):
     stem = f"synth_{index:06d}"
     out_img = out / "images" / f"{stem}{src_img.suffix.lower()}"
@@ -75,6 +87,9 @@ def main():
                     help="prefer validation candidates near this annotation count")
     ap.add_argument("--target-cat-count", type=float, default=None,
                     help="prefer validation candidates near this category count")
+    ap.add_argument("--val-mode-quotas", default=None,
+                    help="optional mode=count quotas for deterministic val split; "
+                         "counts must sum to the number of val positions")
     ap.add_argument("--min-score", type=float, default=0.0)
     ap.add_argument("--max-score", type=float, default=1.0)
     ap.add_argument("--overwrite", action="store_true")
@@ -127,7 +142,24 @@ def main():
 
     used_ann = set()
     chosen = {}
-    for pos, (root, ann_path, img_path, _meta) in zip(sorted(val_positions), hard_rows):
+    val_quotas = _parse_quotas(args.val_mode_quotas)
+    if val_quotas is not None and sum(val_quotas.values()) != len(val_positions):
+        raise SystemExit("--val-mode-quotas must sum to the number of val positions")
+    if val_quotas is None:
+        val_chosen = hard_rows[:len(val_positions)]
+    else:
+        val_chosen = []
+        for mode, count in val_quotas.items():
+            rows = [
+                r for r in hard_rows
+                if r[3]["mode"] == mode and (r[0], r[1]) not in used_ann
+            ]
+            if len(rows) < count:
+                raise SystemExit(f"only found {len(rows)} hard val rows for mode={mode}")
+            val_chosen.extend(rows[:count])
+            used_ann.update((r[0], r[1]) for r in rows[:count])
+        val_chosen.sort(key=hard_key, reverse=True)
+    for pos, (root, ann_path, img_path, _meta) in zip(sorted(val_positions), val_chosen):
         chosen[pos] = (root, ann_path, img_path, "val")
         used_ann.add((root, ann_path))
 
@@ -177,6 +209,7 @@ def main():
         "n": args.n,
         "train_src": args.train_src,
         "hard_src": args.hard_src,
+        "val_mode_quotas": val_quotas,
         "train_positions": sorted(train_positions),
         "val_positions": sorted(val_positions),
         "summary": summary,

@@ -335,8 +335,45 @@ def _apply_recipe(name):
     global REAL_HARD_CROP_PROB, REAL_HARD_CROP_MIN_KEEP, REAL_HARD_CROP_MAX_KEEP
     if name in (None, '', 'none'):
         return
-    if name not in ('realhard-v1', 'realhard-v2'):
+    if name not in ('realhard-v1', 'realhard-v2', 'mildtransfer-v1'):
         raise ValueError(f'unknown --recipe {name!r}')
+    if name == 'mildtransfer-v1':
+        # Conservative source-pool expansion around the proven faintcad/cadneg
+        # direction. Unlike realhard-v1/v2, this keeps the broad transfer mix and
+        # only mildly removes shortcuts: fewer perfect outlines, faint labels,
+        # modest crop/scale variation, and a small amount of CAD clutter.
+        MODE_WEIGHTS = {'elevation': 58, 'freeform': 16, 'roof_plan': 26}
+        CONSTRUCTION_SHEET_PROB = 0.55
+        ROOF_FIELD_PROB = 0.38
+        ELEVATION_CLEAN_BAND_PROB = 0.34
+        ELEVATION_TRIM_PROB = 0.10
+        CONSTRUCTION_PERIMETER_SLAB_PROB = 0.42
+        CONSTRUCTION_ROOM_NEGATIVE_PROB = 0.08
+
+        DRAW_INSTANCE_OUTLINE = False
+        MARKUP_OVERLAY_PROB = 0.10
+        CLUTTER_BOOST = False
+        MONO_IMAGE_PROB = 0.58
+        REALSTYLE_PROB = 0.16
+        FREEFORM_TILE_OUTLINE_PROB = 0.28
+
+        DENSE_FILL_SCOPE = 'instance'
+        DENSE_FILL_FRAC = 0.42
+        DENSE_FILL_OPACITY = 0.42
+        DENSE_FILL_MIN_INK = 0.12
+        INSTANCE_SCALE = 0.82
+        _apply_split_scale(INSTANCE_SCALE)
+
+        NEGATIVE_TEXTURE_PROB = 0.04
+        NEGATIVE_MATERIAL_FRAC = 0.0
+        LABEL_JITTER = 1.0
+        ELEVATION_EXCERPT_SHIFT_FRAC = 0.20
+        ELEVATION_PARTIAL_CROP_PROB = 0.20
+        ELEVATION_PARTIAL_CROP_FRAC = 0.08
+        REAL_HARD_CROP_PROB = 0.10
+        REAL_HARD_CROP_MIN_KEEP = 0.78
+        REAL_HARD_CROP_MAX_KEEP = 0.93
+        return
     if name == 'realhard-v2':
         # Closer to the proven faintcad/cadneg/top-area direction. This variant
         # prioritizes real IoU recovery, then adds only mild hardness so synth
@@ -4421,12 +4458,14 @@ def main():
     ap.add_argument('--workers', type=int, default=(os.cpu_count() or 1),
                     help='number of parallel worker processes')
     ap.add_argument('--recipe', type=str, default=None,
-                    choices=('realhard-v1', 'realhard-v2'),
+                    choices=('realhard-v1', 'realhard-v2', 'mildtransfer-v1'),
                     help='named generator schema. realhard-v1 targets high real '
                          'IoU with harder synth: broad high-area masks, excerpt '
                          'crops, construction/roof fields, label jitter, no '
                          'lollipop markup, and disjoint CAD negatives. realhard-v2 '
-                         'backs off hardness toward the proven faint/top-area mix.')
+                         'backs off hardness toward the proven faint/top-area mix. '
+                         'mildtransfer-v1 is a conservative source-pool expansion '
+                         'around the proven faintcad/cadneg distribution.')
     ap.add_argument('--smoke', action='store_true', help='small canvas/few instances for fast verify')
     ap.add_argument('--no-outline', action='store_true',
                     help='ablate the per-instance boundary line (suspected synth shortcut)')
