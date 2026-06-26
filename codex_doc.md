@@ -11,6 +11,10 @@ Find a synthetic generation/selection schema such that:
 
 This divergence gate is one-sided. Synthetic validation being **harder** than
 real evaluation, i.e. `synth_iou < real_iou`, is acceptable and usually a plus.
+This Codex session previously misunderstood the requirement as
+`abs(synth_iou - real_iou) < 0.05`; do not repeat that. Future sessions are free
+to make synthetic validation harder than real as long as real IoU clears the
+target and `synth_iou - real_iou < 0.05`.
 
 This is now a **pure-synth** goal. Mixed real augmentation results are useful
 context, but they do not satisfy the goal.
