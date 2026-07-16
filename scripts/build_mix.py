@@ -2,10 +2,11 @@
 """Build the "best-of-both" training mix: broad synth + augmented real.
 
 Reproduces the mix that hits divergence ~0 with held-out real ~0.32 (the parity
-setup referenced in synth_progress.md / codex_doc.md). The 28 real plans are
-split deterministically (random.Random(1234)) into 14 TRAIN reals and 14
-HELD-OUT reals; only the train reals are augmented into the mix, so the held-out
-14 stay a clean eval set (pass them to train.py via --real-eval-indices).
+setup referenced in synth_progress.md / codex_doc.md). By default, the 28 real
+plans are split deterministically (random.Random(1234)) into 14 TRAIN reals and
+14 HELD-OUT reals. Set `--hf-train-count 0` when an independent real training
+pool is available; this keeps all 28 Hugging Face plans held out and uses only
+`--real-extra-dir` plans on the training side.
 
 Each train real gets K photometric augmentations (brightness/contrast jitter,
 optional light blur, optional horizontal flip with mask flip, gaussian noise).
@@ -230,6 +231,11 @@ def main():
     ap.add_argument("--split-seed", type=int, default=1234,
                     help="seed for the 14/14 real train/held split (keep at 1234 "
                          "to match the established setup)")
+    ap.add_argument("--hf-train-count", type=int, default=14,
+                    help="number of Hugging Face real plans to include on the "
+                         "training side (default 14 for historical runs; use 0 "
+                         "to hold out all 28 when training from an independent "
+                         "real pool)")
     ap.add_argument("--aug-seed", type=int, default=5858)
     ap.add_argument("--real-aug-strong", action="store_true",
                     help="richer per-real augmentation (color/sharpness jitter, "
@@ -243,9 +249,13 @@ def main():
 
     recs = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir,
                                 config="real-world-test", split="test")
+    if not 0 <= args.hf_train_count < len(recs):
+        raise ValueError("--hf-train-count must be between 0 and one less than "
+                         f"the real dataset size ({len(recs)})")
     perm = list(range(len(recs)))
     random.Random(args.split_seed).shuffle(perm)
-    train_idx, held_idx = perm[:14], perm[14:]
+    train_idx = perm[:args.hf_train_count]
+    held_idx = perm[args.hf_train_count:]
     print(f"real plans: {len(recs)}  train={sorted(train_idx)}  held-out={sorted(held_idx)}")
 
     aug_tmp = args.aug_tmp or f"{args.out}_augtmp"

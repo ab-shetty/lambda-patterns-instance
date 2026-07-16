@@ -30,12 +30,17 @@ def main():
     ap.add_argument("--image-max-size", type=int, default=1024)
     ap.add_argument("--ref-size", type=int, default=224)
     ap.add_argument("--score-thr", type=float, default=0.5)
+    ap.add_argument("--mask-thr", type=float, default=0.5)
+    ap.add_argument("--indices", default=None,
+                    help="Comma-separated dataset indices; default evaluates all records")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     recs = load_parquet_records(args.hf_repo, cache_dir=args.cache_dir,
                                 config=args.real_config, split=args.real_split)
-    ds = InstanceSegDataset(recs, range(len(recs)),
+    indices = (range(len(recs)) if args.indices is None else
+               [int(x) for x in args.indices.split(",") if x.strip()])
+    ds = InstanceSegDataset(recs, indices,
                             image_max_size=args.image_max_size,
                             ref_size=args.ref_size, augment=False)
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
@@ -44,9 +49,10 @@ def main():
     model, _ = load_model(args.ckpt, device)
 
     rows = []
-    tot_iou = tot_gt = tot_pred = 0.0
+    tot_iou = tot_gt_iou = tot_gt = tot_pred = 0.0
     with torch.no_grad():
-        for i, batch in enumerate(loader):
+        for pos, batch in enumerate(loader):
+            i = indices[pos]
             batch = move_batch(batch, device)
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 out = model(batch["images"], batch["pixel_mask"],
@@ -56,7 +62,7 @@ def main():
             keep = probs > args.score_thr
             masks = (torch.nn.functional.interpolate(
                 out["pred_masks"], size=(H, W), mode="bilinear",
-                align_corners=False).sigmoid()[0] > 0.5)[keep]          # [k,H,W]
+                align_corners=False).sigmoid()[0] > args.mask_thr)[keep]  # [k,H,W]
             tgt = batch["targets"][0]
             g = tgt["masks"].shape[0]
             pred_n = int(keep.sum())
@@ -71,14 +77,17 @@ def main():
                 union = gm.sum(1)[:, None] + pm.sum(1)[None, :] - inter
                 iou = (inter / union.clamp(min=1)).max(dim=1)[0].mean().item()
             rows.append((i, iou, g, pred_n))
-            tot_iou += iou; tot_gt += g; tot_pred += pred_n
+            tot_iou += iou; tot_gt_iou += iou * g
+            tot_gt += g; tot_pred += pred_n
 
     n = len(rows)
-    print(f"\nckpt={args.ckpt}  size={args.image_max_size}  thr={args.score_thr}")
+    print(f"\nckpt={args.ckpt}  size={args.image_max_size}  "
+          f"score_thr={args.score_thr}  mask_thr={args.mask_thr}")
     print(f"{'idx':>3} {'iou':>6} {'GT':>3} {'pred':>5}")
     for i, iou, g, p in sorted(rows, key=lambda r: r[1]):
         print(f"{i:>3} {iou:>6.3f} {g:>3} {p:>5}")
-    print(f"\nMEAN mean_gt_iou={tot_iou/n:.4f}  mean_GT={tot_gt/n:.2f}  "
+    print(f"\nGT-WEIGHTED mean_gt_iou={tot_gt_iou/tot_gt:.4f}  "
+          f"image-macro={tot_iou/n:.4f}  mean_GT={tot_gt/n:.2f}  "
           f"mean_pred={tot_pred/n:.2f}  over-pred={tot_pred/max(tot_gt,1):.2f}x  "
           f"(n={n})")
 

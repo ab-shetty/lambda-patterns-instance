@@ -528,7 +528,7 @@ def main():
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(args.log_dir)
 
-    start_epoch, best_iou = 0, 0.0
+    start_epoch, best_iou, best_real_iou = 0, 0.0, 0.0
     if args.resume:
         ck = torch.load(args.resume, map_location=device)
         base = model.module if isinstance(model, nn.DataParallel) else model
@@ -537,6 +537,7 @@ def main():
         scheduler.load_state_dict(ck["scheduler"])
         start_epoch = ck["epoch"] + 1
         best_iou = ck.get("best_iou", 0.0)
+        best_real_iou = ck.get("best_real_iou", 0.0)
         print(f"Resumed from epoch {start_epoch}")
 
     def save(name, epoch):
@@ -544,6 +545,7 @@ def main():
         torch.save({"epoch": epoch, "model": base.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "scheduler": scheduler.state_dict(), "best_iou": best_iou,
+                    "best_real_iou": best_real_iou,
                     "args": vars(args)}, ckpt_dir / name)
 
     print(f"\nTraining for {args.epochs} epochs...")
@@ -604,11 +606,21 @@ def main():
                     f"DIVERGENCE {div:+.4f}")
         print(msg)
 
-        save("last.pth", epoch)
-        if val["mean_gt_iou"] > best_iou:
+        val_improved = val["mean_gt_iou"] > best_iou
+        real_improved = (real_loader is not None and
+                         real["mean_gt_iou"] > best_real_iou)
+        if val_improved:
             best_iou = val["mean_gt_iou"]
+        if real_improved:
+            best_real_iou = real["mean_gt_iou"]
+
+        save("last.pth", epoch)
+        if val_improved:
             save("best.pth", epoch)
             print(f"  -> saved best (mean_gt_iou={best_iou:.4f})")
+        if real_improved:
+            save("best_real.pth", epoch)
+            print(f"  -> saved best real (real_mean_gt_iou={best_real_iou:.4f})")
 
     writer.close()
     print(f"\nDone. Best mean_gt_iou: {best_iou:.4f}")

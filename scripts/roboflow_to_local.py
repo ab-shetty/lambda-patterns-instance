@@ -6,19 +6,21 @@ The real-plan pool is labelled in Roboflow project `perceive-ai/floz-real-pool`
 `images/ + annotations/` dir consumable by `--local-data` and by
 `scripts/build_mix.py` (which globs `images/*.png`).
 
-Class handling (matches the existing 28-real format, which is class-agnostic /
-reference-conditioned):
-- `pattern`, `pattern1`..`pattern4`  -> generic material-region INSTANCES.
+Class handling (matches the existing 28-real reference-conditioned format):
+- `pattern`, `pattern1`..`pattern4`  -> material-region instances. The class
+  name is preserved so separate occurrences of the same pattern remain positive
+  reference matches while different patterns remain negatives.
 - `remove`                           -> HOLES. Roboflow can't draw holes inside a
   shape, so a `remove` polygon means "subtract this area from the pattern polygon
   it sits inside." The repo's `render_instance_mask` already treats
   `segmentation = [outer, hole1, hole2, ...]` (first poly outer, rest holes), so
-  each `remove` is appended as an extra polygon to its parent instance.
+  each `remove` is appended as an extra polygon to every containing instance.
 
-A `remove` is matched to its parent pattern by centroid containment (point in
-the pattern's outer polygon); ties broken by smallest containing area. If no
-pattern contains the centroid, it falls back to the pattern with the largest
-mask overlap, and is dropped (with a warning) if it overlaps nothing.
+A `remove` is matched to its parent patterns by centroid containment (point in
+the pattern's outer polygon). Attaching to every containing pattern is important
+when labeled material regions overlap. If no pattern contains the centroid, it
+falls back to the pattern with the largest mask overlap, and is dropped (with a
+warning) if it overlaps nothing.
 
 Images are re-saved as PNG (the downstream globs expect `*.png`).
 
@@ -53,6 +55,15 @@ def _poly_area(seg_flat):
     return abs(cv2.contourArea(_poly_xy(seg_flat)))
 
 
+def _usable_pattern(seg_flat):
+    """Reject accidental edge slivers that vanish under training resize."""
+    pts = np.array(seg_flat, dtype=np.float32).reshape(-1, 2)
+    if len(pts) < 3 or _poly_area(seg_flat) < 16:
+        return False
+    span = pts.max(axis=0) - pts.min(axis=0)
+    return bool(span[0] >= 2 and span[1] >= 2)
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -72,7 +83,9 @@ def main():
     os.makedirs(f"{args.out}/images", exist_ok=True)
     os.makedirs(f"{args.out}/annotations", exist_ok=True)
 
-    n_img = n_inst = n_hole = n_hole_dropped = 0
+    n_img = n_img_skipped = n_inst = n_pattern_dropped = 0
+    n_hole = n_hole_dropped = 0
+    n_hole_attachments = n_multi_parent = 0
     for img_id, im in images.items():
         anns = anns_by_img.get(img_id, [])
         # COCO segmentation is a list of polygons; take only the first ring per
@@ -84,20 +97,36 @@ def main():
                 continue  # skip RLE / empty
             ring = seg[0]
             name = id2name.get(a["category_id"], "pattern")
-            (removes if name == "remove" else patterns).append(ring)
+            if name == "remove":
+                removes.append(ring)
+            elif not _usable_pattern(ring):
+                n_pattern_dropped += 1
+                print(f"  WARN: degenerate pattern polygon in {im['file_name']} "
+                      "was dropped")
+            else:
+                patterns.append((ring, name))
+
+        # A Roboflow version may include images that have not been labeled yet.
+        # They cannot produce a valid reference-conditioned training example.
+        if not patterns:
+            n_img_skipped += 1
+            continue
 
         # Each pattern -> instance with its outer ring; holes attached below.
-        inst_segs = [[p] for p in patterns]
-        outer_polys = [_poly_xy(p) for p in patterns]
-        areas = [_poly_area(p) for p in patterns]
+        inst_segs = [[p] for p, _ in patterns]
+        pattern_names = [name for _, name in patterns]
+        outer_polys = [_poly_xy(p) for p, _ in patterns]
 
         for rem in removes:
             cx, cy = _centroid(rem)
-            # containing patterns, prefer smallest area
+            # A remove region can sit inside overlapping material annotations;
+            # subtract it from every mask that contains it.
             containing = [j for j, poly in enumerate(outer_polys)
                           if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0]
             if containing:
-                j = min(containing, key=lambda k: areas[k])
+                parents = containing
+                if len(parents) > 1:
+                    n_multi_parent += 1
             else:
                 # fallback: largest mask overlap
                 rmask = np.zeros((im["height"], im["width"]), np.uint8)
@@ -114,12 +143,14 @@ def main():
                     print(f"  WARN: remove polygon in {im['file_name']} overlaps "
                           f"no pattern; dropped")
                     continue
-                j = best
-            inst_segs[j].append(rem)
+                parents = [best]
+            for j in parents:
+                inst_segs[j].append(rem)
+                n_hole_attachments += 1
             n_hole += 1
 
-        out_anns = [{"segmentation": segs, "category_name": "pattern"}
-                    for segs in inst_segs]
+        out_anns = [{"segmentation": segs, "category_name": name}
+                    for segs, name in zip(inst_segs, pattern_names)]
 
         stem = os.path.splitext(im["file_name"])[0]
         png = f"{stem}.png"
@@ -132,8 +163,12 @@ def main():
         n_img += 1
         n_inst += len(out_anns)
 
-    print(f"wrote {n_img} images, {n_inst} instances, {n_hole} holes attached"
+    print(f"wrote {n_img} images, {n_inst} instances, {n_hole} remove polygons "
+          f"attached {n_hole_attachments} times"
+          f"{f', {n_multi_parent} attached to multiple masks' if n_multi_parent else ''}"
           f"{f', {n_hole_dropped} holes dropped' if n_hole_dropped else ''}"
+          f"{f', {n_pattern_dropped} degenerate patterns dropped' if n_pattern_dropped else ''}"
+          f"{f', {n_img_skipped} unlabeled images skipped' if n_img_skipped else ''}"
           f" -> {args.out}")
 
 

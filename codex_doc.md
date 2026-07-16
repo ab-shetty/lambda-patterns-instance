@@ -1,23 +1,68 @@
 # Handoff: synth-only transfer search
 
+Authoritative task semantics and metric: [`PROJECT_UNDERSTANDING.md`](PROJECT_UNDERSTANDING.md).
+
+## UPDATE 2026-07-16 — MIXED REAL + BEST SYNTH
+
+The active user goal is no longer synth-only. It is to combine the strongest
+synthetic schema with labelled real data and maximize the historical 14-image
+HF held-out real mIoU.
+
+The old overall synth-only peak was 0.5593 from the 1600-image
+`top80_balanced220` dataset. Its `/workspace` artifact is lost and was never on
+Hugging Face; 0.5593 was a single-seed epoch-3 spike (epoch 4 was 0.5049), not a
+stable plateau. Do not use the later canonical-500 result (~0.39) as the
+project-wide baseline.
+
+The top80 schema was reconstructed locally from four fresh 5000-image
+faint-CAD/CAD-negative pools. The final set has the exact old mode counts
+(889 elevation / 540 roof / 171 freeform) and a close score mean (0.3868 vs
+0.3840). A matched batch-4 pure-synth calibration peaked at 0.5026.
+
+Correct task baseline: **0.3620 reference-conditioned union IoU**. A pattern ID
+is local to one image only. Given a user rectangle inside one region, the target
+is the union of regions with that same local ID in that image; pattern numbers
+must never be compared across images. Both excess selected pixels and missed
+pixels lower the score.
+
+Checkpoint:
+`data/runs/ck_mix_top80_1600_hf14_rf86_k2_held14_s0_bs4/best_real.pth`.
+Correct metrics and visualizations:
+`data/visualizations/reference_conditioned_hf14_k2_q200`.
+
+The later class-agnostic Mask R-CNN result (reported as 0.8545) is invalid for
+this task because it ignored the reference rectangle and predicted every pattern
+region. Its GT-best coverage metric also ignored false positives. Retain its
+artifacts only as a negative architecture experiment; do not cite its number as
+Floz task performance.
+
+For the old decoder, one variant per scene peaked at
+0.5448. Using four variants per real scene
+(20% real) peaked lower at 0.5126, so distinct coverage with minimal repetition
+remains more important than heavy repetition, while two views gave a small
+additional gain. A matched microbatch check also overturned the old hardware-regime
+assumption here: batch 4 scored 0.4567 at epoch 1 in 178s, versus batch 1 at
+0.3802 in 487s.
+
+Roboflow-only was also measured directly: 86 scenes x four variants, no synth
+and no HF training images, peaked at **0.3147** on held-out HF14 at epoch 9.
+Afterward local validation rose toward 0.58 while HF transfer stayed near
+0.28-0.31. The Roboflow pool is useful as distinct coverage in the top80 mix,
+but is not sufficient as a standalone training distribution.
+
+Roboflow `floz-real-pool` version 2 is converted non-destructively at
+`data/floz-real-pool-v2-clean`: 86 images, 282 instances, 127 remove polygons
+applied as 129 holes. No remote data was deleted or edited.
+
 ## Active Goal
 
-Find a synthetic generation/selection schema such that:
-
-- generate exactly **2000 synthetic images**,
-- train on those 2000 synth images for **10 or fewer epochs**,
-- achieve `real_iou > 0.60`,
-- and keep `synth_iou - real_iou < 0.05`.
-
-This divergence gate is one-sided. Synthetic validation being **harder** than
-real evaluation, i.e. `synth_iou < real_iou`, is acceptable and usually a plus.
-This Codex session previously misunderstood the requirement as
-`abs(synth_iou - real_iou) < 0.05`; do not repeat that. Future sessions are free
-to make synthetic validation harder than real as long as real IoU clears the
-target and `synth_iou - real_iou < 0.05`.
-
-This is now a **pure-synth** goal. Mixed real augmentation results are useful
-context, but they do not satisfy the goal.
+Achieve **held-out HF14 reference-conditioned union IoU >= 0.80 after 10
+epochs** by combining the best synthetic data with the labelled HF-train and
+cleaned Roboflow real pools. The input is a user-selected rectangle and the
+output is only matching regions sharing its image-local pattern ID.
+Synthetic/real divergence is diagnostic, not an acceptance gate. Mixed real
+augmentation results are directly relevant; the old pure-synth-only goal is
+superseded.
 
 Use the local workspace and `/workspace/probes/*.log` as the source of truth.
 Single-run results are noisy, but the current user preference is fast iteration:

@@ -1,12 +1,13 @@
 # Synth Realism Handoff
 
+Authoritative task semantics and metric: [`PROJECT_UNDERSTANDING.md`](PROJECT_UNDERSTANDING.md).
+
 ## Real goal
 Make the synthetic images look as close as possible to the real-world excerpts, then use `train.py` as the test.
 
-The user's working acceptance criteria are:
-- **Primary:** synth and real should approach parity under training, meaning the synth set should behave like the real set instead of becoming much easier over time.
-- **Fast read:** **3 epochs is enough** to tell whether a dataset is diverging.
-- **Secondary:** `epoch0 real_iou` matters. A run that starts around `0.40` on real is materially better than the older `~0.34-0.38` regime.
+The current acceptance criterion is **held-out real mIoU >= 0.80 after a
+10-epoch mixed synthetic + labelled-real run**. Divergence and early-epoch
+scores remain diagnostics, not the objective.
 
 Do **not** optimize fill-density as the objective by itself. It is only a guardrail.
 
@@ -16,6 +17,62 @@ Do **not** optimize fill-density as the objective by itself. It is only a guardr
 - Put review artifacts the user should inspect **inside the repo**, not under `/tmp`.
 
 ## Current high-level read
+As of 2026-07-16 the objective has shifted from synth-only parity to maximizing
+held-out real mIoU with a mixed synthetic + real training set.
+
+The overall historical synth-only peak was **0.5593**, not the lower canonical
+500 results. It used a 1600-image `top80_balanced220` selection at 1024px with
+q200/mask10/dice10/eos0.03. The old `/workspace` artifact is not available on
+this machine or Hugging Face, and the score was a single-seed epoch-3 spike
+(epoch 4 fell to 0.5049), so treat it as an observed historical peak rather
+than a reproducible plateau.
+
+The top80 schema was reconstructed from four newly generated 5000-image
+faint-CAD/CAD-negative pools. The rebuilt 1600 set exactly matches the old mode
+counts (889 elevation / 540 roof / 171 freeform) and closely matches its score
+statistics (mean 0.3868 vs 0.3840), though it is not byte-identical and its mean
+annotation count is 7.61 vs 7.78.
+
+**Correct reference-conditioned baseline: 0.3620 union IoU.** The user selects
+a rectangle inside one pattern region; the model must return only regions with
+the same image-local pattern ID. Pattern numbers have no meaning across images.
+The target and prediction are each rasterized as a pixel union, so both missed
+regions and excess/wrong selections lower IoU. The evaluated checkpoint is the
+best mixed custom RefMask2Former model:
+`data/runs/ck_mix_top80_1600_hf14_rf86_k2_held14_s0_bs4/best_real.pth`.
+Correct metrics and 52 reference-selection visualizations are under
+`data/visualizations/reference_conditioned_hf14_k2_q200`.
+
+The Mask R-CNN 0.8545 experiment is **invalid for the actual task**: it ignored
+the user reference rectangle, predicted all image annotations, and was scored
+with a GT-best coverage metric that ignored false positives. Do not cite it as
+task performance.
+
+Important ablations from the corrected sweep:
+- matched reconstructed pure synth, batch 4: peak 0.5026 (epoch 2)
+- Roboflow-only (86 scenes, four variants each), batch 4: peak 0.3147
+  (epoch 9); local validation kept rising while HF held-out transfer saturated
+- 1600 synth + 400 repeated real variants (20% real), batch 4: peak 0.5126
+- 1600 synth + 100 distinct real variants (5.9% real), batch 4: **0.5448**
+- 1600 synth + 200 real variants (11.1% real), batch 4: **0.5521**
+- reference-conditioned union IoU for the best mixed custom model: **0.3620**
+- matched 20%-real microbatch test at epoch 1: batch 4 scored 0.4567 in 178s;
+  batch 1/grad-accum 4 scored 0.3802 in 487s. The old assumption that batch 1
+  must transfer better does not hold for this GH200/q200 mixed regime.
+
+Earlier canonical-source ablations are still useful negative evidence: 500
+synth + HF14 + Roboflow peaked at 0.3868; 1000 synth was worse early; 250 synth
+peaked around 0.36. They should not be cited as the project-wide baseline.
+
+`train.py` now saves a separate `best_real.pth` for real-eval runs, so a
+validation-selected checkpoint cannot overwrite the best held-out-real model.
+
+The Roboflow import is stored in `data/floz-real-pool-v2-clean`: 86 usable
+images, 282 pattern instances, and 127 `remove` polygons applied as 129 holes
+(overlap means two remove polygons cut two enclosing masks). The conversion is
+non-destructive: Roboflow version 2 was created as an immutable snapshot and no
+remote data was deleted or edited.
+
 The big early gap was real: older synth data was too clean, too regular, and too neatly partitioned.
 
 What improved transfer:
