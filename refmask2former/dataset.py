@@ -160,7 +160,8 @@ def _normalize_chw(img_uint8):
 class InstanceSegDataset(Dataset):
     def __init__(self, records, indices, image_max_size=1024, ref_size=224,
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
-                 realism_aug=False, domain_random=False):
+                 realism_aug=False, domain_random=False,
+                 repeat_reference_prob=0.0):
         self.records = records
         self.indices = list(indices)
         self.image_max_size = image_max_size
@@ -171,6 +172,7 @@ class InstanceSegDataset(Dataset):
         self.grayscale = grayscale
         self.realism_aug = realism_aug
         self.domain_random = domain_random
+        self.repeat_reference_prob = repeat_reference_prob
         # When not augmenting (val / real eval), the reference patch is chosen
         # DETERMINISTICALLY per image so the metric measures the MODEL, not a
         # random "reference lottery" (the dominant epoch-to-epoch noise source).
@@ -212,7 +214,13 @@ class InstanceSegDataset(Dataset):
             (self.ref_seed * 1_000_003) ^ (i * 65537 + 12345))
         if len(anns) > 0:
             _rc = ref_rng if ref_rng is not None else random
-            target_cat = _rc.choice(list(dict.fromkeys(cats)))
+            unique_cats = list(dict.fromkeys(cats))
+            repeated_cats = [c for c in unique_cats if cats.count(c) >= 2]
+            if (self.augment and repeated_cats and
+                    _rc.random() < self.repeat_reference_prob):
+                target_cat = _rc.choice(repeated_cats)
+            else:
+                target_cat = _rc.choice(unique_cats)
             cand = [j for j, c in enumerate(cats) if c == target_cat]
             ref_idx = _rc.choice(cand)
             bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch,
@@ -382,7 +390,7 @@ def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None,
 
 def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
-                   domain_random=False):
+                   domain_random=False, repeat_reference_prob=0.0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -393,7 +401,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
     train_ds = InstanceSegDataset(records, train_idx, image_max_size, ref_size,
                                   augment=True, grayscale=grayscale,
                                   realism_aug=realism_aug,
-                                  domain_random=domain_random)
+                                  domain_random=domain_random,
+                                  repeat_reference_prob=repeat_reference_prob)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale)

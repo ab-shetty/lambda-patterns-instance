@@ -67,6 +67,9 @@ def parse_args():
                         "brightness/contrast jitter) to force scale/appearance "
                         "invariance so the mask head generalizes to real instead of "
                         "overfitting synth's fixed scale/look. Raises real_iou.")
+    p.add_argument("--repeat-reference-prob", type=float, default=0.0,
+                   help="During synthetic training, preferentially sample a "
+                        "pattern category occurring at least twice in the image.")
     p.add_argument("--eval-bn-adapt", action="store_true",
                    help="Transductive BN at eval: backbone BatchNorm uses each eval "
                         "image's own batch stats (not synth-training running stats) "
@@ -98,6 +101,13 @@ def parse_args():
                    help="Freeze the entire backbone at ImageNet weights so it never "
                         "specializes to synth; decoder segments from generic features "
                         "identical for synth and real (targets the real_iou ceiling).")
+    p.add_argument("--reference-only", action="store_true",
+                   help="Fine-tune only the Siamese reference projector. Use with "
+                        "--init-from to preserve a strong segmentation checkpoint "
+                        "while improving pattern discrimination.")
+    p.add_argument("--freeze-reference-projector", action="store_true",
+                   help="Keep a warm-started Siamese matching space fixed while "
+                        "fine-tuning the instance mask decoder.")
     p.add_argument("--freeze-backbone-bn", action=argparse.BooleanOptionalAction,
                    default=True,
                    help="DEFAULT ON: freeze backbone BatchNorm (eval running stats, "
@@ -105,8 +115,16 @@ def parse_args():
                         "bs1/grad-accum since per-forward BN over 1 image is noise. "
                         "Pass --no-freeze-backbone-bn to disable.")
     p.add_argument("--epochs", type=int, default=50)
+    p.add_argument("--save-every-epoch", action="store_true",
+                   help="Retain epoch_N.pth checkpoints for corrected-metric "
+                        "selection after short experiments.")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)
+    p.add_argument("--reference-lr-mult", type=float, default=None,
+                   help="LR multiplier for the reference projection head. Defaults to "
+                        "--backbone-lr-mult for backward compatibility. Set to "
+                        "1.0 to train its randomly initialized projection head "
+                        "at the base LR during short reference-matching runs.")
     p.add_argument("--weight-decay", type=float, default=0.05)
     p.add_argument("--warmup-frac", type=float, default=0.05,
                    help="Fraction of total steps for linear LR warmup")
@@ -123,6 +141,26 @@ def parse_args():
     p.add_argument("--hidden-dim", type=int, default=256)
     p.add_argument("--mask-dim", type=int, default=256)
     p.add_argument("--ref-dim", type=int, default=128)
+    p.add_argument("--ref-pool-features", action="store_true",
+                   help="Build each instance's reference embedding by pooling "
+                        "pixel features inside its predicted mask instead of "
+                        "using only the decoder query token.")
+    p.add_argument("--ref-siamese-backbone", action="store_true",
+                   help="Encode reference crops and mask-pooled image regions "
+                        "with the shared image backbone and projection head.")
+    p.add_argument("--ref-siamese-level",
+                   choices=["res2", "res3", "res4", "res5", "res3+res5"],
+                   default="res5", help="Backbone scale used for Siamese texture "
+                   "matching; earlier levels retain finer hatch detail.")
+    p.add_argument("--ref-siamese-stats", action="store_true",
+                   help="Represent reference and candidate textures with both "
+                        "feature means and standard deviations (style statistics).")
+    p.add_argument("--ref-texture-backbone", action="store_true",
+                   help="Use a separate frozen ImageNet backbone for Siamese "
+                        "appearance matching, isolated from segmentation updates.")
+    p.add_argument("--ref-pairwise-head", action="store_true",
+                   help="Learn a nonlinear match classifier over query/reference "
+                        "embeddings instead of relying on cosine alone.")
     p.add_argument("--dec-layers", type=int, default=9)
     p.add_argument("--nheads", type=int, default=8)
     p.add_argument("--no-pretrained", action="store_true")
@@ -141,6 +179,9 @@ def parse_args():
     p.add_argument("--mask-weight", type=float, default=5.0)
     p.add_argument("--dice-weight", type=float, default=5.0)
     p.add_argument("--ref-weight", type=float, default=2.0)
+    p.add_argument("--ref-ranking-margin", type=float, default=0.0,
+                   help="Hard positive-vs-negative ranking margin in reference "
+                        "logit units; directly trains relative instance selection.")
     p.add_argument("--eos-coef", type=float, default=0.1)
     p.add_argument("--num-points", type=int, default=12544)
     # Reproducibility / eval-instrument hardening
@@ -293,20 +334,25 @@ def evaluate(model, loader, criterion, device, use_amp=False, bn_adapt=False):
 
 def build_optimizer(model, args):
     base = model
-    backbone_params, ref_params, other_params = [], [], []
+    backbone_params, ref_backbone_params, ref_head_params, other_params = [], [], [], []
     for name, prm in base.named_parameters():
         if not prm.requires_grad:
             continue
         if name.startswith("backbone."):
             backbone_params.append(prm)
+        elif name.startswith("reference_encoder.backbone."):
+            ref_backbone_params.append(prm)
         elif name.startswith("reference_encoder."):
-            ref_params.append(prm)
+            ref_head_params.append(prm)
         else:
             other_params.append(prm)
+    reference_lr_mult = (args.backbone_lr_mult if args.reference_lr_mult is None
+                         else args.reference_lr_mult)
     groups = [
         {"params": other_params, "lr": args.lr},
         {"params": backbone_params, "lr": args.lr * args.backbone_lr_mult},
-        {"params": ref_params, "lr": args.lr * args.backbone_lr_mult},
+        {"params": ref_backbone_params, "lr": args.lr * args.backbone_lr_mult},
+        {"params": ref_head_params, "lr": args.lr * reference_lr_mult},
     ]
     return optim.AdamW(groups, lr=args.lr, weight_decay=args.weight_decay)
 
@@ -387,7 +433,8 @@ def main():
     train_ds, val_ds = build_datasets(
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
         train_split=args.train_split, grayscale=args.grayscale,
-        realism_aug=args.realism_aug, domain_random=args.domain_random)
+        realism_aug=args.realism_aug, domain_random=args.domain_random,
+        repeat_reference_prob=args.repeat_reference_prob)
     if args.grayscale:
         print("Grayscale mode: feeding luminance-only 3-channel images "
               "(synth-train, synth-val, real-eval).")
@@ -475,13 +522,27 @@ def main():
         num_queries=args.num_queries, hidden_dim=args.hidden_dim,
         mask_dim=args.mask_dim, ref_dim=args.ref_dim, nheads=args.nheads,
         dec_layers=args.dec_layers, pretrained=not args.no_pretrained,
-        stem_pool=args.backbone_stem_pool).to(device)
+        stem_pool=args.backbone_stem_pool,
+        ref_pool_features=args.ref_pool_features,
+        ref_siamese_backbone=args.ref_siamese_backbone,
+        ref_siamese_level=args.ref_siamese_level,
+        ref_siamese_stats=args.ref_siamese_stats,
+        ref_texture_backbone=args.ref_texture_backbone).to(device)
+    if args.ref_pairwise_head:
+        if not args.ref_siamese_backbone:
+            raise ValueError("--ref-pairwise-head requires Siamese matching")
+        model.enable_pairwise_match_head(args.ref_dim)
+        model.to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
 
     if args.init_from:
         ck = torch.load(args.init_from, map_location=device)
-        model.load_state_dict(ck["model"])
+        strict_init = not (args.ref_pairwise_head and
+                           not ck.get("args", {}).get("ref_pairwise_head", False))
+        incompatible = model.load_state_dict(ck["model"], strict=strict_init)
+        if not strict_init:
+            print(f"Partial warm start; new parameters: {incompatible.missing_keys}")
         print(f"Warm-started model weights from {args.init_from} "
               f"(epoch {ck.get('epoch','?')}); fresh optimizer + epoch 0")
 
@@ -496,6 +557,26 @@ def main():
         for p in base.backbone.parameters():
             p.requires_grad_(False)
         print("Froze ENTIRE backbone at ImageNet weights (no synth specialization).")
+
+    if args.reference_only:
+        if not args.ref_siamese_backbone:
+            raise ValueError("--reference-only requires --ref-siamese-backbone")
+        base = model.module if isinstance(model, nn.DataParallel) else model
+        for p in base.parameters():
+            p.requires_grad_(False)
+        for p in base.siamese_ref_projector.parameters():
+            p.requires_grad_(True)
+        if getattr(base, "ref_pairwise_head", False):
+            for p in base.siamese_match_head.parameters():
+                p.requires_grad_(True)
+        print("Fine-tuning Siamese reference projector only; segmentation frozen.")
+
+    if args.freeze_reference_projector:
+        if not args.ref_siamese_backbone:
+            raise ValueError("--freeze-reference-projector requires Siamese matching")
+        base = model.module if isinstance(model, nn.DataParallel) else model
+        base.siamese_ref_projector.requires_grad_(False)
+        print("Froze Siamese reference projector.")
 
     if args.freeze_backbone_bn:
         # Standard DETR/Mask2Former choice: keep the pretrained ImageNet BN
@@ -513,7 +594,8 @@ def main():
     weight_dict = {"loss_ce": args.class_weight, "loss_mask": args.mask_weight,
                    "loss_dice": args.dice_weight, "loss_ref": args.ref_weight}
     criterion = SetCriterion(matcher, weight_dict, eos_coef=args.eos_coef,
-                             num_points=args.num_points).to(device)
+                             num_points=args.num_points,
+                             ref_ranking_margin=args.ref_ranking_margin).to(device)
 
     optimizer = build_optimizer(model, args)
     total_steps = len(train_loader) * args.epochs
@@ -615,6 +697,8 @@ def main():
             best_real_iou = real["mean_gt_iou"]
 
         save("last.pth", epoch)
+        if args.save_every_epoch:
+            save(f"epoch_{epoch}.pth", epoch)
         if val_improved:
             save("best.pth", epoch)
             print(f"  -> saved best (mean_gt_iou={best_iou:.4f})")

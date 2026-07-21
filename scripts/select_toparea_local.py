@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import shutil
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,8 @@ class Candidate:
     ann_path: Path
     img_path: Path
     mode: str
+    class_count: int
+    max_class_instances: int
 
 
 def _iter_candidates(source: Path):
@@ -47,6 +50,7 @@ def _iter_candidates(source: Path):
         if image_area <= 0:
             continue
         anns = ann.get("annotations") or []
+        class_counts = Counter(a.get("category_name", "pattern") for a in anns)
         ann_area = sum(float(a.get("area") or 0.0) for a in anns)
         score = ann_area / image_area
         yield Candidate(
@@ -58,6 +62,8 @@ def _iter_candidates(source: Path):
             ann_path=ann_path,
             img_path=img_path,
             mode=str(ann.get("mode") or "unknown"),
+            class_count=len(class_counts),
+            max_class_instances=max(class_counts.values(), default=0),
         )
 
 
@@ -125,6 +131,10 @@ def main():
                     help="number of examples to select")
     ap.add_argument("--min-score", type=float, default=0.0,
                     help="optional minimum labelled-area fraction")
+    ap.add_argument("--max-classes", type=int, default=0,
+                    help="Keep images with at most this many pattern classes (0=off)")
+    ap.add_argument("--min-max-repeat", type=int, default=0,
+                    help="Require at least one pattern class with this many instances")
     ap.add_argument("--mode-quotas", default=None,
                     help="optional comma-separated mode quotas, e.g. "
                          "elevation=776,roof_plan=417,freeform=107")
@@ -143,7 +153,9 @@ def main():
     candidates = []
     for source in sources:
         candidates.extend(c for c in _iter_candidates(source)
-                          if c.score >= args.min_score and c.ann_count > 0)
+                          if c.score >= args.min_score and c.ann_count > 0
+                          and (not args.max_classes or c.class_count <= args.max_classes)
+                          and c.max_class_instances >= args.min_max_repeat)
     candidates.sort(key=lambda c: (c.score, c.ann_area, -c.ann_count), reverse=True)
     selected = _select(candidates, args.n, _parse_mode_quotas(args.mode_quotas))
     if len(selected) < args.n:
@@ -159,6 +171,8 @@ def main():
             "image_area": cand.image_area,
             "ann_count": cand.ann_count,
             "mode": cand.mode,
+            "class_count": cand.class_count,
+            "max_class_instances": cand.max_class_instances,
             "source": str(cand.source),
             "source_ann": str(cand.ann_path),
             "source_image": str(cand.img_path),

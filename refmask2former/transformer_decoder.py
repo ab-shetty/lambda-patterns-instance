@@ -105,9 +105,10 @@ class FFNLayer(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(self, d_model=256, nhead=8, num_layers=9, num_queries=100,
                  num_feature_levels=3, mask_dim=256, ref_dim=128,
-                 dim_feedforward=2048):
+                 dim_feedforward=2048, ref_pool_features=False):
         super().__init__()
         self.num_heads = nhead
+        self.ref_pool_features = ref_pool_features
         self.num_layers = num_layers
         self.num_queries = num_queries
         self.num_feature_levels = num_feature_levels
@@ -146,8 +147,21 @@ class TransformerDecoder(nn.Module):
         decoder_output = self.decoder_norm(output).transpose(0, 1)  # [B, Q, C]
         cls = self.class_embed(decoder_output)                      # [B, Q, 2]
         mask_emb = self.mask_embed(decoder_output)                  # [B, Q, mask_dim]
-        ref = F.normalize(self.ref_embed(decoder_output), dim=-1)   # [B, Q, ref_dim]
         outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_emb, mask_features)
+        if self.ref_pool_features:
+            # Pool appearance features from inside each predicted instance. The
+            # decoder token is excellent for object shape/location, but the
+            # reference task asks which hatch/material the instance contains.
+            # Detaching mask weights keeps the matching loss from distorting mask
+            # boundaries while still training the shared pixel features and ref head.
+            weights = outputs_mask.sigmoid().detach()
+            weights = weights.masked_fill(mask_padding[:, None], 0.0)
+            denom = weights.flatten(2).sum(-1).clamp(min=1e-6)
+            pooled = torch.einsum("bqhw,bchw->bqc", weights, mask_features)
+            pooled = pooled / denom[..., None]
+            ref = F.normalize(self.ref_embed(pooled), dim=-1)
+        else:
+            ref = F.normalize(self.ref_embed(decoder_output), dim=-1)   # [B, Q, ref_dim]
 
         # Build masked-attention mask at the target level resolution.
         attn = F.interpolate(outputs_mask, size=target_size, mode="bilinear",

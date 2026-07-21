@@ -61,7 +61,16 @@ def load_model(checkpoint, device):
         ref_dim=saved.get("ref_dim", 128),
         nheads=saved.get("nheads", 8),
         dec_layers=saved.get("dec_layers", 9),
-        pretrained=False).to(device)
+        pretrained=False,
+        stem_pool=saved.get("backbone_stem_pool", "max"),
+        ref_pool_features=saved.get("ref_pool_features", False),
+        ref_siamese_backbone=saved.get("ref_siamese_backbone", False),
+        ref_siamese_level=saved.get("ref_siamese_level", "res5"),
+        ref_siamese_stats=saved.get("ref_siamese_stats", False),
+        ref_texture_backbone=saved.get("ref_texture_backbone", False)).to(device)
+    if saved.get("ref_pairwise_head", False):
+        model.enable_pairwise_match_head(saved.get("ref_dim", 128))
+        model.to(device)
     model.load_state_dict(ck["model"])
     model.eval()
     return model, ck

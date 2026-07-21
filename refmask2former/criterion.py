@@ -27,12 +27,13 @@ def _strip_aux(key):
 
 class SetCriterion(nn.Module):
     def __init__(self, matcher, weight_dict, eos_coef=0.1, num_points=12544,
-                 ref_scale=10.0):
+                 ref_scale=10.0, ref_ranking_margin=0.0):
         super().__init__()
         self.matcher = matcher
         self.weight_dict = weight_dict
         self.num_points = num_points
         self.ref_scale = ref_scale
+        self.ref_ranking_margin = ref_ranking_margin
         self.register_buffer("empty_weight", torch.tensor([eos_coef, 1.0]))
 
     def _loss_labels(self, outputs, targets, indices):
@@ -69,16 +70,29 @@ class SetCriterion(nn.Module):
             return outputs["pred_ref"].sum() * 0.0
         ref_g = outputs["reference_emb"]                 # [B, ref_dim]
         pred_ref = outputs["pred_ref"]                   # [B, Q, ref_dim]
-        logits, labels = [], []
+        logits, labels, ranking_losses = [], [], []
         for b, (pi, gi) in enumerate(indices):
             if len(pi) == 0:
                 continue
-            sim = (pred_ref[b][pi] * ref_g[b][None]).sum(-1)   # cosine [m]
-            logits.append(self.ref_scale * sim)
-            labels.append(targets[b]["ref_match"][gi].float())
+            if "pred_match_logits" in outputs:
+                image_logits = outputs["pred_match_logits"][b][pi]
+            else:
+                sim = (pred_ref[b][pi] * ref_g[b][None]).sum(-1)
+                image_logits = self.ref_scale * sim
+            image_labels = targets[b]["ref_match"][gi].float()
+            logits.append(image_logits)
+            labels.append(image_labels)
+            pos = image_logits[image_labels > 0.5]
+            neg = image_logits[image_labels <= 0.5]
+            if self.ref_ranking_margin > 0 and len(pos) and len(neg):
+                ranking_losses.append(F.softplus(
+                    neg.max() - pos.min() + self.ref_ranking_margin))
         if not logits:
             return pred_ref.sum() * 0.0
-        return F.binary_cross_entropy_with_logits(torch.cat(logits), torch.cat(labels))
+        loss = F.binary_cross_entropy_with_logits(torch.cat(logits), torch.cat(labels))
+        if ranking_losses:
+            loss = loss + torch.stack(ranking_losses).mean()
+        return loss
 
     def _compute(self, outputs, targets, indices, prefix=""):
         ce = self._loss_labels(outputs, targets, indices)

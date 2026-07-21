@@ -41,7 +41,34 @@ def parse_args():
     p.add_argument("--image-max-size", type=int, default=1024)
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--score-thresh", type=float, default=0.5)
+    p.add_argument("--mask-thresh", type=float, default=0.5)
     p.add_argument("--match-thresh", type=float, default=0.0)
+    p.add_argument("--match-margin", type=float, default=None,
+                   help="Optional relative matching rule: among object queries, "
+                        "keep similarities within this margin of the best query. "
+                        "Avoids absolute cosine calibration drift per reference.")
+    p.add_argument("--match-cluster", action="store_true",
+                   help="Split object-query similarities into two 1-D clusters and "
+                        "keep the higher-similarity cluster. This is label-free and "
+                        "adapts to each reference's cosine scale.")
+    p.add_argument("--match-largest-gap", action="store_true",
+                   help="Keep the leading similarity-ranked queries above the "
+                        "largest adjacent score gap (label-free per reference).")
+    p.add_argument("--match-top-k", type=int, default=None,
+                   help="Keep the globally calibrated top K object queries by "
+                        "reference similarity.")
+    p.add_argument("--match-roi-imagenet", action="store_true",
+                   help="Compare the reference with isolated predicted-instance "
+                        "crops using the checkpoint's pretrained reference backbone.")
+    p.add_argument("--match-roi-fixed-patch", action="store_true",
+                   help="With --match-roi-imagenet, crop each instance at the "
+                        "reference rectangle's native scale instead of its bbox.")
+    p.add_argument("--match-roi-blend", type=float, default=None,
+                   help="Rank-fuse ROI similarity with learned query similarity; "
+                        "value is ROI rank weight in [0,1].")
+    p.add_argument("--oracle-overlap-thresh", type=float, default=None,
+                   help="Diagnostic only: select queries by fraction of their mask "
+                        "inside GT target. Never use this to report product scores.")
     return p.parse_args()
 
 
@@ -123,14 +150,113 @@ def main():
                 scores = outputs["pred_logits"].softmax(-1)[0, :, 1]
                 similarities = torch.einsum(
                     "qd,d->q", outputs["pred_ref"][0], outputs["reference_emb"][0])
+                if "pred_match_logits" in outputs:
+                    similarities = outputs["pred_match_logits"][0]
                 pred_masks = (F.interpolate(outputs["pred_masks"], size=(nh, nw),
                                              mode="bilinear", align_corners=False)
-                              .sigmoid()[0] > 0.5)
-                keep = (scores > args.score_thresh) & (similarities > args.match_thresh)
-                prediction = (pred_masks[keep].any(0).cpu().numpy() if keep.any()
-                              else np.zeros((nh, nw), dtype=bool))
+                              .sigmoid()[0] > args.mask_thresh)
+                objects = scores > args.score_thresh
+                if args.match_roi_imagenet and objects.any():
+                    roi_indices = objects.nonzero(as_tuple=False).flatten()
+                    white = image_tensor.new_tensor(
+                        [(1.0 - 0.485) / 0.229, (1.0 - 0.456) / 0.224,
+                         (1.0 - 0.406) / 0.225])[:, None, None]
+                    crops = []
+                    for query_idx in roi_indices.tolist():
+                        instance_mask = pred_masks[query_idx]
+                        points = instance_mask.nonzero(as_tuple=False)
+                        if points.numel() == 0:
+                            crops.append(white.expand(3, args.ref_size,
+                                                      args.ref_size).clone())
+                            continue
+                        if args.match_roi_fixed_patch:
+                            mask_np = instance_mask.cpu().numpy().astype(np.uint8)
+                            distance = cv2.distanceTransform(mask_np,
+                                                             cv2.DIST_L2, 5)
+                            cy, cx = np.unravel_index(distance.argmax(),
+                                                     distance.shape)
+                            crop_w = max(8, round(w * scale))
+                            crop_h = max(8, round(h * scale))
+                            x0 = max(0, min(nw - crop_w, cx - crop_w // 2))
+                            y0 = max(0, min(nh - crop_h, cy - crop_h // 2))
+                            x1, y1 = min(nw, x0 + crop_w), min(nh, y0 + crop_h)
+                        else:
+                            y0, x0 = points.min(0).values.tolist()
+                            y1, x1 = (points.max(0).values + 1).tolist()
+                        crop = image_tensor[0, :, y0:y1, x0:x1]
+                        crop_mask = instance_mask[y0:y1, x0:x1]
+                        crop = torch.where(crop_mask[None], crop,
+                                           white.expand_as(crop))
+                        crop = F.interpolate(crop[None],
+                                             size=(args.ref_size, args.ref_size),
+                                             mode="bilinear",
+                                             align_corners=False)[0]
+                        crops.append(crop)
+                    roi_batch = torch.stack(crops)
+                    roi_features = model.reference_encoder.backbone(
+                        roi_batch).flatten(1)
+                    ref_features = model.reference_encoder.backbone(
+                        reference).flatten(1)
+                    roi_features = F.normalize(roi_features.float(), dim=-1)
+                    ref_features = F.normalize(ref_features.float(), dim=-1)
+                    roi_sims = roi_features @ ref_features[0]
+                    similarities = similarities.clone()
+                    if args.match_roi_blend is None:
+                        similarities[roi_indices] = roi_sims.to(similarities.dtype)
+                    else:
+                        def _ranks(values):
+                            order = values.argsort()
+                            ranks = torch.empty_like(values, dtype=torch.float32)
+                            ranks[order] = torch.arange(
+                                len(values), device=values.device,
+                                dtype=torch.float32)
+                            return ranks / max(len(values) - 1, 1)
+                        learned_ranks = _ranks(similarities[roi_indices].float())
+                        roi_ranks = _ranks(roi_sims.float())
+                        alpha = args.match_roi_blend
+                        fused = (1.0 - alpha) * learned_ranks + alpha * roi_ranks
+                        similarities[roi_indices] = fused.to(similarities.dtype)
                 target = np.logical_or.reduce(
                     [m for m, c in zip(masks, categories) if c == category])
+                if args.oracle_overlap_thresh is not None:
+                    target_t = torch.from_numpy(target).to(pred_masks.device)
+                    overlap = (pred_masks & target_t).flatten(1).sum(1)
+                    precision = overlap / pred_masks.flatten(1).sum(1).clamp(min=1)
+                    keep = objects & (precision >= args.oracle_overlap_thresh)
+                elif args.match_top_k is not None and objects.any():
+                    object_indices = objects.nonzero(as_tuple=False).flatten()
+                    k = min(args.match_top_k, object_indices.numel())
+                    chosen = object_indices[similarities[object_indices].topk(k).indices]
+                    keep = torch.zeros_like(objects)
+                    keep[chosen] = True
+                elif args.match_largest_gap and objects.sum() >= 2:
+                    values = similarities[objects]
+                    ordered, _ = values.sort(descending=True)
+                    split = (ordered[:-1] - ordered[1:]).argmax()
+                    threshold = (ordered[split] + ordered[split + 1]) / 2
+                    keep = objects & (similarities >= threshold)
+                elif args.match_cluster and objects.sum() >= 2:
+                    values = similarities[objects]
+                    lo, hi = values.min(), values.max()
+                    for _ in range(12):
+                        midpoint = (lo + hi) / 2
+                        high_group = values >= midpoint
+                        if high_group.all() or (~high_group).all():
+                            break
+                        new_lo = values[~high_group].mean()
+                        new_hi = values[high_group].mean()
+                        if torch.isclose(lo, new_lo) and torch.isclose(hi, new_hi):
+                            lo, hi = new_lo, new_hi
+                            break
+                        lo, hi = new_lo, new_hi
+                    keep = objects & (similarities >= (lo + hi) / 2)
+                elif args.match_margin is not None and objects.any():
+                    best_similarity = similarities[objects].max()
+                    keep = objects & (similarities >= best_similarity - args.match_margin)
+                else:
+                    keep = objects & (similarities > args.match_thresh)
+                prediction = (pred_masks[keep].any(0).cpu().numpy() if keep.any()
+                              else np.zeros((nh, nw), dtype=bool))
                 intersection = int((prediction & target).sum())
                 union = int((prediction | target).sum())
                 iou = intersection / max(union, 1)
@@ -176,6 +302,15 @@ def main():
         "checkpoint": args.checkpoint, "checkpoint_epoch": checkpoint.get("epoch"),
         "image_max_size": args.image_max_size,
         "score_thresh": args.score_thresh, "match_thresh": args.match_thresh,
+        "mask_thresh": args.mask_thresh,
+        "match_margin": args.match_margin,
+        "match_cluster": args.match_cluster,
+        "match_largest_gap": args.match_largest_gap,
+        "match_top_k": args.match_top_k,
+        "match_roi_imagenet": args.match_roi_imagenet,
+        "match_roi_fixed_patch": args.match_roi_fixed_patch,
+        "match_roi_blend": args.match_roi_blend,
+        "oracle_overlap_thresh": args.oracle_overlap_thresh,
         "n_images": len(indices), "n_reference_selections": len(rows),
         "mean_iou": mean_iou,
         "image_mean_iou": {k: sum(v) / len(v) for k, v in by_image.items()},

@@ -29,7 +29,9 @@ def _downsample_mask(padding_mask, size):
 class RefMask2Former(nn.Module):
     def __init__(self, num_queries=100, hidden_dim=256, mask_dim=256, ref_dim=128,
                  nheads=8, dec_layers=9, dim_feedforward=2048, pretrained=True,
-                 stem_pool="max"):
+                 stem_pool="max", ref_pool_features=False,
+                 ref_siamese_backbone=False, ref_siamese_level="res5",
+                 ref_siamese_stats=False, ref_texture_backbone=False):
         super().__init__()
         self.backbone = ResNetBackbone(pretrained=pretrained, stem_pool=stem_pool)
         self.pixel_decoder = FPNPixelDecoder(
@@ -37,8 +39,36 @@ class RefMask2Former(nn.Module):
         self.transformer = TransformerDecoder(
             d_model=hidden_dim, nhead=nheads, num_layers=dec_layers,
             num_queries=num_queries, num_feature_levels=3,
-            mask_dim=mask_dim, ref_dim=ref_dim, dim_feedforward=dim_feedforward)
+            mask_dim=mask_dim, ref_dim=ref_dim, dim_feedforward=dim_feedforward,
+            ref_pool_features=ref_pool_features)
         self.reference_encoder = ReferenceEncoder(ref_dim=ref_dim, pretrained=pretrained)
+        self.ref_siamese_backbone = ref_siamese_backbone
+        self.ref_siamese_level = ref_siamese_level
+        self.ref_siamese_stats = ref_siamese_stats
+        self.ref_texture_backbone = ref_texture_backbone
+        self.ref_pairwise_head = False
+        if ref_siamese_backbone:
+            self._siamese_levels = (ref_siamese_level.split("+")
+                                    if "+" in ref_siamese_level
+                                    else [ref_siamese_level])
+            siamese_channels = sum(self.backbone.out_channels[level]
+                                   for level in self._siamese_levels)
+            if ref_siamese_stats:
+                siamese_channels *= 2
+            self.siamese_ref_projector = nn.Sequential(
+                nn.Linear(siamese_channels, 512), nn.ReLU(inplace=True),
+                nn.Dropout(0.2), nn.Linear(512, ref_dim))
+            if ref_texture_backbone:
+                self.texture_backbone = ResNetBackbone(
+                    pretrained=pretrained, stem_pool=stem_pool)
+                self.texture_backbone.requires_grad_(False)
+
+    def enable_pairwise_match_head(self, ref_dim=128):
+        """Install an expressive reference/query comparison head."""
+        self.ref_pairwise_head = True
+        self.siamese_match_head = nn.Sequential(
+            nn.Linear(ref_dim * 4, 256), nn.ReLU(inplace=True),
+            nn.Dropout(0.2), nn.Linear(256, 1))
 
         # Strides of the levels the pixel decoder feeds to the transformer.
         self._level_strides = [self.backbone.out_strides[n]
@@ -63,7 +93,78 @@ class RefMask2Former(nn.Module):
                                mask_features_padding)
 
         if reference is not None:
-            out["reference_emb"] = self.reference_encoder(reference)  # [B, ref_dim]
+            if self.ref_siamese_backbone:
+                # Encode reference and candidate regions with the same backbone
+                # and projection. This makes cosine similarity compare appearance
+                # in one genuine Siamese feature space instead of aligning an FPN
+                # query token with an independently trained reference ResNet.
+                if self.ref_texture_backbone:
+                    self.texture_backbone.eval()
+                    with torch.no_grad():
+                        reference_maps = self.texture_backbone(reference)
+                        texture_maps = self.texture_backbone(images)
+                else:
+                    reference_maps = self.backbone(reference)
+                    texture_maps = feats
+                reference_parts = []
+                for level in self._siamese_levels:
+                    fmap = reference_maps[level]
+                    if self.ref_siamese_stats:
+                        # Style-stat gradients (especially sqrt(var)) are poorly
+                        # conditioned in bf16. Keep segmentation backbone updates
+                        # driven by mask losses and train the texture projector on
+                        # detached, stable feature statistics.
+                        fmap = fmap.detach()
+                    reference_parts.append(fmap.mean(dim=(-2, -1)))
+                    if self.ref_siamese_stats:
+                        reference_parts.append(fmap.var(dim=(-2, -1), unbiased=False).sqrt())
+                reference_feat = torch.cat(reference_parts, dim=1)
+                out["reference_emb"] = F.normalize(
+                    self.siamese_ref_projector(reference_feat), dim=-1)
+
+                def _region_embeddings(mask_logits):
+                    pooled_levels = []
+                    for level in self._siamese_levels:
+                        image_map = texture_maps[level]
+                        if self.ref_siamese_stats:
+                            image_map = image_map.detach()
+                        level_padding = _downsample_mask(
+                            padding, image_map.shape[-2:])
+                        weights = F.interpolate(
+                            mask_logits, size=image_map.shape[-2:],
+                            mode="bilinear", align_corners=False)
+                        weights = weights.sigmoid().detach()
+                        weights = weights.masked_fill(
+                            level_padding[:, None], 0.0)
+                        denom = weights.flatten(2).sum(-1).clamp(min=1e-6)
+                        pooled_level = torch.einsum(
+                            "bqhw,bchw->bqc", weights, image_map)
+                        mean = pooled_level / denom[..., None]
+                        pooled_levels.append(mean)
+                        if self.ref_siamese_stats:
+                            second = torch.einsum(
+                                "bqhw,bchw->bqc", weights, image_map.square())
+                            second = second / denom[..., None]
+                            pooled_levels.append(
+                                (second - mean.square()).clamp(min=1e-6).sqrt())
+                    pooled = torch.cat(pooled_levels, dim=-1)
+                    return F.normalize(self.siamese_ref_projector(pooled), dim=-1)
+
+                out["pred_ref"] = _region_embeddings(out["pred_masks"])
+                for aux in out.get("aux_outputs", []):
+                    aux["pred_ref"] = _region_embeddings(aux["pred_masks"])
+                if self.ref_pairwise_head:
+                    def _pair_logits(query_emb):
+                        ref_emb = out["reference_emb"][:, None].expand_as(query_emb)
+                        pair = torch.cat([query_emb, ref_emb,
+                                          (query_emb - ref_emb).abs(),
+                                          query_emb * ref_emb], dim=-1)
+                        return self.siamese_match_head(pair).squeeze(-1)
+                    out["pred_match_logits"] = _pair_logits(out["pred_ref"])
+                    for aux in out.get("aux_outputs", []):
+                        aux["pred_match_logits"] = _pair_logits(aux["pred_ref"])
+            else:
+                out["reference_emb"] = self.reference_encoder(reference)  # [B, ref_dim]
         return out
 
     @torch.no_grad()
