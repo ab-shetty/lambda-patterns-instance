@@ -22,6 +22,11 @@ The active target is `>= 0.65`; it has not yet been reached. Do not report the
 training-time legacy `real_iou`, an oracle, a class-agnostic score, or an
 ensemble as the current result.
 
+The next 100-image model-generation and Roboflow-labelling batch is specified
+exactly in `image_generation/README.md` and `image_generation/prompts.jsonl`.
+Use that package when moving generation to a personal computer; do not invent a
+new prompt distribution from conversation memory.
+
 `RefUNet` predicts the selected pattern union directly. If the product needs
 separate instances, split the binary mask into connected components (preserving
 holes) after inference. Training remains one checkpoint that can be continued
