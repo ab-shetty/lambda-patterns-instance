@@ -1,152 +1,97 @@
 # Codex Handoff
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 
-Read [`PROJECT_UNDERSTANDING.md`](PROJECT_UNDERSTANDING.md) for product semantics
-and [`startup.md`](startup.md) for setup and exact reproduction commands.
+Read `PROJECT_UNDERSTANDING.md` for task semantics and `startup.md` for complete,
+copy-paste reproduction commands. `startup.md` covers the current mixed result,
+the verified synthetic-only baseline, the strongest Roboflow-only baseline, and
+the 86-image live-augmentation control.
 
-## Current result
+## Current accepted handoff result
 
-The active synthetic-data goal is complete.
+The best extensible single model is `RefUNet`, trained on synthetic + Roboflow:
 
-- Training data: 1,600 unique, fully synthetic images.
-- Training duration: exactly ten actual epochs in a two-phase curriculum.
-- Evaluation: fixed HF14 holdout, 14 real plans and 52 reference selections.
-- Acceptance metric: reference-conditioned union IoU.
-- Verified score: **0.5506125168** (target `>= 0.55`).
-- Passing checkpoint:
-  `data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth`.
-- Metrics and visual audit:
-  `data/evaluations/verified_rank1_hf14/`.
+| Item | Value |
+|---|---|
+| Synthetic records | 1,600 |
+| Roboflow records | 1,548 (86 originals + 1,462 offline variants) |
+| Actual epochs | 0 through 8 |
+| Evaluation | fixed HF14, all 52 reference selections |
+| Metric | reference-conditioned union IoU |
+| Mask threshold | 0.35 |
+| Corrected mIoU | **0.6127448856345988** |
+| Checkpoint | `data/runs/ck_refunet_mix3148_w128_s31/epoch_8.pth` |
+| Metrics | `data/evaluations/refunet_e8_t0.35.json` |
 
-The passing checkpoint occurs at the sixth actual training epoch. The complete
-lineage continued through ten epochs, satisfying the requirement that the score
-may be reached at any point during a ten-epoch run.
+The active target is 0.65. It has not been achieved. The user accepted the 0.6
+result as the handoff point and explicitly rejected checkpoint ensembling as the
+deliverable because future Roboflow labels must extend one training run.
 
-## Product semantics
+## Product and model semantics
 
-The product behaves like reference-conditioned **instance segmentation**:
+A reference rectangle identifies an image-local pattern. The target is the union
+of every region with that same image-local grouping ID. IDs such as `pattern1`
+have no meaning across plans. Roboflow `remove` polygons are subtracted as holes.
 
-1. A user selects a rectangle inside a material or hatch pattern.
-2. The model predicts separate candidate instance masks.
-3. Each candidate receives an object score and a reference-match score.
-4. Matching instances are returned separately, with their own masks and scores.
+The earlier query model emitted separate instance candidates and then grouped
+them by reference similarity. Its mixed-data ceiling was 0.588568. `RefUNet`
+removes that grouping bottleneck: a shared ResNet-50 extracts plan and reference
+features, four multiscale conditioning blocks combine image features with the
+pooled reference representation, and an FPN decoder predicts one selected union
+mask. Connected-component postprocessing can expose separate user-facing
+instances without using multiple checkpoints.
 
-Pattern names such as `pattern1` are local to one image and have no meaning
-across images. The evaluator unions matching instances only to compute a strict
-pixel IoU that penalizes both missed instances and false selections. Do not turn
-the user-facing result into one semantic mask.
+Relevant implementation:
 
-Do not cite class-agnostic GT-best coverage, oracle query selection, Mask R-CNN
-coverage, or the training-time `real_iou` proxy as product mIoU. Only
-`scripts/evaluate_reference_selection.py` implements the acceptance test.
+- `refmask2former/ref_unet.py`: shared backbone, conditioning blocks, FPN mask.
+- `scripts/train_refunet.py`: union targets, BCE + Dice training, continuation
+  checkpoints, fixed HF14 diagnostic evaluation, explicit schedule length and
+  optimizer reset.
+- `scripts/evaluate_refunet_selection.py`: authoritative 52-selection evaluation
+  for `RefUNet` checkpoints.
+- `scripts/augment_local_dataset.py`: deterministic strong Roboflow variants.
+- `scripts/merge_local_datasets.py`: deterministic synthetic/Roboflow merge.
 
-## Synthetic dataset
+## Exact training nuance
 
-The canonical full set is:
+The retained run has two optimizer phases:
 
-`data/synthetic/toparea1600_balanced`
+1. actual epoch 0, using the first epoch of a planned ten-epoch cosine schedule;
+2. reload epoch-0 weights, reset the optimizer, then train actual epochs 1–8
+   using the first eight epochs of a planned nine-epoch cosine schedule.
 
-- 1,600 images
-- 889 elevation
-- 540 roof plan
-- 171 freeform
-- labelled-area mean: `0.394379`
-- labelled-area median: `0.292692`
+This is now represented explicitly by `--schedule-epochs` and
+`--reset-optimizer`; do not approximate it with one uninterrupted command when
+trying to reproduce the reported checkpoint. Full commands are in `startup.md`.
 
-The first five curriculum epochs use the strict high-area subset:
+## Durable comparison evidence
 
-`data/synthetic/toparea750_balanced`
+| Experiment | Corrected HF14 mIoU | Meaning |
+|---|---:|---|
+| Synthetic-only query curriculum | 0.550613 | Verified prior baseline |
+| Clean 86 Roboflow, live flip/rotation | 0.349361 | Full ten-epoch control |
+| Strong18 Roboflow-only query lineage | 0.464606 | Offline diversity matters |
+| Synthetic + Roboflow query model | 0.588568 | Best old single checkpoint |
+| Synthetic + Roboflow direct `RefUNet` | **0.612745** | Current single-model result |
 
-- 750 images
-- 476 elevation
-- 196 roof plan
-- 78 freeform
+The 86-image control confirms that live orientation augmentation alone is not a
+replacement for offline appearance/crop/scale/degradation diversity. The 1,548
+Roboflow records still contain only 86 unique real source plans, which is the
+main remaining data limitation.
 
-An audit confirmed that all 750 source identities are contained in the 1,600
-set. Both are selected from `faintcad2500` and `cadneg2500`; no real image is in
-either training directory. Their selection manifests are stored inside the
-dataset directories (which are git-ignored).
+## Evaluation rules
 
-## Model and training
+- HF `real-world-test` images are evaluation-only.
+- Fixed indices: `12,16,27,7,11,25,23,1,18,2,0,3,14,24`.
+- Evaluate every labelled instance as a deterministic user selection: 52 total.
+- Report reference-conditioned union IoU only.
+- Do not report the legacy training `real_iou`, per-GT best coverage, an oracle,
+  class-agnostic Mask R-CNN scores, or checkpoint ensembles as product mIoU.
+- Threshold 0.35 is globally calibrated and fixed for the current `RefUNet`.
 
-The successful model remains class-agnostic Mask2Former-style instance
-segmentation with 200 queries. Reference matching uses a shared Siamese image
-backbone and pools both fine `res3` and coarse `res5` features inside each
-predicted mask.
+## Generated artifacts
 
-Training is a curriculum over the same 1,600-image synthetic universe:
-
-- Phase 1: five joint segmentation/reference epochs on the 750-image high-area
-  subset, 1280 px, batch 4.
-- Phase 2: five reference-only epochs on all 1,600 images, 1280 px, batch 8.
-- Phase 2 freezes segmentation and adds a hardest-positive versus
-  hardest-negative soft ranking loss with margin `1.0` logit units.
-
-The ranking loss was the final necessary improvement. It optimizes the failure
-that average BCE/AUC concealed: one difficult false-positive or false-negative
-instance can substantially reduce union IoU.
-
-Inference for the passing checkpoint uses:
-
-- object score threshold: `0.6`
-- relative reference-match margin: `0.1`
-- mask threshold: `0.5`
-
-The relative margin is label-free at inference: retain object queries whose
-similarity is within `0.1` of the best query for that reference.
-
-## Relevant implementation changes
-
-- `refmask2former/model.py`
-  - shared-backbone Siamese instance/reference embeddings
-  - selectable `res3+res5` multi-scale pooling
-- `refmask2former/criterion.py`
-  - optional hard reference-ranking loss
-- `refmask2former/dataset.py`
-  - deterministic evaluation references
-  - optional repeated-reference sampling (not used by the winning recipe)
-- `train.py`
-  - reference LR grouping, staged freezing, per-epoch checkpoints, ranking flags
-- `evaluate.py`
-  - reconstructs the saved reference architecture from checkpoint arguments
-- `scripts/evaluate_reference_selection.py`
-  - authoritative HF14 evaluation and visual audit
-  - relative-margin and other diagnostic selection modes
-- `scripts/select_toparea_local.py`
-  - exact balanced dataset selection and manifests
-
-## Data acquisition
-
-Hugging Face `abshetty/floz-synth-v5`, config `real-world-test`, contains 28
-real evaluation images. The fixed HF14 indices are:
-
-`12,16,27,7,11,25,23,1,18,2,0,3,14,24`
-
-Roboflow `perceive-ai/floz-real-pool` version 2 was converted into 86 usable
-images, 282 pattern instances, and 127 `remove` polygons attached as 129 holes.
-`remove` is never a class: subtract it from surrounding pattern polygons. The
-Roboflow data is available for other work but was not used by the successful
-fully synthetic training lineage.
-
-## Durable experiment evidence
-
-- The original 500-image Siamese run scored `0.457807` corrected IoU.
-- Multi-scale `res3+res5` matching on 750 images raised this to `0.519512`.
-- Expanding ordinary joint training to 1,600 images improved mask coverage but
-  peaked at only `0.504098` corrected IoU.
-- Hard-ranking margin `2.0` reached `0.536815` but did not cross the gate.
-- Hard-ranking margin `1.0` reached `0.550613` and passed.
-- Reference feature means/variances, a separate frozen ImageNet texture
-  backbone, whole-instance ROI matching, fixed-patch ROI matching, pairwise MLP
-  matching, all-repeated datasets, and repeated-reference oversampling did not
-  beat the multi-scale hard-ranking recipe.
-- Oracle query selection reached about `0.61`, proving mask coverage was already
-  sufficient and that reference grouping was the decisive bottleneck.
-
-## Repository state
-
-Source and documentation should be committed together. Generated datasets,
-checkpoints, logs, and evaluation images remain under `data/` or `logs/` and are
-intentionally git-ignored. Preserve those directories when moving to another VM
-or regenerate them using [`startup.md`](startup.md).
+Datasets, checkpoints, logs, and evaluation JSON files live under git-ignored
+`data/` and `logs/`. Preserve those directories between VMs for byte-identical
+artifacts, or regenerate them using `startup.md`. Source and documentation are
+committed; credentials are never stored.

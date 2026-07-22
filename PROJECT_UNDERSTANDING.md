@@ -49,11 +49,14 @@ region union. The fixed HF14 heldout image indices are:
 
 `12,16,27,7,11,25,23,1,18,2,0,3,14,24`
 
-## Acceptance target
+## Current target and result
 
-Achieve **reference-conditioned union IoU >= 0.80** on the real HF14 heldout
-set after a 10-epoch training run using a combination of the strongest
-synthetic data and cleaned labelled real data, including Roboflow.
+The active target is **reference-conditioned union IoU >= 0.65** on the real
+HF14 holdout, at any checkpoint within ten training epochs, using synthetic and
+cleaned Roboflow data. The current reproducible single-model result is
+**0.6127448856** at actual epoch 8. It does not yet satisfy 0.65, but it is the
+accepted handoff baseline. See `startup.md` for exact data, training, and
+evaluation commands.
 
 ## Metrics that do not prove success
 

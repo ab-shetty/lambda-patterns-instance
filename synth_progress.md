@@ -1,6 +1,19 @@
 # Synthetic Dataset Progress
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
+
+## Mixed-data successor
+
+The synthetic-only result below remains fully reproducible and is an important
+baseline. The current accepted single-model result now uses the same 1,600
+synthetic images plus 1,548 Roboflow records and reaches **0.6127448856** on the
+same corrected HF14 metric at actual epoch 8. The implementation is the direct
+reference-conditioned `RefUNet`; see `codex_doc.md` and `startup.md` for the
+architecture, exact two-stage schedule, data construction, and evaluation.
+
+Roboflow-only reference points are 0.349361 for 86 originals with live
+flip/rotation and 0.464606 for the strong18 offline pool. These do not change the
+verified synthetic-only outcome documented below.
 
 ## Outcome
 
