@@ -5,51 +5,56 @@ selection: a user selects a rectangle inside a material pattern and the model
 returns every matching region in the same plan. Pattern IDs are image-local.
 Roboflow `remove` polygons are holes, never foreground classes.
 
+## Read this before quoting any number
+
+On 2026-08-06 a bug was found and fixed in `sample_reference_box`
+(`refmask2former/dataset.py`), the function that turns a ground-truth instance
+into the user's reference rectangle. It could return a rectangle lying partly or
+entirely **outside** the pattern it was supposed to sample — see
+"The reference-box fix" below.
+
+Every number measured before that date (`0.6127`, `0.5506`, `0.4646`, `0.3494`,
+`0.6432`) used the broken sampler, as did the `>= 0.65` target. They are **not
+comparable** to anything measured afterwards. `sample_reference_box_legacy` is
+retained so the old figures stay reproducible. Always state which sampler a
+number came from.
+
 ## Current reproducible result
 
-The best extensible **single checkpoint** is the direct `RefUNet` model:
+Fixed sampler, `RefUNet`, trained on 1,600 synthetic + 1,548 Roboflow real +
+504 generated-realistic records (3,652 total):
 
-- training: 1,600 synthetic images + 1,548 Roboflow-derived images;
-- unique real sources: 86 (the other 1,462 are deterministic offline variants);
-- duration: actual epochs 0 through 8, within the ten-epoch limit;
-- evaluation: fixed HF14, 14 plans and all 52 reference selections;
-- calibrated mask threshold: `0.35`;
-- corrected reference-conditioned union mIoU: **`0.6127448856345988`**;
-- checkpoint: `data/runs/ck_refunet_mix3148_w128_s31/epoch_8.pth`;
-- metrics: `data/evaluations/refunet_e8_t0.35.json`.
+| Item | Value |
+|---|---|
+| Recipe mean (3 seeds) | **0.6860 ± 0.0175** |
+| Best single checkpoint | **0.705407920670342** |
+| Checkpoint | `data/runs/ck_fix_mix3652_seed31/epoch_6.pth` |
+| Metrics | `data/evaluations/refunet_fix_mix3652_s31_e6.json` |
+| Visual audit | `data/visualizations/fix_mix3652_s31_e6/` |
+| Evaluation | fixed HF14, 14 plans, all 52 reference selections |
+| Mask threshold | 0.35 |
 
-The active target is `>= 0.65`; it has not yet been reached. Do not report the
-training-time legacy `real_iou`, an oracle, a class-agnostic score, or an
-ensemble as the current result.
+Report the **3-seed mean** as the result. Run-to-run noise is ~0.013–0.018 sd on
+these mixes, so a single checkpoint is the top of a spread, not the expected
+value. See "Seeds" below.
 
-The next 100-image model-generation and Roboflow-labelling batch is specified
-exactly in `image_generation/README.md` and `image_generation/prompts.jsonl`.
-Use that package when moving generation to a personal computer; do not invent a
-new prompt distribution from conversation memory.
+## Environment and credentials
 
-`RefUNet` predicts the selected pattern union directly. If the product needs
-separate instances, split the binary mask into connected components (preserving
-holes) after inference. Training remains one checkpoint that can be continued
-when more Roboflow labels arrive.
-
-## Environment and data acquisition
-
-Credentials must be available as `HF_TOKEN` and `ROBOFLOW_API_KEY`; never print
-their values.
+Credentials live in `~/.env` as `HF_TOKEN` and `ROBOFLOW_API_KEY`; load with
+`set -a; . ~/.env; set +a` and never print their values.
 
 ```bash
-pip install -r requirements.txt
-pip install roboflow
+pip install --user -r requirements.txt roboflow
 ```
 
-The winning VM used Python 3.10, torch 2.7.0, torchvision 0.22.0, OpenCV 4.10.0,
-Pillow 12.3.0, and datasets 5.0.0 on one NVIDIA GH200. Minor nondeterminism can
-cause small last-decimal changes.
+Verified working stack: Python 3.10.12, torch 2.7.0, torchvision 0.22.0,
+datasets 5.0.1, OpenCV 4.10.0, Pillow 12.3.0, numpy 1.26.4, on one NVIDIA GH200
+with 64 CPUs. Minor nondeterminism can change the last decimals.
 
 Cache the evaluation dataset (never put these HF images into training):
 
 ```bash
-python - <<'PY'
+python3 - <<'PY'
 from datasets import load_dataset
 ds = load_dataset("abshetty/floz-synth-v5", "real-world-test", split="test",
                   cache_dir="./data")
@@ -57,250 +62,252 @@ print(len(ds))  # 28
 PY
 ```
 
-Download and convert Roboflow version 2:
+## Synthetic source
+
+The original pools `data/synthetic/faintcad2500` and `cadneg2500` **cannot be
+rebuilt**: they only ever existed on a VM two hops back and the
+`generate_synthetic_v5.py` flags that produced them were never committed (the
+full history of every branch was searched). The named recipes `realhard-v1`,
+`realhard-v2`, and `mildtransfer-v1` are explicitly approximations of that
+distribution, not the thing itself.
+
+The reproducible stand-in is the 20k-row default config of
+`abshetty/floz-synth-v5`, exported to local-data format:
 
 ```bash
-python - <<'PY'
-import os
-from roboflow import Roboflow
-project = (Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"])
-           .workspace("perceive-ai").project("floz-real-pool"))
-print(project.versions())
-project.version(2).download(
-    "coco-segmentation",
-    location="data/roboflow/floz-real-pool-v2-raw",
-    overwrite=True,
-)
-PY
-
-python scripts/roboflow_to_local.py \
-  --coco data/roboflow/floz-real-pool-v2-raw/train/_annotations.coco.json \
-  --img-dir data/roboflow/floz-real-pool-v2-raw/train \
-  --out data/roboflow/floz-real-pool-v2-clean
+python3 scripts/hf_to_local.py --out data/synthetic/hf20k --workers 48
+# 20,000 images, 74,465 instances; modes: elevation 8956, freeform 8085, roof_plan 2959
 ```
 
-Expected version-2 conversion: 86 usable images, 282 pattern instances, 127
-`remove` polygons, and 129 hole attachments. One degenerate pattern and two
-unlabelled images are skipped. New Roboflow versions will legitimately change
-these counts; inspect the conversion summary rather than forcing old counts.
-
-## Rebuild the exact mixed dataset
-
-The canonical synthetic input is `data/synthetic/toparea1600_balanced`. If it
-is not preserved from the previous VM, recreate it from the existing generator
-pools:
+`hf_to_local.py` fills in a per-instance `area` (outer ring minus holes) when the
+parquet lacks it, because `select_toparea_local.py` ranks on it.
 
 ```bash
-python scripts/select_toparea_local.py \
-  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
+python3 scripts/select_toparea_local.py \
+  --sources data/synthetic/hf20k \
   --out data/synthetic/toparea1600_balanced --n 1600 \
   --mode-quotas elevation=889,roof_plan=540,freeform=171
 ```
 
-Create 17 deterministic strong offline variants per Roboflow source. The clean
-original is retained, producing 18 views per source and 1,548 records total:
+This selects the top 1,600 of 20,000 (top 8%) where the original selected the top
+1,600 of 5,000 (top 32%), so the set skews higher-area: score mean `0.518` /
+median `0.387` versus the historical `0.394` / `0.293`. Empirically this costs
+nothing — see the mix3148 control below.
+
+## Real data from Roboflow
+
+Two projects in workspace `perceive-ai` contribute:
 
 ```bash
-python scripts/augment_local_dataset.py \
+python3 - <<'PY'
+import os
+from roboflow import Roboflow
+rf = Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"]).workspace("perceive-ai")
+rf.project("floz-real-pool").version(2).download(
+    "coco-segmentation", location="data/roboflow/floz-real-pool-v2-raw", overwrite=True)
+rf.project("floz-generated-realistic-label-pool").version(1).download(
+    "coco-segmentation", location="data/roboflow/floz-genreal-v1-raw", overwrite=True)
+PY
+
+python3 scripts/roboflow_to_local.py \
+  --coco data/roboflow/floz-real-pool-v2-raw/train/_annotations.coco.json \
+  --img-dir data/roboflow/floz-real-pool-v2-raw/train \
+  --out data/roboflow/floz-real-pool-v2-clean
+# 86 images, 282 instances, 127 remove polygons attached 129 times,
+# 2 to multiple masks, 1 degenerate pattern dropped, 2 unlabelled skipped
+
+python3 scripts/roboflow_to_local.py \
+  --coco data/roboflow/floz-genreal-v1-raw/train/_annotations.coco.json \
+  --img-dir data/roboflow/floz-genreal-v1-raw/train \
+  --out data/roboflow/floz-genreal-v1-clean
+# 28 images, 107 instances, 62 remove polygons attached 62 times
+```
+
+`floz-generated-realistic-label-pool` v1 holds the 28 salvageable, hand-labelled
+images from the AI-generation batch. If it has no version yet, generate one with
+**no preprocessing and no augmentation** — resizing and offline augmentation are
+done locally.
+
+New Roboflow versions will legitimately change these counts; read the conversion
+summary rather than forcing the old ones.
+
+### Pool characteristics
+
+| | real 86 | generated 28 |
+|---|---|---|
+| long side | 640 (every image, native) | 1536–2065 |
+| megapixels (median) | 0.41 | 1.57 |
+| instances / image | 2.0 | 3.0 |
+| labelled-area fraction | 0.153 | 0.284 |
+
+The 86 real plans are natively 640×640 web-scraped drawings — Roboflow stores
+them at that size, so no re-export recovers detail, and training at 1280 upscales
+them 2×.
+
+## Build the training mix
+
+```bash
+python3 scripts/augment_local_dataset.py \
   --src data/roboflow/floz-real-pool-v2-clean \
   --out data/roboflow/floz-real-pool-v2-strong18 \
-  --aug-per-scene 17 --strong --seed 5858
-```
+  --aug-per-scene 17 --strong --seed 5858          # 86 -> 1,548
 
-Merge synthetic first and Roboflow second. The merge renames records
-deterministically to `item_000000` through `item_003147`:
+python3 scripts/augment_local_dataset.py \
+  --src data/roboflow/floz-genreal-v1-clean \
+  --out data/roboflow/floz-genreal-v1-strong18 \
+  --aug-per-scene 17 --strong --seed 5858          # 28 -> 504
 
-```bash
-python scripts/merge_local_datasets.py \
+python3 scripts/merge_local_datasets.py \
   --sources data/synthetic/toparea1600_balanced \
             data/roboflow/floz-real-pool-v2-strong18 \
-  --out data/mixed/toparea1600_rfstrong1548
+            data/roboflow/floz-genreal-v1-strong18 \
+  --out data/mixed/toparea1600_rf1548_gen504       # 3,652
 ```
 
-Verify that both `images/` and `annotations/` contain exactly 3,148 files.
-Everything under `data/` is intentionally git-ignored.
+Verify both `images/` and `annotations/` hold exactly 3,652 files. Merge order
+matters for the deterministic `item_XXXXXX` renaming. Everything under `data/`
+is intentionally git-ignored.
 
-## Reproduce the 0.6127448856 checkpoint
+## Train
 
-The observed run had two deliberate optimizer phases. Phase A trains actual
-epoch 0 with a cosine schedule planned for ten epochs:
+Two optimizer phases: actual epoch 0 on the first epoch of a planned ten-epoch
+cosine, then reload, reset the optimizer, and train actual epochs 1–8 on the
+first eight of a planned nine-epoch cosine. Do not approximate this with one
+uninterrupted command.
 
 ```bash
-PYTHONPATH=. python scripts/train_refunet.py \
-  --local-data data/mixed/toparea1600_rfstrong1548 \
-  --checkpoint-dir data/runs/ck_refunet_mix3148_w128_s31 \
-  --epochs 1 --schedule-epochs 10 \
-  --batch-size 8 --num-workers 64 --prefetch-factor 4 \
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+CK=data/runs/ck_fix_mix3652_seed31
+COMMON="--batch-size 8 --num-workers 24 --prefetch-factor 4 \
   --image-max-size 1280 --ref-size 224 --width 128 \
   --lr 2e-4 --backbone-lr-mult 0.1 --train-split 0.99 \
-  --domain-random --seed 31
+  --domain-random --mask-thresh 0.35 --seed 31"
+
+PYTHONPATH=. python3 scripts/train_refunet.py \
+  --local-data data/mixed/toparea1600_rf1548_gen504 \
+  --checkpoint-dir $CK --epochs 1 --schedule-epochs 10 $COMMON
+
+PYTHONPATH=. python3 scripts/train_refunet.py \
+  --local-data data/mixed/toparea1600_rf1548_gen504 \
+  --checkpoint-dir $CK --epochs 8 --schedule-epochs 9 $COMMON \
+  --reset-optimizer --init-from $CK/epoch_0.pth
 ```
 
-Phase B reloads epoch 0 weights, intentionally resets the optimizer, and trains
-actual epochs 1 through 8 using the first eight epochs of a nine-epoch cosine
-schedule. This exactly encodes the schedule that produced the retained result:
+`--mask-thresh 0.35` makes the per-epoch diagnostic directly comparable to the
+reported result. `scripts/run_fixedsampler.sh` runs all three seeds.
+
+Throughput is ~25 ms per record per epoch: ~85–92 s/epoch on 3,652 records, so a
+full 9-epoch run is ~14 minutes and a 3-seed comparison ~45 minutes. Budget
+seeds by default.
+
+## Evaluate
 
 ```bash
-PYTHONPATH=. python scripts/train_refunet.py \
-  --local-data data/mixed/toparea1600_rfstrong1548 \
-  --checkpoint-dir data/runs/ck_refunet_mix3148_w128_s31 \
-  --epochs 8 --schedule-epochs 9 \
-  --batch-size 8 --num-workers 64 --prefetch-factor 4 \
-  --image-max-size 1280 --ref-size 224 --width 128 \
-  --lr 2e-4 --backbone-lr-mult 0.1 --train-split 0.99 \
-  --domain-random --seed 31 --reset-optimizer \
-  --init-from data/runs/ck_refunet_mix3148_w128_s31/epoch_0.pth
-```
-
-The training script writes model, optimizer, scheduler, actual epoch, arguments,
-and HF14 diagnostics into each checkpoint. It also retains `best_real.pth`, but
-the acceptance score must be recomputed with the authoritative evaluator and
-the calibrated threshold:
-
-```bash
-PYTHONPATH=. python scripts/evaluate_refunet_selection.py \
-  --checkpoint data/runs/ck_refunet_mix3148_w128_s31/epoch_8.pth \
+PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py \
+  --checkpoint data/runs/ck_fix_mix3652_seed31/epoch_6.pth \
   --indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
   --image-max-size 1280 --ref-size 224 --mask-thresh 0.35 \
-  --metrics-out data/evaluations/refunet_e8_t0.35.json
+  --metrics-out data/evaluations/refunet_fix_mix3652_s31_e6.json
+# 14 images, 52 reference selections, mean IoU 0.705407920670342
 ```
 
-Expected output: 14 images, 52 reference selections, and mean IoU
-`0.6127448856345988`.
-
-## Reproduce the synthetic-only 0.5506125168 baseline
-
-Create the 750-image curriculum subset as well as the 1,600-image set described
-above:
+Render the required visual audit (input + rectangle, expected union, predicted
+union, overlap/excess/missed) with:
 
 ```bash
-python scripts/select_toparea_local.py \
-  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
-  --out data/synthetic/toparea750_balanced --n 750 \
-  --mode-quotas elevation=476,roof_plan=196,freeform=78
+PYTHONPATH=. python3 scripts/visualize_refunet_selection.py \
+  --checkpoint data/runs/ck_fix_mix3652_seed31/epoch_6.pth \
+  --mask-thresh 0.35 --out data/visualizations/fix_mix3652_s31_e6
 ```
 
-Phase 1 was configured for ten epochs but intentionally stopped after
-`epoch_4.pth` (five completed epochs):
+It reproduces the evaluator's RNG, resize, and threshold exactly, names files by
+IoU so failures sort first, and writes `manifest.csv` + `summary.txt`.
 
-```bash
-python train.py \
-  --local-data data/synthetic/toparea750_balanced \
-  --image-max-size 1280 --batch-size 4 --grad-accum 1 --epochs 10 \
-  --save-every-epoch --num-workers 64 --prefetch-factor 4 \
-  --real-eval --real-eval-indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
-  --domain-random --num-queries 200 \
-  --mask-weight 10 --dice-weight 10 --ref-weight 2 \
-  --ref-siamese-backbone --ref-siamese-level res3+res5 \
-  --eos-coef 0.03 --seed 0 \
-  --checkpoint-dir data/runs/ck_toparea750_hybrid_1280_s0 \
-  --log-dir data/runs/tb_toparea750_hybrid_1280_s0
-```
+## The reference-box fix
 
-Phase 2 performs five reference-only hard-ranking epochs. Its `epoch_0.pth` is
-the sixth actual epoch and the passing checkpoint:
+`sample_reference_box` treated `min_size` (128px) as an inviolable floor while
+never computing whether a box that large could fit. Two failure modes followed:
 
-```bash
-python train.py \
-  --local-data data/synthetic/toparea1600_balanced \
-  --image-max-size 1280 --batch-size 8 --grad-accum 1 --epochs 5 \
-  --save-every-epoch --num-workers 64 --prefetch-factor 4 \
-  --real-eval --real-eval-indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
-  --domain-random --num-queries 200 \
-  --mask-weight 10 --dice-weight 10 --ref-weight 2 \
-  --ref-ranking-margin 1.0 \
-  --ref-siamese-backbone --ref-siamese-level res3+res5 \
-  --reference-only --eos-coef 0.03 --lr 1e-4 --seed 0 \
-  --init-from data/runs/ck_toparea750_hybrid_1280_s0/epoch_4.pth \
-  --checkpoint-dir data/runs/ck_stage750e4_rank1_refonly5 \
-  --log-dir data/runs/tb_stage750e4_rank1_refonly5
+- regions thinner than 128px could never yield a valid box at all;
+- regions where only a sliver of the sampled size range fit (e.g. a largest
+  inscribed square of 135px while sizes were drawn over 128–254) almost never
+  found it.
 
-PYTHONPATH=. python scripts/evaluate_reference_selection.py \
-  --checkpoint data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth \
-  --image-max-size 1280 --score-thresh 0.6 --mask-thresh 0.5 \
-  --match-margin 0.1 \
-  --metrics-out data/evaluations/synth_only_0550613.json
-```
+Either way all 450 attempts failed and the function fell through to an unchecked
+`centroid ± 16` 32×32 box. On a ring-shaped mask — a wall with a window punched
+out — that centroid sits **in the hole**, so the reference crop showed none of
+the pattern, then got upscaled 7× to 224px.
 
-Expected corrected HF14 mIoU: `0.5506125168094088`.
+Measured incidence before the fix: **57%** of real-plan reference crops and
+**36%** of generated-plan crops were partly or entirely outside their own mask;
+**0%** of synthetic ones were, because those images are 2–5k px wide so 128px
+boxes fit trivially. That is why it hid for so long — it only bit the real data.
 
-## Reproduce the strongest Roboflow-only 0.4646064981 baseline
+The fix computes a Chebyshev `cv2.distanceTransform`, which gives the half-width
+of the largest square that fits at every pixel. Size is drawn from what actually
+fits, the centre only from pixels deep enough to hold it, and sides are odd so
+the box is symmetric about its centre. `min_size` is now a preference.
+Containment is guaranteed and asserted across all pools.
 
-This lineage uses `floz-real-pool-v2-strong18` and no synthetic images. Phase 1
-was configured for ten epochs at 2048px and stopped after `epoch_2.pth`:
+Effect on HF14 (`mix3652`, 3 seeds): **0.6331 → 0.6860 (+0.053, t=4.18,
+p=0.014)**, with complete separation between arms. Selections scoring below 0.25
+dropped from 8 to 1 while the median barely moved — the fix removed impossible
+questions rather than making the model broadly better.
 
-```bash
-python train.py \
-  --local-data data/roboflow/floz-real-pool-v2-strong18 \
-  --image-max-size 2048 --batch-size 1 --grad-accum 4 --epochs 10 \
-  --save-every-epoch --num-workers 24 --prefetch-factor 4 \
-  --train-split 0.99 --real-eval \
-  --real-eval-indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
-  --num-queries 200 --mask-weight 10 --dice-weight 10 --ref-weight 2 \
-  --ref-siamese-backbone --ref-siamese-level res3+res5 \
-  --eos-coef 0.03 --lr 1e-4 --seed 7 \
-  --checkpoint-dir data/runs/ck_rf_strong18_bs1_2048_s7 \
-  --log-dir data/runs/tb_rf_strong18_bs1_2048_s7
-```
+## Seeds
 
-Phase 2 warm-starts phase-one epoch 2, emphasizes mask quality, and was stopped
-after its first checkpoint:
+Run-to-run noise, same data and recipe: sd ~0.013–0.018 on the 3.1k–3.7k mixes,
+and up to 0.049 spread on 504-record pools. Effects worth chasing (+0.03) are
+only ~2× that, and this repo has already retracted a win that survived three
+seeds and died at five (`385f3cb` → `1cbaeea`, `cd71c26`).
 
-```bash
-python train.py \
-  --local-data data/roboflow/floz-real-pool-v2-strong18 \
-  --image-max-size 2048 --batch-size 1 --grad-accum 4 --epochs 5 \
-  --save-every-epoch --num-workers 24 --prefetch-factor 4 \
-  --train-split 0.99 --real-eval \
-  --real-eval-indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
-  --num-queries 200 --mask-weight 20 --dice-weight 20 --ref-weight 0 \
-  --ref-siamese-backbone --ref-siamese-level res3+res5 \
-  --eos-coef 0.03 --lr 5e-5 --seed 11 \
-  --init-from data/runs/ck_rf_strong18_bs1_2048_s7/epoch_2.pth \
-  --checkpoint-dir data/runs/ck_rf_2048_maskfocus_from_e2_s11 \
-  --log-dir data/runs/tb_rf_2048_maskfocus_from_e2_s11
-
-PYTHONPATH=. python scripts/evaluate_reference_selection.py \
-  --checkpoint data/runs/ck_rf_2048_maskfocus_from_e2_s11/epoch_0.pth \
-  --image-max-size 2048 --score-thresh 0.3 --mask-thresh 0.05 \
-  --match-margin 0.1 \
-  --metrics-out data/evaluations/roboflow_only_0464606.json
-```
-
-Expected corrected HF14 mIoU: `0.4646064981`.
-
-For the separate 86-original/live-augmentation control, use the clean dataset,
-ten full epochs, and no `--domain-random`. `InstanceSegDataset` supplies live
-horizontal/vertical flips and quarter-turn rotations:
-
-```bash
-python train.py \
-  --local-data data/roboflow/floz-real-pool-v2-clean \
-  --image-max-size 1280 --batch-size 4 --grad-accum 1 --epochs 10 \
-  --save-every-epoch --num-workers 64 --prefetch-factor 4 \
-  --train-split 0.99 --real-eval \
-  --real-eval-indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 \
-  --num-queries 200 --mask-weight 10 --dice-weight 10 --ref-weight 2 \
-  --ref-ranking-margin 1.0 \
-  --ref-siamese-backbone --ref-siamese-level res3+res5 \
-  --eos-coef 0.03 --lr 1e-4 --seed 40 \
-  --checkpoint-dir data/runs/ck_rf_clean86_live_fliprot_s40 \
-  --log-dir data/runs/tb_rf_clean86_live_fliprot_s40
-```
-
-The best checkpoint is epoch 4. At 2048px with score `0.3`, mask `0.05`, and
-match margin `0.1`, it scores `0.3493612685`.
+Report a multi-seed mean ± sd. Three seeds is the working minimum; use five when
+an effect is under ~2× the sd.
 
 ## Durable comparison points
 
-| Training data / model | Corrected HF14 mIoU |
-|---|---:|
-| Synthetic-only query model | 0.550613 |
-| 86 clean Roboflow images, live flips/rotations only | 0.349361 |
-| 1,548 strong Roboflow views, query model | 0.464606 |
-| Synthetic + Roboflow query model | 0.588568 |
-| Synthetic + Roboflow direct `RefUNet` | **0.612745** |
+All rows are `RefUNet`, HF14, threshold 0.35. The sampler column is load-bearing.
 
-The 86-image live-augmentation control completed all ten epochs; its best point
-was epoch 4. Offline augmentation adds substantial appearance, crop, scale, and
-degradation diversity beyond flips and rotations alone.
+| Training data | sampler | seeds | HF14 mIoU |
+|---|---|---|---:|
+| generated 28 only (504 records) | old | 3 | 0.2608 ± 0.020 |
+| real 28 only, matched count | old | 3 draws | 0.2777 ± 0.030 |
+| real 86 only (1,548 records) | old | 1 | 0.3507 |
+| synth 1600 + real 1548 (`mix3148`) | old | 3 | 0.6001 ± 0.0143 |
+| synth 1600 + real 1548 + gen 504 (`mix3652`) | old | 3 | 0.6331 ± 0.0132 |
+| **`mix3652`** | **fixed** | **3** | **0.6860 ± 0.0175** |
+
+Historical, broken sampler, earlier query-model lineage: synthetic-only 0.5506,
+Roboflow-only strong18 0.4646, 86 clean with live flips 0.3494, synth+Roboflow
+query model 0.5886, synth+Roboflow `RefUNet` 0.6127.
+
+### What the comparisons establish
+
+- **The 28 generated plans are worth +0.033** on top of the full mix (t=2.94,
+  p=0.043, complete separation) for a 1.6% increase in records.
+- **Per source, a generated plan ≈ a real plan.** Count-matched at 28 unique
+  sources, generated scored 0.2608 and real 0.2777 — a gap well inside the
+  ~0.05 run-to-run spread of the small pools.
+- **Resolution is worth ~0.032**: the same 28 generated plans downscaled to a
+  640 long side scored 0.2330 versus 0.2650 native.
+- **Count dominates**: 28 → 86 real sources buys +0.073.
+- Substituting the HF 20k synthetic source cost ~0.006 (`mix3148` 0.6001 mean vs
+  the historical 0.6127 single run), so the irrecoverable pools are not a loss.
+
+Practical consequence for future data work: generate more, and generate large.
+Per-image value matches real plans, and resolution is a property you control at
+generation time but can never retrofit onto the 640px scraped pool.
+
+## Evaluation rules
+
+- HF `real-world-test` images are evaluation-only.
+- Fixed indices: `12,16,27,7,11,25,23,1,18,2,0,3,14,24`.
+- Evaluate every labelled instance as a deterministic user selection: 52 total.
+- Report reference-conditioned union IoU only, with the sampler named.
+- Do not report the legacy training `real_iou`, per-GT best coverage, an oracle,
+  class-agnostic Mask R-CNN scores, or checkpoint ensembles as product mIoU.
+- Threshold 0.35 is fixed. Do not sweep it, the inference resolution, or any
+  other knob against HF14 — that is fitting the acceptance set.
+- HF14 images 24, 25, and 27 carry human highlighter markup because they came
+  from real markup PDFs. That is the real input distribution; keep them in, and
+  treat robustness to markup as a model requirement.

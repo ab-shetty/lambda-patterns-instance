@@ -49,14 +49,32 @@ region union. The fixed HF14 heldout image indices are:
 
 `12,16,27,7,11,25,23,1,18,2,0,3,14,24`
 
+## The reference rectangle must lie inside the pattern
+
+A reference selection is only meaningful if the rectangle actually shows the
+pattern. Until 2026-08-06 `sample_reference_box` could return a rectangle partly
+or entirely outside the region it sampled — on a wall with a window punched out
+it returned the mask centroid, which sits in the window. Such a selection is not
+a question any user would ask and the model cannot answer it.
+
+The sampler now guarantees containment via a distance transform. Consequently
+**numbers measured before 2026-08-06 are not comparable to later ones**, because
+six of the 52 selections used invalid rectangles. `sample_reference_box_legacy`
+reproduces the old behaviour for historical checks.
+
 ## Current target and result
 
-The active target is **reference-conditioned union IoU >= 0.65** on the real
-HF14 holdout, at any checkpoint within ten training epochs, using synthetic and
-cleaned Roboflow data. The current reproducible single-model result is
-**0.6127448856** at actual epoch 8. It does not yet satisfy 0.65, but it is the
-accepted handoff baseline. See `startup.md` for exact data, training, and
-evaluation commands.
+The original target was **reference-conditioned union IoU >= 0.65** on the real
+HF14 holdout, at any checkpoint within ten training epochs. That target was set
+against the broken sampler and has not been restated.
+
+On the fixed metric the current recipe (1,600 synthetic + 1,548 real + 504
+generated-realistic) averages **0.6860 ± 0.0175** across three seeds, with a best
+single checkpoint of **0.705407920670342**. Report the multi-seed mean, not the
+best checkpoint: run-to-run noise is ~0.013-0.018 sd here.
+
+See `startup.md` for exact data, training, and evaluation commands, and
+`codex_doc.md` for what changed.
 
 ## Metrics that do not prove success
 
@@ -80,5 +98,9 @@ Heldout visualizations must show, for each evaluated reference selection:
 3. the model's reference-conditioned predicted union;
 4. an error view distinguishing overlap, excess selection, and missed pixels.
 
-The current corrected baseline artifacts are in
-`data/visualizations/reference_conditioned_hf14_k2_q200`.
+`scripts/visualize_refunet_selection.py` renders exactly these four views for a
+`RefUNet` checkpoint, reproducing the evaluator's RNG, resize, and threshold so
+each panel's IoU is the number feeding the reported mean. Files are named by IoU
+so failures sort first, alongside `manifest.csv` and `summary.txt`.
+
+Current artifacts: `data/visualizations/fix_mix3652_s31_e6/`.

@@ -1,6 +1,24 @@
 # Synthetic Dataset Progress
 
-Last updated: 2026-07-22
+Last updated: 2026-08-06
+
+## Status of this document
+
+Everything below was measured with the pre-2026-08-06 reference-box sampler,
+which could place the user rectangle outside the pattern it sampled. Those
+numbers remain internally consistent and the generator conclusions still hold,
+but they are **not comparable** to anything measured after the fix. See
+`startup.md` for the fix and the current results.
+
+Two further corrections from 2026-08-06:
+
+- The source pools `data/synthetic/faintcad2500` and `data/synthetic/cadneg2500`
+  referenced throughout this file **no longer exist and cannot be rebuilt** — the
+  generator flags that produced them were never committed. Use the 20k HF config
+  via `scripts/hf_to_local.py` instead; the substitution costs ~0.006.
+- The synthetic pools were the one part of the data **never** affected by the
+  sampler bug (0% bad boxes), because their images are 2-5k px wide so 128px
+  reference boxes fit trivially. The bug bit only the 640px real plans.
 
 ## Mixed-data successor
 

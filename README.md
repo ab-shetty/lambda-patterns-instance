@@ -1,5 +1,13 @@
 # RefMask2Former — Reference-Conditioned Instance Segmentation
 
+> **Not the current model.** This file documents the query model
+> (detect-every-instance, then group by reference similarity), whose mixed-data
+> ceiling was 0.5886. The shipping model is the direct `RefUNet`
+> (`refmask2former/ref_unet.py`, trained by `scripts/train_refunet.py`), which
+> predicts the selected union in one pass and currently averages 0.6860 on HF14.
+> Read `PROJECT_UNDERSTANDING.md`, then `startup.md`, then `codex_doc.md`.
+> The architecture and dataset notes below still apply to both models.
+
 Instance-segmentation successor to the reference-based **semantic** pattern
 segmentation model. Where the old model merged every matching region into a
 single binary mask, this one separates each pattern occurrence into its own

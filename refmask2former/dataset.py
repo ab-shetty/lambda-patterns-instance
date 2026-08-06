@@ -43,7 +43,58 @@ def render_instance_mask(segmentation, height, width):
 def sample_reference_box(mask, min_size=128, max_size=512, rng=None):
     """Random box fully inside a single instance mask. Returns (x, y, w, h).
     Pass `rng` (a random.Random) to make the box DETERMINISTIC (eval); None uses
-    the global RNG (training)."""
+    the global RNG (training).
+
+    `min_size` is a preference, not a floor. A Chebyshev distance transform gives
+    the half-width of the largest square that fits at every pixel, so the largest
+    feasible box is known up front instead of being searched for: the box size is
+    drawn from what actually fits and the centre is drawn only from pixels deep
+    enough to hold it. The returned box is therefore always fully inside the mask.
+
+    The previous version clamped size to `max(..., min_size)` in both the random
+    search and the shrink ladder, so any region thinner than `min_size` -- and any
+    region whose feasible sizes were a sliver of the sampled range -- exhausted all
+    450 attempts and fell through to an unchecked `centroid +- 16` box. On
+    ring-shaped regions that centroid sits in the hole, producing reference crops
+    containing none of the pattern (94% of real-plan instances hit this path). Use
+    `sample_reference_box_legacy` to reproduce numbers measured before the fix."""
+    r = rng if rng is not None else random
+    m = (np.asarray(mask) > 0).astype(np.uint8)
+    if not m.any():
+        return (0, 0, 32, 32)
+
+    # Zero border so the transform never reports room that runs off the image.
+    padded = np.pad(m, 1, mode="constant", constant_values=0)
+    dt = cv2.distanceTransform(padded, cv2.DIST_C, 3)[1:-1, 1:-1]
+
+    # dt[p] == d means every pixel within Chebyshev distance d-1 of p is inside,
+    # so p can host a square of half-width d-1, i.e. side 2*(d-1)+1.
+    max_half = int(dt.max()) - 1
+    if max_half < 0:
+        ys, xs = np.nonzero(m)
+        i = r.randint(0, len(ys) - 1)
+        return (int(xs[i]), int(ys[i]), 1, 1)
+
+    # Sample the half-width and derive an odd side, so the box is exactly
+    # symmetric about its centre; an even side would extend one pixel further
+    # right/down than `half` and could cross the mask edge.
+    hi_half = min((max_size - 1) // 2, max_half)
+    lo_half = min((min_size - 1) // 2, hi_half)
+    half = (int(lo_half + (hi_half - lo_half) * (r.random() ** 0.5))
+            if hi_half > lo_half else hi_half)
+    half = max(0, min(half, hi_half))
+
+    centers = np.argwhere(dt >= half + 1)
+    cy, cx = centers[r.randint(0, len(centers) - 1)]
+    size = 2 * half + 1
+    return (int(cx - half), int(cy - half), size, size)
+
+
+def sample_reference_box_legacy(mask, min_size=128, max_size=512, rng=None):
+    """Pre-fix sampler, kept only to reproduce historical measurements.
+
+    Can return a box that is partially or entirely outside `mask`; see
+    `sample_reference_box` for why."""
     r = rng if rng is not None else random
     coords = np.argwhere(mask > 0)
     if len(coords) == 0:
