@@ -179,7 +179,40 @@ masks only for the strict acceptance calculation.
 | Ranking margin 2.0 | 0.536815 | Hard-pair ranking was the right loss |
 | Ranking margin 1.0 | **0.550613** | Passed |
 
-## Useful negative evidence
+## Useful negative evidence (2026-08-06, fixed sampler, RefUNet)
+
+Thirteen levers screened at one seed on the **validation split** (see
+`startup.md`), baseline validation peak `0.7672`. None beat baseline. Do not
+repeat these without a materially new hypothesis; full reasoning is in commit
+`b2d2f09`.
+
+| lever | val peak | note |
+|---|---:|---|
+| threshold retune (0.25–0.65) | 0.7638 | raising it monotonically hurts — the model floods faint sheets *confidently*, so no post-hoc calibration helps |
+| boundary snapping ×4 | 0.7672 | guided filter / morph / bilinear / ink-cell fill all ≈0. Boundary precision is **not** the bottleneck at 0.77 |
+| resolution 2048 | 0.7524 | |
+| schedule 15 epochs | 0.7529 | |
+| resolution 1792 | 0.7508 | two independent points: more pixels hurt |
+| synthetic volume 3200 | 0.7415 | |
+| `--realism-aug` | 0.7398 | |
+| dense correlation `--corr-grid 4` | 0.7300 | |
+| ink-matched synthetic | 0.7218 | density realism cost labelled area (0.387→0.286) |
+| faint + high-area synthetic | 0.7227 | still lost with area preserved |
+| dense correlation `--corr-grid 8` | 0.7179 | monotonic: more matching precision, worse result |
+| `--scale-matched-ref` | 0.6146 | worst change measured; see the warning in `dataset.py` |
+
+Two mechanisms worth remembering:
+
+- **Region identification, not boundary placement, is the binding constraint.**
+  Per-image IoU spans 0.42–0.98 and the low ones are wrong regions, not fuzzy
+  edges. A perfect model misplacing boundaries by 3px would still reach 0.9485
+  mean IoU, so boundaries only start mattering above ~0.90.
+- **The model learns a scale-invariant texture embedding, not template
+  matching.** Engineered matching is weak: naive NCC scores AUC 0.433 — *below
+  chance*, because CAD hatch is periodic and NCC is phase-sensitive — and
+  phase-invariant Gabor energy only reaches 0.674.
+
+## Useful negative evidence (earlier lineage, broken sampler)
 
 These variants were evaluated with the corrected task metric and should not be
 repeated without a materially new hypothesis:

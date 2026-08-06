@@ -338,6 +338,26 @@ class InstanceSegDataset(Dataset):
             masks_arr = np.zeros((0, nh, nw), np.uint8)
 
         # Reference patch resize.
+        #
+        # DO NOT "FIX" THIS TO MATCH THE IMAGE SCALE. The plan is resized by
+        # image_max_size/max(h,w) (a shrink, typically ~0.34x) while the reference
+        # is resized to a flat ref_size square (usually a magnification), so the
+        # same hatch appears a MEDIAN 5.6x larger in the reference than in the
+        # plan, and only 3% of selections land within 1.5x. That looks like an
+        # obvious scale bug. It is not: `--scale-matched-ref` implements the
+        # "correction" and it is the single worst change measured (validation
+        # 0.7672 -> 0.6146, 2026-08-06).
+        #
+        # Magnifying the crop to a full ref_size square hands the encoder a large,
+        # detailed view of the hatch; matching the scales instead shrinks it to
+        # ~40-150px of content adrift on white padding and throws away far more
+        # than scale alignment recovers. The model learns a scale-INVARIANT
+        # texture embedding, not literal template matching, so reference detail
+        # beats geometric correspondence. (Same reason the reference is collapsed
+        # to a global-average vector in ref_unet.py: spatial layout is exactly
+        # what differs between two instances of one hatch. Dense correlation over
+        # a reference token grid, `--corr-grid`, is also a loss: -0.037 at g=4,
+        # -0.049 at g=8.)
         if self.scale_matched_ref:
             ref_r = scale_matched_reference(ref_patch, scale, self.ref_size)
         else:

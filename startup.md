@@ -38,6 +38,36 @@ Report the **3-seed mean** as the result. Run-to-run noise is ~0.013–0.018 sd 
 these mixes, so a single checkpoint is the top of a spread, not the expected
 value. See "Seeds" below.
 
+## Validation split — tune here, never on HF14
+
+The HF `real-world-test` config has 28 images. HF14 is the acceptance holdout;
+its complement is **never trained on and never scored for acceptance**, so it is
+the tuning set:
+
+```text
+validation indices: 4,5,6,8,9,10,13,15,17,19,20,21,22,26   (14 images, 77 selections)
+```
+
+It correlates with HF14 at Pearson r=0.876 / Spearman 0.888 across 27
+checkpoints, and reads systematically higher (~0.75 vs ~0.68) because it is an
+easier set — use it for *ranking* configurations, not for absolute numbers.
+Several of its plans share source PDFs with HF14 (Las Huertas, Ceilhunt, W
+Felton, Maple Rd), so it is correlated rather than independent; treat a
+validation gain as suggestive, then confirm once on HF14.
+
+### Checkpoint selection is part of the metric
+
+Taking the best epoch *by HF14 score* uses the acceptance set to choose the
+checkpoint. Choosing the epoch on validation instead:
+
+| protocol | HF14 |
+|---|---:|
+| epoch = HF14 peak (project's stated "any checkpoint within ten epochs") | 0.6860 ± 0.0175 |
+| epoch chosen on validation | **0.6783 ± 0.0081** |
+
+The +0.0077 gap is selection bias. Both are honest under their own protocol;
+quote the val-selected number when you need one that will hold up.
+
 ## Environment and credentials
 
 Credentials live in `~/.env` as `HF_TOKEN` and `ROBOFLOW_API_KEY`; load with

@@ -33,6 +33,21 @@ Fixed sampler, `RefUNet`, 1,600 synthetic + 1,548 real + 504 generated-realistic
 Quote the 3-seed mean. Run-to-run noise is ~0.013–0.018 sd here, so the best
 checkpoint is the top of a spread rather than the expected value.
 
+That 0.6860 picks the epoch by HF14 score, which uses the acceptance set to
+choose the checkpoint. Selecting the epoch on the validation split instead gives
+**0.6783 ± 0.0081**. Both follow a defensible protocol — the project's metric is
+defined as "any checkpoint within ten epochs" — but quote the val-selected number
+when it has to hold up. See `startup.md` for the split and its correlation.
+
+Thirteen levers were screened against this baseline on 2026-08-06 (resolution,
+synthetic selection, volume, schedule, augmentation, threshold, boundary
+snapping, dense reference correlation, scale-matched reference) and **none beat
+it**; the table is in `synth_progress.md` and the reasoning in commit `b2d2f09`.
+Two of them, `--corr-grid` and `--scale-matched-ref`, are implemented and
+default-off. Read the warning above the reference resize in
+`refmask2former/dataset.py` before "fixing" the reference scale — it looks like a
+bug and correcting it costs 0.153.
+
 The `>= 0.65` target was defined under the broken sampler and has not been
 restated. On the fixed metric this recipe averages 0.686; whether that counts as
 meeting the goal is a product decision, not a measurement one.
