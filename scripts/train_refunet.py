@@ -34,6 +34,11 @@ def parse_args():
     p.add_argument("--image-max-size", type=int, default=1280)
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--width", type=int, default=128)
+    p.add_argument("--corr-grid", type=int, default=0,
+                   help="dense reference correlation: keep the reference as a "
+                        "GxG token grid and cosine-match every image location "
+                        "against all tokens. 0 = the old globally-averaged "
+                        "reference vector only.")
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)
     p.add_argument("--weight-decay", type=float, default=1e-4)
@@ -43,6 +48,9 @@ def parse_args():
     p.add_argument("--dice-weight", type=float, default=2.0)
     p.add_argument("--domain-random", action="store_true")
     p.add_argument("--realism-aug", action="store_true")
+    p.add_argument("--scale-matched-ref", action="store_true",
+                   help="crop the reference at the IMAGE's pixel scale instead "
+                        "of resizing it to ref-size (median 5.6x magnification).")
     p.add_argument("--init-from")
     p.add_argument("--reset-optimizer", action="store_true",
                    help="On continuation, load model weights and epoch only, then "
@@ -82,7 +90,7 @@ def main():
     train_ds, val_ds = build_datasets(
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
         train_split=args.train_split, seed=args.seed,
-        domain_random=args.domain_random, realism_aug=args.realism_aug)
+        domain_random=args.domain_random, realism_aug=args.realism_aug, scale_matched_ref=args.scale_matched_ref)
     collate = partial(collate_fn, size_divisible=32)
     loader_options = ({"persistent_workers": True,
                        "prefetch_factor": args.prefetch_factor}
@@ -94,7 +102,8 @@ def main():
         generator=generator, **loader_options)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
-    model = RefUNet(args.width, pretrained=args.init_from is None).to(device)
+    model = RefUNet(args.width, pretrained=args.init_from is None,
+                    corr_grid=args.corr_grid).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
@@ -151,7 +160,8 @@ def main():
                 val_losses.append(float(loss))
         rows = evaluate_model(model, real_records, real_indices,
                               args.image_max_size, args.ref_size,
-                              args.mask_thresh, device)
+                              args.mask_thresh, device,
+                              scale_matched_ref=args.scale_matched_ref)
         real_iou = float(np.mean([row["iou"] for row in rows]))
         state = {"model": model.state_dict(), "epoch": local_epoch,
                  "actual_epoch": actual_epoch, "args": vars(args),

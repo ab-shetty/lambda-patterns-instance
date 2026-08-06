@@ -124,6 +124,49 @@ def sample_reference_box_legacy(mask, min_size=128, max_size=512, rng=None):
     return (max(0, cx - 16), max(0, cy - 16), 32, 32)
 
 
+def fit_canvas(patch, size, pad_value=255):
+    """Centre a patch on a `size x size` canvas without changing its scale.
+
+    Centre-crops when the patch is larger. Pads with paper-white otherwise, which
+    is what actually surrounds a material region on a plan.
+    """
+    h, w = patch.shape[:2]
+    if h > size:
+        top = (h - size) // 2
+        patch = patch[top:top + size]
+        h = size
+    if w > size:
+        left = (w - size) // 2
+        patch = patch[:, left:left + size]
+        w = size
+    if h == size and w == size:
+        return patch
+    canvas = np.full((size, size) + patch.shape[2:], pad_value, patch.dtype)
+    top, left = (size - h) // 2, (size - w) // 2
+    canvas[top:top + h, left:left + w] = patch
+    return canvas
+
+
+def scale_matched_reference(patch, scale, size, min_side=64):
+    """Resize a native-resolution reference crop to the IMAGE's pixel scale.
+
+    The reference used to be resized to `size x size` regardless of its native
+    extent, so the hatch appeared a median of 5.6x larger in the reference than
+    in the plan the model sees (75% of selections were off by more than 3x).
+    Template matching -- engineered or learned -- cannot work across that gap.
+    Applying the image's own scale factor puts both at the same pixel scale;
+    `min_side` stops very small crops from collapsing to a few pixels.
+    """
+    h, w = patch.shape[:2]
+    nh, nw = max(1, round(h * scale)), max(1, round(w * scale))
+    if max(nh, nw) < min_side:
+        boost = min_side / max(nh, nw, 1)
+        nh, nw = max(1, round(nh * boost)), max(1, round(nw * boost))
+    patch = cv2.resize(patch, (nw, nh), interpolation=cv2.INTER_AREA
+                       if scale < 1 else cv2.INTER_LINEAR)
+    return fit_canvas(patch, size)
+
+
 def _sample_fliprot():
     """Sample one flip/rot90 transform: (hflip, vflip, k_quarter_turns)."""
     return random.random() < 0.5, random.random() < 0.5, random.randint(0, 3)
@@ -211,7 +254,7 @@ def _normalize_chw(img_uint8):
 class InstanceSegDataset(Dataset):
     def __init__(self, records, indices, image_max_size=1024, ref_size=224,
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
-                 realism_aug=False, domain_random=False,
+                 realism_aug=False, domain_random=False, scale_matched_ref=False,
                  repeat_reference_prob=0.0):
         self.records = records
         self.indices = list(indices)
@@ -223,6 +266,7 @@ class InstanceSegDataset(Dataset):
         self.grayscale = grayscale
         self.realism_aug = realism_aug
         self.domain_random = domain_random
+        self.scale_matched_ref = scale_matched_ref
         self.repeat_reference_prob = repeat_reference_prob
         # When not augmenting (val / real eval), the reference patch is chosen
         # DETERMINISTICALLY per image so the metric measures the MODEL, not a
@@ -294,8 +338,11 @@ class InstanceSegDataset(Dataset):
             masks_arr = np.zeros((0, nh, nw), np.uint8)
 
         # Reference patch resize.
-        ref_r = cv2.resize(ref_patch, (self.ref_size, self.ref_size),
-                           interpolation=cv2.INTER_LINEAR)
+        if self.scale_matched_ref:
+            ref_r = scale_matched_reference(ref_patch, scale, self.ref_size)
+        else:
+            ref_r = cv2.resize(ref_patch, (self.ref_size, self.ref_size),
+                               interpolation=cv2.INTER_LINEAR)
 
         if self.augment:
             # One flip/rot90 transform shared by image, masks, AND the reference
@@ -441,7 +488,8 @@ def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None,
 
 def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
-                   domain_random=False, repeat_reference_prob=0.0):
+                   domain_random=False, repeat_reference_prob=0.0,
+                   scale_matched_ref=False):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -453,8 +501,10 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   augment=True, grayscale=grayscale,
                                   realism_aug=realism_aug,
                                   domain_random=domain_random,
+                                  scale_matched_ref=scale_matched_ref,
                                   repeat_reference_prob=repeat_reference_prob)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
-                                augment=False, grayscale=grayscale)
+                                augment=False, grayscale=grayscale,
+                                scale_matched_ref=scale_matched_ref)
     return train_ds, val_ds

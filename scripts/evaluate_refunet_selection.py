@@ -13,7 +13,8 @@ import torch
 from PIL import Image
 
 from refmask2former import load_parquet_records
-from refmask2former.dataset import _normalize_chw, render_instance_mask, sample_reference_box
+from refmask2former.dataset import (_normalize_chw, render_instance_mask,
+                                    sample_reference_box, scale_matched_reference)
 from refmask2former.ref_unet import RefUNet
 
 HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
@@ -22,14 +23,15 @@ HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
 def load_refunet(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device)
     args = checkpoint.get("args", {})
-    model = RefUNet(width=int(args.get("width", 128)), pretrained=False).to(device)
+    model = RefUNet(width=int(args.get("width", 128)), pretrained=False,
+                    corr_grid=int(args.get("corr_grid", 0) or 0)).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
     return model, checkpoint
 
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
-                   mask_thresh=0.5, device=None):
+                   mask_thresh=0.5, device=None, scale_matched_ref=False):
     device = device or next(model.parameters()).device
     rows = []
     with torch.inference_mode():
@@ -53,8 +55,11 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                 crop = image0[y:y + h, x:x + w]
                 if not crop.size:
                     continue
-                crop = cv2.resize(crop, (ref_size, ref_size),
-                                  interpolation=cv2.INTER_LINEAR)
+                if scale_matched_ref:
+                    crop = scale_matched_reference(crop, scale, ref_size)
+                else:
+                    crop = cv2.resize(crop, (ref_size, ref_size),
+                                      interpolation=cv2.INTER_LINEAR)
                 reference = _normalize_chw(crop).unsqueeze(0).to(device)
                 with torch.autocast("cuda", dtype=torch.bfloat16,
                                     enabled=device.type == "cuda"):
@@ -90,8 +95,10 @@ def main():
     records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
                                    config="real-world-test", split="test")
     indices = [int(value) for value in args.indices.split(",") if value.strip()]
+    ckpt_args = checkpoint.get("args", {}) or {}
     rows = evaluate_model(model, records, indices, args.image_max_size,
-                          args.ref_size, args.mask_thresh, device)
+                          args.ref_size, args.mask_thresh, device,
+                          scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")))
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
