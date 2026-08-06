@@ -97,6 +97,14 @@ much as one real plan (0.2608 vs 0.2777 at 28 sources each, a gap inside the
 natively 640×640 and can never be improved, while generation resolution is a
 free choice.
 
+**Before generating more, read the status section at the top of
+`image_generation/README.md`.** The 100-prompt scheme was run once and its
+framing was wrong: it produced full sheets with legends and title blocks, then
+over-corrected into fragments of buildings. The product gesture is a small
+rectangle inside a drawing region — the housed part of a plan, not the legend.
+70 already-uploaded images in `floz-generated-realistic-label-pool` are
+unlabelled and available to label now, which is the cheapest next increment.
+
 Untested hypothesis worth pursuing on a validation split: the largest remaining
 clean failure is thin wall poche in dense floor plans (image 12), plausibly a
 1280px downscaling artifact. It must not be tuned against HF14.
