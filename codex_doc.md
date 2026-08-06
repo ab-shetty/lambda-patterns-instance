@@ -102,8 +102,9 @@ free choice.
 framing was wrong: it produced full sheets with legends and title blocks, then
 over-corrected into fragments of buildings. The product gesture is a small
 rectangle inside a drawing region — the housed part of a plan, not the legend.
-70 already-uploaded images in `floz-generated-realistic-label-pool` are
-unlabelled and available to label now, which is the cheapest next increment.
+Only 28 of 98 generated images were good enough to label (~29% yield); the
+remaining 70 were reviewed and rejected, so there is no labelling backlog to
+mine. More data means generating a better round, not labelling what exists.
 
 Untested hypothesis worth pursuing on a validation split: the largest remaining
 clean failure is thin wall poche in dense floor plans (image 12), plausibly a

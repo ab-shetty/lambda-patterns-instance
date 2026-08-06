@@ -16,8 +16,10 @@ What happened and where the output lives:
 - The next ~50 were regenerated toward focused areas and over-corrected into
   **fractions of houses and buildings**. Workable, but not the target either.
 - 98 images were uploaded to project `perceive-ai/floz-generated-realistic-label-pool`.
-  **28 were salvageable and are hand-labelled** (version 1); **70 remain
-  unannotated** and are available to label now.
+  **28 were salvageable and are hand-labelled** (version 1). The other **70 were
+  reviewed and rejected as too poor to label** — they are not a labelling backlog
+  and should not be treated as cheap extra data. The usable yield of this
+  generation round was 28 out of 98, roughly 29%.
 - A separate earlier batch, `realistic-label-pool-v1-100` in
   `perceive-ai/floz-real-pool`, holds 25 images that are almost all unlabelled.
   It is superseded; prefer the dedicated project.
