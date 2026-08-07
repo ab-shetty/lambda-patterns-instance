@@ -34,6 +34,13 @@ def parse_args():
     p.add_argument("--image-max-size", type=int, default=1280)
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--width", type=int, default=128)
+    p.add_argument("--rank-weight", type=float, default=0.0,
+                   help="Auxiliary hard-pair ranking loss on image-local pattern "
+                        "identity. 0 = off, giving the exact baseline model.")
+    p.add_argument("--rank-margin", type=float, default=1.0,
+                   help="Margin the hardest positive must beat the hardest "
+                        "negative by. The query lineage preferred 1.0 over 2.0/4.0.")
+    p.add_argument("--metric-dim", type=int, default=128)
     p.add_argument("--corr-grid", type=int, default=0,
                    help="dense reference correlation: keep the reference as a "
                         "GxG token grid and cosine-match every image location "
@@ -71,6 +78,44 @@ def union_targets(batch, device):
     return torch.stack(outputs).float().unsqueeze(1).to(device)
 
 
+def ranking_loss(image_embedding, reference_embedding, batch, device, margin):
+    """Hard-pair ranking on image-local pattern identity.
+
+    The union BCE+Dice objective never asks whether a region is the same
+    MATERIAL as the reference -- only whether the final mask comes out right. The
+    query-model lineage found this question to be its single biggest lever
+    (ranking margin 2.0 -> 0.5368, margin 1.0 -> 0.5506, the passing result) and
+    it was dropped, untested, in the move to RefUNet.
+
+    Each ground-truth instance is pooled in the metric space and scored against
+    the reference. Only the hardest pair in each image is penalised: the
+    worst-matching instance that SHOULD match must still beat the best-matching
+    instance that should NOT, by `margin`. Images with no negative (or no
+    positive) carry no signal here and are skipped.
+    """
+    _, _, h, w = image_embedding.shape
+    losses = []
+    for i, target in enumerate(batch["targets"]):
+        match = target["ref_match"].to(device) > 0.5
+        if not match.any() or match.all():
+            continue
+        masks = target["masks"].to(device).float()[None]
+        pooled_masks = F.interpolate(masks, size=(h, w), mode="area")[0]
+        area = pooled_masks.flatten(1).sum(1)
+        keep = area > 1e-3
+        if not (match & keep).any() or not ((~match) & keep).any():
+            continue
+        pooled = (pooled_masks[:, None] * image_embedding[i][None]).flatten(2).sum(2)
+        pooled = F.normalize(pooled / area[:, None].clamp(min=1e-3), dim=1)
+        similarity = pooled @ reference_embedding[i]
+        hardest_positive = similarity[match & keep].min()
+        hardest_negative = similarity[(~match) & keep].max()
+        losses.append(F.relu(margin - (hardest_positive - hardest_negative)))
+    if not losses:
+        return image_embedding.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
 def mask_loss(logits, targets, valid, bce_weight, dice_weight):
     bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     bce = (bce * valid).sum() / valid.sum().clamp(min=1)
@@ -103,7 +148,8 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
     model = RefUNet(args.width, pretrained=args.init_from is None,
-                    corr_grid=args.corr_grid).to(device)
+                    corr_grid=args.corr_grid,
+                    metric_dim=(args.metric_dim if args.rank_weight > 0 else 0)).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
@@ -138,9 +184,17 @@ def main():
             targets = union_targets(batch, device)
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                logits = model(images, references)
+                if args.rank_weight > 0:
+                    logits, image_embedding, reference_embedding = model(
+                        images, references, return_embeddings=True)
+                else:
+                    logits = model(images, references)
                 loss, bce, dice = mask_loss(logits, targets, valid,
                                             args.bce_weight, args.dice_weight)
+                if args.rank_weight > 0:
+                    rank = ranking_loss(image_embedding, reference_embedding,
+                                        batch, device, args.rank_margin)
+                    loss = loss + args.rank_weight * rank
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step(); scheduler.step(); running.append(float(loss))

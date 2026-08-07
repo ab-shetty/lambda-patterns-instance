@@ -69,7 +69,7 @@ class ConditionBlock(nn.Module):
 class RefUNet(nn.Module):
     """Shared ResNet features + multiscale reference-conditioned FPN."""
 
-    def __init__(self, width=128, pretrained=True, corr_grid=0):
+    def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0):
         super().__init__()
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
@@ -93,6 +93,16 @@ class RefUNet(nn.Module):
             nn.Conv2d(width, width, 3, padding=1, bias=False),
             nn.GroupNorm(8, width), nn.GELU(),
             nn.Conv2d(width, 1, 1))
+        # Optional metric head for the auxiliary hard-pair ranking loss. Off by
+        # default, so a model built without it is bit-identical to the baseline.
+        # Fine + coarse rather than coarse alone: the query-model lineage
+        # measured res3+res5 well above res5 only (0.5195 vs 0.4578).
+        self.metric_dim = metric_dim
+        if metric_dim > 0:
+            self.metric_proj = nn.Sequential(
+                nn.Conv2d(channels[1] + channels[3], 256, 1, bias=False),
+                nn.GroupNorm(8, 256), nn.GELU(),
+                nn.Conv2d(256, metric_dim, 1))
 
     def features(self, x):
         x = self.stem(x)
@@ -102,7 +112,21 @@ class RefUNet(nn.Module):
         c4 = self.layer4(c3)
         return c1, c2, c3, c4
 
-    def forward(self, image, reference):
+    def metric_embeddings(self, image_features, reference_features):
+        """Siamese projection of image locations and the reference into one
+        normalised space, so a dot product is a same-material score."""
+        coarse = image_features[3]
+        fine = F.interpolate(image_features[1], size=coarse.shape[-2:],
+                             mode="bilinear", align_corners=False)
+        image_embedding = F.normalize(
+            self.metric_proj(torch.cat([fine, coarse], 1)), dim=1)
+        reference_vector = torch.cat([reference_features[1].mean((-2, -1)),
+                                      reference_features[3].mean((-2, -1))], 1)
+        reference_embedding = F.normalize(
+            self.metric_proj(reference_vector[:, :, None, None])[:, :, 0, 0], dim=1)
+        return image_embedding, reference_embedding
+
+    def forward(self, image, reference, return_embeddings=False):
         image_size = image.shape[-2:]
         image_features = self.features(image)
         reference_features = self.features(reference)
@@ -115,8 +139,11 @@ class RefUNet(nn.Module):
                                     mode="bilinear", align_corners=False)
             pyramid = self.smooth[level](pyramid + conditioned[level])
         logits = self.head(pyramid)
-        return F.interpolate(logits, size=image_size, mode="bilinear",
-                             align_corners=False)
+        out = F.interpolate(logits, size=image_size, mode="bilinear",
+                            align_corners=False)
+        if return_embeddings and self.metric_dim > 0:
+            return (out,) + self.metric_embeddings(image_features, reference_features)
+        return out
 
     def parameter_groups(self, lr, backbone_lr_mult=0.1):
         backbone_modules = (self.stem, self.layer1, self.layer2,

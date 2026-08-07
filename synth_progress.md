@@ -201,6 +201,44 @@ repeat these without a materially new hypothesis; full reasoning is in commit
 | dense correlation `--corr-grid 8` | 0.7179 | monotonic: more matching precision, worse result |
 | `--scale-matched-ref` | 0.6146 | worst change measured; see the warning in `dataset.py` |
 
+## Lever 14: auxiliary hard-pair ranking loss (2026-08-07, one seed)
+
+The query lineage's biggest win (ranking margin 1.0 -> 0.5506) was dropped
+untested when `RefUNet` replaced the query model. Now tested, implemented in
+`ref_unet.py` + `train_refunet.py` and default-off (`--rank-weight 0`):
+
+| arm (seed 31, HF14 peak) | mIoU |
+|---|---:|
+| baseline | 0.6801 |
+| `--rank-weight 0.5 --rank-margin 1.0` | 0.6871 |
+
+**+0.007 is inside the 0.013-0.018 run-to-run sd — null.** Likely because the
+query model *needed* explicit matching to group candidates, whereas `RefUNet`
+predicts the union directly and its conditioning already learns what the union
+loss requires. One seed only; a null here is not proof of no effect.
+
+## Classical template matching is strong but redundant (2026-08-07)
+
+`scripts/hatch_matcher.py` measures drafting parameters (orientation, spacing via
+the distance transform of the paper, density) instead of correlating a filter
+bank. On HF14 it beats the out-of-the-box Gabor probe by a wide margin — AUC
+0.727 -> 0.897, oracle-threshold IoU 0.308 -> 0.505 — so *engineered matching was
+never the weak part; the engineering was*.
+
+It is nonetheless **not worth feeding into the model**. On identical images,
+instances and reference rectangles it correlates *positively* with `RefUNet`
+(+0.45 AUC, +0.65 IoU) and its IoU collapses to 0.252 on `RefUNet`'s worst 13
+selections versus ~0.59 elsewhere: the two fail on the same inputs. An oracle
+that perfectly overrode the 5 selections where `RefUNet` fails and the matcher is
+confident would gain only +0.076.
+
+Three measurements agree that the residual difficulty is intrinsic, not a
+resolution or architecture deficit: 74% of the matcher's false positives are real
+linework a labeller assigned to a different material; no region-recovery scheme
+(ink closing, planar subdivision, oracle ceiling 0.257) can even represent the GT
+regions; and both methods fail together. This is the confusability the generator
+spec deliberately builds in.
+
 Two mechanisms worth remembering:
 
 - **Region identification, not boundary placement, is the binding constraint.**
