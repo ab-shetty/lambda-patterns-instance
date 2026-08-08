@@ -41,6 +41,11 @@ def parse_args():
                    help="Margin the hardest positive must beat the hardest "
                         "negative by. The query lineage preferred 1.0 over 2.0/4.0.")
     p.add_argument("--metric-dim", type=int, default=128)
+    p.add_argument("--anchor", action="store_true",
+                   help="Feed WHERE the user drew as a 4th input plane. The "
+                        "rectangle always lies inside an instance of the target "
+                        "pattern, so it is a guaranteed-positive anchor; only the "
+                        "crop was previously passed in.")
     p.add_argument("--corr-grid", type=int, default=0,
                    help="dense reference correlation: keep the reference as a "
                         "GxG token grid and cosine-match every image location "
@@ -149,7 +154,8 @@ def main():
                             num_workers=0, collate_fn=collate)
     model = RefUNet(args.width, pretrained=args.init_from is None,
                     corr_grid=args.corr_grid,
-                    metric_dim=(args.metric_dim if args.rank_weight > 0 else 0)).to(device)
+                    metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
+                    anchor=args.anchor).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
@@ -184,11 +190,14 @@ def main():
             targets = union_targets(batch, device)
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast("cuda", dtype=torch.bfloat16):
+                ref_boxes = (batch["ref_boxes"].to(device, non_blocking=True)
+                             if args.anchor else None)
                 if args.rank_weight > 0:
                     logits, image_embedding, reference_embedding = model(
-                        images, references, return_embeddings=True)
+                        images, references, ref_box=ref_boxes,
+                        return_embeddings=True)
                 else:
-                    logits = model(images, references)
+                    logits = model(images, references, ref_box=ref_boxes)
                 loss, bce, dice = mask_loss(logits, targets, valid,
                                             args.bce_weight, args.dice_weight)
                 if args.rank_weight > 0:
@@ -208,7 +217,9 @@ def main():
                 valid = batch["pixel_mask"].to(device)[:, None].float()
                 targets = union_targets(batch, device)
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    logits = model(images, references)
+                    logits = model(images, references,
+                                   ref_box=(batch["ref_boxes"].to(device)
+                                            if args.anchor else None))
                     loss, _, _ = mask_loss(logits, targets, valid,
                                            args.bce_weight, args.dice_weight)
                 val_losses.append(float(loss))

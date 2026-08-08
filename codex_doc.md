@@ -1,10 +1,50 @@
 # Handoff
 
-Last updated: 2026-08-06
+Last updated: 2026-08-08
 
 Read `PROJECT_UNDERSTANDING.md` for task semantics and `startup.md` for complete,
 copy-paste reproduction commands, the data-rebuild path, and the full comparison
 table.
+
+## Pick up here (2026-08-08)
+
+**The synthetic half of the mix teaches the wrong task.** Measured, per selection,
+as the share of the target union lying in the connected component that contains
+the user's rectangle:
+
+| pool | share local | single-component targets |
+|---|---:|---:|
+| synthetic 1600 | 0.893 | 84% |
+| real 86 | 0.523 | 29% |
+| generated 28 | 0.551 | 36% |
+| HF14 (eval) | 0.537 | 27% |
+
+Real plans repeat a material in disconnected places; `toparea1600_balanced` mostly
+does not, so for 44% of records the correct answer is "outline the blob you are
+pointing at". Independent evidence that the model exploits this: feeding the
+reference-box location as a 4th input plane (`--anchor`, implemented) *collapsed*
+HF14 from 0.680 to 0.433 with val loss rising — the shortcut is available and the
+model takes it.
+
+**Next experiment, ready to run.** Fixable by selection, not regeneration: of the
+20k pool, ~30% have >=50% of families disconnected and ~15% have all of them
+(~3,000 images, and only 1,600 are needed). Build a selector that requires
+disconnected families, keep the mode quotas, retrain, compare against the
+seed-31 baseline below. Caveat: re-selection trades away area, and area-vs-realism
+selection levers have lost before (`ink-matched` 0.7218, `faint+high-area` 0.7227
+vs 0.7672 on validation).
+
+**Baseline to compare against.** `data/runs/ck_a10_mix3652_seed31/epoch_4.pth`,
+**0.6801** on HF14, one seed. The documented recipe runs unchanged on a 23GB A10
+(batch 8 at 1280 peaks at 19.3GiB; use `--num-workers 12`), ~55 min for the full
+two-stage run. Single-seed screening only — treat anything under ~0.03 as noise.
+
+**Also worth knowing.** Image 14 is 9 of 52 selections (17% of the metric) and
+averages 0.291; fixing it alone would give +0.105. Its failures are wrong-region,
+not fuzzy-boundary, and are *not* explained by resolution or aspect ratio.
+Two levers were closed this session — see `synth_progress.md`: the auxiliary
+ranking loss (null, +0.007) and classical template matching (`scripts/hatch_matcher.py`
+beats the Gabor probe by a wide margin but is redundant with `RefUNet`).
 
 ## Read this first
 

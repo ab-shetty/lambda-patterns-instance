@@ -322,10 +322,18 @@ class InstanceSegDataset(Dataset):
                                                   self.max_patch, rng=ref_rng)
             ref_patch = image[by:by + bh, bx:bx + bw].copy()
             ref_match = np.array([1.0 if c == target_cat else 0.0 for c in cats], np.float32)
+            # WHERE the user drew is real product input and was being discarded:
+            # only the crop survived. The rectangle is sampled inside instance
+            # `ref_idx`, and the target union always contains that instance, so
+            # these pixels are guaranteed positives -- an anchor the model can
+            # grow from instead of having to locate the pattern from scratch.
+            ref_box_mask = np.zeros((h0, w0), np.uint8)
+            ref_box_mask[by:by + bh, bx:bx + bw] = 1
         else:
             target_cat = None
             ref_patch = image[:min(h0, 224), :min(w0, 224)].copy()
             ref_match = np.zeros((0,), np.float32)
+            ref_box_mask = np.zeros((h0, w0), np.uint8)
 
         # Aspect-preserving resize of image + masks.
         scale = self.image_max_size / max(h0, w0)
@@ -336,6 +344,9 @@ class InstanceSegDataset(Dataset):
                                   for m in masks], 0)
         else:
             masks_arr = np.zeros((0, nh, nw), np.uint8)
+        # Same interpolation and geometry as the instance masks, so the anchor
+        # stays pixel-aligned with the targets it is supposed to sit inside.
+        ref_box_r = cv2.resize(ref_box_mask, (nw, nh), interpolation=cv2.INTER_NEAREST)
 
         # Reference patch resize.
         #
@@ -376,6 +387,10 @@ class InstanceSegDataset(Dataset):
             image_r = _apply_fliprot_image(image_r, hflip, vflip, k)
             masks_arr = _apply_fliprot_masks(masks_arr, hflip, vflip, k)
             ref_r = _apply_fliprot_image(ref_r, hflip, vflip, k)
+            # The anchor is a spatial map, so it takes the SAME transform as the
+            # image and masks. Leaving it out would point the model at a mirrored
+            # location and teach it the anchor is noise.
+            ref_box_r = _apply_fliprot_masks(ref_box_r[None], hflip, vflip, k)[0]
 
             if self.realism_aug:
                 # Train-time only: push synth toward real PDF-export appearance.
@@ -402,6 +417,8 @@ class InstanceSegDataset(Dataset):
                              for m in masks_arr], 0)
                     else:
                         masks_arr = np.zeros((0, new_h, new_w), np.uint8)
+                    ref_box_r = cv2.resize(ref_box_r, (new_w, new_h),
+                                           interpolation=cv2.INTER_NEAREST)
                     nh, nw = new_h, new_w
                 # (Random crop of the scene was tested here — div@ep10 +0.114, within
                 # noise of DR-alone +0.101, lowered real too — so not kept.)
@@ -427,6 +444,7 @@ class InstanceSegDataset(Dataset):
             "masks": torch.from_numpy(masks_arr).to(torch.uint8),   # [G, nh, nw]
             "ref_match": torch.from_numpy(ref_match),               # [G]
             "reference": _normalize_chw(ref_r),                     # [3, R, R]
+            "ref_box": torch.from_numpy(ref_box_r).float()[None],   # [1, nh, nw]
         }
 
 
@@ -444,6 +462,7 @@ def collate_fn(batch, size_divisible=32):
     B = len(batch)
 
     images = torch.zeros(B, 3, maxH, maxW)
+    ref_boxes = torch.zeros(B, 1, maxH, maxW)
     pixel_mask = torch.zeros(B, maxH, maxW, dtype=torch.bool)
     references = torch.stack([b["reference"] for b in batch], 0)
 
@@ -451,6 +470,7 @@ def collate_fn(batch, size_divisible=32):
     for b, sample in enumerate(batch):
         _, h, w = sample["image"].shape
         images[b, :, :h, :w] = sample["image"]
+        ref_boxes[b, :, :h, :w] = sample["ref_box"]
         pixel_mask[b, :h, :w] = True
 
         g = sample["masks"].shape[0]
@@ -463,7 +483,7 @@ def collate_fn(batch, size_divisible=32):
             "ref_match": sample["ref_match"],                 # [G]
         })
 
-    return {"images": images, "pixel_mask": pixel_mask,
+    return {"images": images, "pixel_mask": pixel_mask, "ref_boxes": ref_boxes,
             "references": references, "targets": targets}
 
 

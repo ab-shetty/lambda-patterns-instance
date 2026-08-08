@@ -69,12 +69,28 @@ class ConditionBlock(nn.Module):
 class RefUNet(nn.Module):
     """Shared ResNet features + multiscale reference-conditioned FPN."""
 
-    def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0):
+    def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0,
+                 anchor=False):
         super().__init__()
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
         self.stem = nn.Sequential(backbone.conv1, backbone.bn1,
                                   backbone.relu, backbone.maxpool)
+        # Anchor channel: WHERE the user drew. The rectangle is always inside an
+        # instance of the target pattern, so those pixels are guaranteed
+        # positives -- but only the crop was ever passed in, so the model had to
+        # re-locate the pattern from scratch. The extra input plane is
+        # zero-initialised, making the model bit-identical to the baseline at
+        # step 0 and leaving it free to learn how much to trust the anchor.
+        self.anchor = anchor
+        if anchor:
+            old = self.stem[0]
+            stem_conv = nn.Conv2d(4, old.out_channels, old.kernel_size,
+                                  stride=old.stride, padding=old.padding, bias=False)
+            with torch.no_grad():
+                stem_conv.weight[:, :3] = old.weight
+                stem_conv.weight[:, 3:].zero_()
+            self.stem[0] = stem_conv
         self.layer1, self.layer2 = backbone.layer1, backbone.layer2
         self.layer3, self.layer4 = backbone.layer3, backbone.layer4
         channels = (256, 512, 1024, 2048)
@@ -126,8 +142,18 @@ class RefUNet(nn.Module):
             self.metric_proj(reference_vector[:, :, None, None])[:, :, 0, 0], dim=1)
         return image_embedding, reference_embedding
 
-    def forward(self, image, reference, return_embeddings=False):
+    def forward(self, image, reference, ref_box=None, return_embeddings=False):
         image_size = image.shape[-2:]
+        if self.anchor:
+            if ref_box is None:
+                ref_box = image.new_zeros((image.shape[0], 1) + tuple(image_size))
+            image = torch.cat([image, ref_box], 1)
+            # The reference crop IS the rectangle, so its anchor plane is all-ones
+            # -- the same siamese backbone then sees a consistent meaning for the
+            # channel on both inputs.
+            reference = torch.cat(
+                [reference, reference.new_ones(reference.shape[0], 1,
+                                               *reference.shape[-2:])], 1)
         image_features = self.features(image)
         reference_features = self.features(reference)
         reference_vectors = [f.mean((-2, -1)) for f in reference_features]

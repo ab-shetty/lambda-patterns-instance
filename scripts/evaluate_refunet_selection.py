@@ -61,9 +61,22 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                     crop = cv2.resize(crop, (ref_size, ref_size),
                                       interpolation=cv2.INTER_LINEAR)
                 reference = _normalize_chw(crop).unsqueeze(0).to(device)
+                # The anchor plane must be built the same way here as in the
+                # dataset, or an anchored model is evaluated without the input it
+                # was trained on. Built at native size, then resized with the
+                # image so it stays pixel-aligned.
+                ref_box = None
+                if getattr(model, "anchor", False):
+                    box_native = np.zeros((h0, w0), np.uint8)
+                    box_native[y:y + h, x:x + w] = 1
+                    ref_box = torch.from_numpy(
+                        cv2.resize(box_native, (nw, nh),
+                                   interpolation=cv2.INTER_NEAREST)
+                    ).float()[None, None].to(device)
                 with torch.autocast("cuda", dtype=torch.bfloat16,
                                     enabled=device.type == "cuda"):
-                    probability = model(image_tensor, reference).sigmoid()[0, 0]
+                    probability = model(image_tensor, reference,
+                                        ref_box=ref_box).sigmoid()[0, 0]
                 pred_small = probability > mask_thresh
                 prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
                                         (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
