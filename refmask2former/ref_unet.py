@@ -70,7 +70,7 @@ class RefUNet(nn.Module):
     """Shared ResNet features + multiscale reference-conditioned FPN."""
 
     def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0,
-                 anchor=False, anchor_dropout=0.0, anchor_ref_plane=1.0):
+                 anchor=False, anchor_dropout=0.0, anchor_ref_plane=0.0):
         super().__init__()
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
@@ -100,7 +100,11 @@ class RefUNet(nn.Module):
         # the reference features themselves -- the observed failure is a model
         # whose matching pathway is still fully active (reference sensitivity
         # 0.92) but whose masks are much worse, which is what that would look
-        # like. 0.0 matches the image plane's dominant value instead.
+        # like. 0.0 matches the image plane's dominant value instead, and is
+        # the default: the 1.0 path costs 0.069 HF14 and has no measured use, so
+        # it is kept only so an older anchored checkpoint still reloads exactly
+        # (`load_refunet` reads this value from the checkpoint's saved args, not
+        # from this default).
         self.anchor_ref_plane = float(anchor_ref_plane)
         if anchor:
             old = self.stem[0]

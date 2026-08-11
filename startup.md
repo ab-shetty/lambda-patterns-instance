@@ -226,6 +226,24 @@ PYTHONPATH=. python3 scripts/train_refunet.py \
 `--mask-thresh 0.35` makes the per-epoch diagnostic directly comparable to the
 reported result. `scripts/run_fixedsampler.sh` runs all three seeds.
 
+**This recipe is deliberately anchor-free — do not add `--anchor`.** Feeding the
+user's rectangle in as a 4th input plane sounds like free information and is
+not: measured 2026-08-10 it is neutral-to-slightly-negative once it works at all
+(mix3652 −0.014 HF14; synth-only −0.055 and −0.040 on validation, where every
+anchored run scored below every un-anchored one). It was previously recorded as
+*catastrophic* (0.680 → 0.433, read as the model taking a shortcut); that was an
+input-statistics bug in the reference plane, not shortcut-taking, and the 0.433
+does not reproduce. `--anchor-ref-plane` now defaults to `0.0`, which is the
+fixed behaviour, so an anchored run is merely useless rather than harmful — but
+the recommended recipe still omits `--anchor` entirely. `codex_doc.md` has the
+probe evidence. The one real effect is that a working anchor collapses
+run-to-run variance (HF14 sd 0.0051 vs 0.0229) without moving the mean, which
+says the remaining error is in appearance matching, not localisation.
+
+**Screening budget.** Measured run-to-run sd on `mix3652` is **0.0262** (seeds
+7/31/99), so a single-seed gap under ~0.05 carries no information. A +0.015
+single-seed "win" on this recipe was retracted at 3 seeds on 2026-08-10.
+
 Throughput is ~25 ms per record per epoch: ~85–92 s/epoch on 3,652 records, so a
 full 9-epoch run is ~14 minutes and a 3-seed comparison ~45 minutes. Budget
 seeds by default.

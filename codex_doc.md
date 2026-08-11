@@ -181,6 +181,15 @@ One real secondary effect: the anchor **collapses run-to-run variance** (HF14 sd
 supplies reliable localization while the remaining error sits entirely in
 appearance matching — which is where the score is lost and where effort belongs.
 
+`--anchor-ref-plane` now **defaults to 0.0**, the fixed behaviour, so enabling
+`--anchor` no longer silently reproduces the bug. Pass `1.0` only to reproduce
+it. Checkpoints saved before the flip reload unchanged — `load_refunet` reads the
+value from the checkpoint's own args, not from the default.
+
+The recommended recipe in `startup.md` still omits `--anchor` entirely, and
+should: fixed, it is neutral-to-slightly-negative. Do not read this section as an
+improvement to adopt.
+
 Unresolved: `--anchor-dropout` has never been tested cleanly, because it was only
 ever run on top of the bug. Retest it against `--anchor-ref-plane 0.0` if the
 anchor turns out to need regularizing at all.

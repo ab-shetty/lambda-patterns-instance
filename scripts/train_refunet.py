@@ -51,12 +51,14 @@ def parse_args():
                         "hidden, forcing the model to stay able to solve the "
                         "task from the reference crop alone instead of leaning "
                         "on the anchor. Requires --anchor. 0 = off.")
-    p.add_argument("--anchor-ref-plane", type=float, default=1.0,
+    p.add_argument("--anchor-ref-plane", type=float, default=0.0,
                    help="Value of the anchor channel on the REFERENCE branch. "
-                        "1.0 is the original ('this crop is the target'); 0.0 "
-                        "removes the statistics mismatch that constant channel "
-                        "creates against the sparse box the image branch sees "
-                        "through the same siamese filters.")
+                        "0.0 (default) matches the mostly-zero plane the image "
+                        "branch sees, so the shared siamese filters get "
+                        "consistent statistics. 1.0 was the original and is a "
+                        "bug: a constant plane on one branch against a sparse "
+                        "box on the other corrupts the reference features and "
+                        "costs 0.069 HF14. Only set 1.0 to reproduce that.")
     p.add_argument("--corr-grid", type=int, default=0,
                    help="dense reference correlation: keep the reference as a "
                         "GxG token grid and cosine-match every image location "
