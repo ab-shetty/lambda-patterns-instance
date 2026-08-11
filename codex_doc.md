@@ -193,16 +193,7 @@ clean failure is thin wall poche in dense floor plans (image 12), plausibly a
 
 ## Evaluation rules
 
-- HF `real-world-test` images are evaluation-only.
-- Fixed indices: `12,16,27,7,11,25,23,1,18,2,0,3,14,24`; 52 selections.
-- Report reference-conditioned union IoU only, naming the sampler and the seed
-  count.
-- Do not report the legacy training `real_iou`, per-GT best coverage, an oracle,
-  class-agnostic Mask R-CNN scores, or checkpoint ensembles as product mIoU.
-- Threshold 0.35 is fixed. Do not sweep it or the inference resolution against
-  HF14 — that is fitting the acceptance set.
-- HF14 images 24, 25, 27 carry human highlighter markup from real markup PDFs.
-  That is the real input distribution; keep them in.
+In `startup.md` — single copy, so the two cannot drift.
 
 ## Generated artifacts
 

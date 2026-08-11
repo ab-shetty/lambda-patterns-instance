@@ -2,17 +2,15 @@
 
 ## 2026-08-10 — anchor plane bug found; disconnection, volume and ratio all null
 
-All synth-only arms are 1,600 synthetic records; mix arms are the 3,652 recipe.
 Epochs chosen on the validation split (`scripts/select_epoch_on_val.py`), never
-on HF14. **Measured run-to-run sd on mix3652: 0.0262** (seeds 7/31/99) — single
-seed gaps under ~0.05 are noise.
+on HF14. **Run-to-run sd on mix3652 is 0.0262** (seeds 7/31/99): single-seed gaps
+under ~0.05 are noise. Nothing here raised real IoU.
 
-### The `--anchor` collapse was an input-statistics bug
+### The `--anchor` collapse was an input-statistics bug, not a shortcut
 
 The anchor channel was 1.0 across the whole reference crop while the image branch
-saw a sparse rectangle in a field of zeros, through the same siamese stem. Those
-filters cannot serve both and the reference features were the casualty.
-`--anchor-ref-plane 0.0` fixes it (now the default).
+saw a sparse rectangle in a field of zeros — same siamese stem, so the reference
+features were the casualty. `--anchor-ref-plane 0.0` fixes it (now default).
 
 | mix3652, seed 31 | val | HF14 | val loss ep0→ep8 |
 |---|---:|---:|---|
@@ -20,65 +18,58 @@ filters cannot serve both and the reference features were the casualty.
 | `--anchor` (plane 1.0) | 0.6332 | 0.6088 | 1.13 → **0.70, rising** |
 | `--anchor --anchor-ref-plane 0.0` | 0.7305 | 0.6777 | 0.97 → **0.32** |
 
-The documented 0.433 did **not** reproduce; the bug costs 0.083 here, not 0.247.
+The documented 0.433 did **not** reproduce — the bug costs 0.083 here, not 0.247.
 Do not quote 0.433 without re-deriving it.
 
-`scripts/anchor_vs_reference_probe.py` feeds contradictory inputs — reference
-crop from family B, anchor rectangle in family A — and reports which the output
-obeys, plus `pred_local`, the share of the prediction inside the anchor's own
-connected component:
+`scripts/anchor_vs_reference_probe.py` feeds contradictory inputs (reference crop
+from family B, anchor in family A) and reports which the output obeys, plus
+`pred_local`, the share of the prediction inside the anchor's own component:
 
-| model (synth-only, seed 7) | honest | pred_local | gt_local | follow_anchor | follow_ref | ref_sens |
+| synth-only, seed 7 | honest | pred_local | gt_local | follow_anchor | follow_ref | ref_sens |
 |---|---:|---:|---:|---:|---:|---:|
 | disc, no anchor | 0.611 | 0.193 | 0.266 | 0.036 | 0.604 | 0.934 |
-| conn, no anchor | 0.494 | 0.217 | 0.266 | 0.016 | 0.580 | 0.969 |
 | disc `--anchor` | 0.276 | 0.282 | 0.266 | 0.028 | 0.255 | 0.918 |
 | **conn `--anchor`** | 0.306 | 0.331 | 0.266 | 0.064 | 0.375 | 0.795 |
 | disc `--anchor` + dropout 0.5 | 0.583 | 0.217 | 0.266 | 0.019 | 0.597 | 0.979 |
 | disc `--anchor-ref-plane 0.0` | 0.534 | 0.246 | 0.266 | 0.032 | 0.569 | 0.962 |
 
-A shortcutting model would show `pred_local` near 1.0 and `ref_sens` near 0. It
+Shortcutting would mean `pred_local` near 1.0 and `ref_sens` near 0. Instead it
 sits at ground-truth localness with the reference pathway fully causal — damaged,
 not shortcutting. The `conn` row is decisive: that is the pool where the shortcut
-IS on offer and it still is not taken. The dropout row corroborates by accident —
+IS available and it still is not taken. The dropout row corroborates by accident:
 `--anchor-dropout` zeroes the reference plane too, so it applies the fix to half
-of training and recovers most of the loss.
+of training and recovers most of the loss. It has therefore never been tested
+cleanly.
 
 ### A working anchor still does not help
 
-| setting | no anchor (val / HF14) | + fixed anchor | effect |
-|---|---|---|---|
-| synth-only disc, 3 seeds | 0.6260 / 0.6090 | 0.5710 / 0.5923 | val −0.055 |
-| synth-only conn, 3 seeds | 0.6124 / 0.6190 | 0.5728 / 0.6218 | val −0.040 |
-| mix3652, 1 seed | 0.7466 / 0.6916 | 0.7305 / 0.6777 | val −0.016 |
+| setting | no anchor (val / HF14) | + fixed anchor | val effect |
+|---|---|---|---:|
+| synth-only disc, 3 seeds | 0.6260 / 0.6090 | 0.5710 / 0.5923 | −0.055 |
+| synth-only conn, 3 seeds | 0.6124 / 0.6190 | 0.5728 / 0.6218 | −0.040 |
+| mix3652, 1 seed | 0.7466 / 0.6916 | 0.7305 / 0.6777 | −0.016 |
 
-Every anchored run scores below every un-anchored run on validation. The one real
-effect: it collapses variance (HF14 sd 0.0051 vs 0.0229 on conn) without moving
-the mean — localisation is not where the error is.
+Every anchored run scored below every un-anchored run on validation. The one real
+effect: variance collapses (HF14 sd 0.0051 vs 0.0229) without the mean moving —
+so localisation is not where the error is.
 
-### Disconnected synthetic data: null
+### Disconnected synthetic data: null (3 seeds, mode- and area-matched)
 
-`share_local` halved with mode mix and labelled-area distribution held identical.
+conn `share_local` 0.821 → HF14 0.6190 ± 0.0229; disc 0.446 → 0.6090 ± 0.0324.
 
-| arm | share_local | HF14 (3 seeds) |
-|---|---:|---:|
-| conn (control) | 0.821 | 0.6190 ± 0.0229 |
-| disc | 0.446 | 0.6090 ± 0.0324 |
-
-Two things the plan got wrong. **Mode quotas are unfillable**: disconnection is
-99.8% of freeform but 10.9% of elevation and 5.3% of roof_plan, so only 3 of the
-2,833 all-disconnected images are elevations against a quota of 889 — any such
-pool is ~100% floor plans, i.e. a mode swap, and floorplan-heavy synth was
-already retracted (`385f3cb` → `1cbaeea`). **Elevations are the whole gap and
-selection cannot fix them**: synth elevation 0.975 vs real elevation-like 0.492;
-synth freeform 0.505 vs real plan-like 0.280; synth roof_plan 0.973. Elevations
-are 57% of the real set. Generation can: the current generator already emits
-elevations at 0.629 (the 20k parquet came from an older recipe) and the new
-`--elev-repeat-prob` reaches 0.584.
+Two things the plan got wrong. **Mode quotas are unfillable** — disconnection is
+99.8% of freeform but 10.9% of elevation, so only 3 of the 2,833 all-disconnected
+images are elevations against a quota of 889; any such pool is ~100% floor plans,
+a mode swap, and floorplan-heavy synth was already retracted (`385f3cb` →
+`1cbaeea`). **Elevations are the whole gap and selection cannot fix them** —
+synth elevation `share_local` 0.975 vs real elevation-like 0.492 (freeform 0.505
+vs 0.280; roof_plan 0.973), and elevations are 57% of the real set. Generation
+can: the current generator already emits elevations at 0.629 (the 20k parquet
+came from an older recipe) and `--elev-repeat-prob` reaches 0.584.
 
 ### Volume and mix ratio: null
 
-All seed 31. Nothing beat the 3,652 baseline anywhere.
+All seed 31; nothing beat the 3,652 baseline anywhere.
 
 | arm | records | real % | real-ish | val | HF14 |
 |---|---:|---:|---:|---:|---:|
@@ -89,31 +80,23 @@ All seed 31. Nothing beat the 3,652 baseline anywhere.
 | realaug2x | 5,704 | 72% | 4,104 | 0.7548 | 0.7069 |
 | synth400 | 2,452 | 84% | 2,052 | 0.7538 | 0.6789 |
 
-`realaug2x` looked like a win and **is retracted**: 3 seeds give 0.6767 ± 0.0262
-against the documented 0.6860 ± 0.0175. Seeds 7 and 99 land at ~0.661; seed 31
-was the outlier. Two seed-31 follow-ups confirm the seed rather than the config —
-a 15-epoch schedule gives 0.7004, and `realaug4x` (9,808 records, 8,208 real-ish)
-gives 0.7005. Every seed-31 run sits at ~0.70 regardless of the data.
-
-Read the table with the 0.0262 sd in mind: each row is one seed. Two conclusions
-drawn from it before the seeds returned — "real-derived record count is the
-lever" (realaug2x vs synth800, +0.042) and "real fraction is monotone on
-validation" — are **not supported**, both inside noise. The defensible statement
-is the negative: neither volume nor ratio moves real IoU. Consistent with
-`startup.md`'s standing conclusion that more *distinct labelled real sources* is
-the binding constraint — re-augmenting the same 114 sources 18× → 36× → 72×
-buys nothing.
+`realaug2x` looked like a win and **is retracted**: 0.6767 ± 0.0262 at 3 seeds vs
+the documented 0.6860 ± 0.0175. Seeds 7/99 land at ~0.661; seed 31 was the
+outlier, and two seed-31 follow-ups confirm the seed not the config (15-epoch
+schedule 0.7004; `realaug4x` at 9,808 records 0.7005). Each row above is one
+seed, so two conclusions drawn before the seeds returned — "real-derived record
+count is the lever" (+0.042) and "real fraction is monotone on validation" — are
+**not supported**. Consistent with more *distinct labelled real sources* being
+the binding constraint: re-augmenting the same 114 sources 18× → 36× → 72× buys
+nothing.
 
 ### New tooling
 
 `connectivity_stats.py` (share_local; needs full resolution — at 1024 nearby
 components merge), `select_disconnected_local.py`, `select_by_connectivity.py`,
-`anchor_vs_reference_probe.py`, `select_epoch_on_val.py`. Generator gains
+`anchor_vs_reference_probe.py`, `select_epoch_on_val.py`, generator
 `--elev-repeat-prob` (default 0). Also fixed: `load_refunet` never passed
-`anchor`, so an anchored checkpoint could not be loaded outside training.
-
-
-Last updated: 2026-08-06
+`anchor`, so anchored checkpoints could not be loaded outside training.
 
 ## Status of the pre-2026-08-06 material below
 

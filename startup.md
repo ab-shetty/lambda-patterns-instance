@@ -226,23 +226,16 @@ PYTHONPATH=. python3 scripts/train_refunet.py \
 `--mask-thresh 0.35` makes the per-epoch diagnostic directly comparable to the
 reported result. `scripts/run_fixedsampler.sh` runs all three seeds.
 
-**This recipe is deliberately anchor-free — do not add `--anchor`.** Feeding the
-user's rectangle in as a 4th input plane sounds like free information and is
-not: measured 2026-08-10 it is neutral-to-slightly-negative once it works at all
-(mix3652 −0.014 HF14; synth-only −0.055 and −0.040 on validation, where every
-anchored run scored below every un-anchored one). It was previously recorded as
-*catastrophic* (0.680 → 0.433, read as the model taking a shortcut); that was an
-input-statistics bug in the reference plane, not shortcut-taking, and the 0.433
-does not reproduce. `--anchor-ref-plane` now defaults to `0.0`, which is the
-fixed behaviour, so an anchored run is merely useless rather than harmful — but
-the recommended recipe still omits `--anchor` entirely. `codex_doc.md` has the
-probe evidence. The one real effect is that a working anchor collapses
-run-to-run variance (HF14 sd 0.0051 vs 0.0229) without moving the mean, which
-says the remaining error is in appearance matching, not localisation.
+**Deliberately anchor-free — do not add `--anchor`.** Fixed, it is
+neutral-to-slightly-negative (mix3652 −0.014 HF14; synth-only −0.055 / −0.040 on
+validation). Its recorded 0.680 → 0.433 "collapse" was a reference-plane bug, not
+a shortcut, and does not reproduce; `--anchor-ref-plane` now defaults to the fixed
+value, so an anchored run is merely useless rather than harmful. Evidence in
+`synth_progress.md`.
 
-**Screening budget.** Measured run-to-run sd on `mix3652` is **0.0262** (seeds
-7/31/99), so a single-seed gap under ~0.05 carries no information. A +0.015
-single-seed "win" on this recipe was retracted at 3 seeds on 2026-08-10.
+**Screening budget.** Run-to-run sd on `mix3652` is **0.0262** (seeds 7/31/99),
+so single-seed gaps under ~0.05 mean nothing. A +0.015 single-seed "win" was
+retracted at 3 seeds on 2026-08-10.
 
 Throughput is ~25 ms per record per epoch: ~85–92 s/epoch on 3,652 records, so a
 full 9-epoch run is ~14 minutes and a 3-seed comparison ~45 minutes. Budget
@@ -273,29 +266,21 @@ IoU so failures sort first, and writes `manifest.csv` + `summary.txt`.
 
 ## The reference-box fix
 
-`sample_reference_box` treated `min_size` (128px) as an inviolable floor while
-never computing whether a box that large could fit. Two failure modes followed:
+`sample_reference_box` treated `min_size` (128px) as a floor without checking a
+box that large could fit, so thin regions exhausted all 450 attempts and fell
+through to an unchecked `centroid ± 16` box. On a ring-shaped mask — a wall with
+a window punched out — that centroid sits **in the hole**, so the crop showed
+none of the pattern, then upscaled 7× to 224px.
 
-- regions thinner than 128px could never yield a valid box at all;
-- regions where only a sliver of the sampled size range fit (e.g. a largest
-  inscribed square of 135px while sizes were drawn over 128–254) almost never
-  found it.
+Incidence before the fix: **57%** of real-plan crops and **36%** of generated-plan
+crops lay partly or entirely outside their own mask, but **0%** of synthetic ones
+(those images are 2–5k px wide, so 128px boxes fit trivially). That is why it hid
+— it only bit the real data.
 
-Either way all 450 attempts failed and the function fell through to an unchecked
-`centroid ± 16` 32×32 box. On a ring-shaped mask — a wall with a window punched
-out — that centroid sits **in the hole**, so the reference crop showed none of
-the pattern, then got upscaled 7× to 224px.
-
-Measured incidence before the fix: **57%** of real-plan reference crops and
-**36%** of generated-plan crops were partly or entirely outside their own mask;
-**0%** of synthetic ones were, because those images are 2–5k px wide so 128px
-boxes fit trivially. That is why it hid for so long — it only bit the real data.
-
-The fix computes a Chebyshev `cv2.distanceTransform`, which gives the half-width
-of the largest square that fits at every pixel. Size is drawn from what actually
-fits, the centre only from pixels deep enough to hold it, and sides are odd so
-the box is symmetric about its centre. `min_size` is now a preference.
-Containment is guaranteed and asserted across all pools.
+The fix uses a Chebyshev `cv2.distanceTransform` for the largest square that fits
+at every pixel: size is drawn from what actually fits, the centre only from
+pixels deep enough to hold it, sides odd so the box is symmetric. `min_size` is
+now a preference; containment is asserted across all pools.
 
 Effect on HF14 (`mix3652`, 3 seeds): **0.6331 → 0.6860 (+0.053, t=4.18,
 p=0.014)**, with complete separation between arms. Selections scoring below 0.25
@@ -331,20 +316,19 @@ query model 0.5886, synth+Roboflow `RefUNet` 0.6127.
 
 ### What the comparisons establish
 
-- **The 28 generated plans are worth +0.033** on top of the full mix (t=2.94,
-  p=0.043, complete separation) for a 1.6% increase in records.
-- **Per source, a generated plan ≈ a real plan.** Count-matched at 28 unique
-  sources, generated scored 0.2608 and real 0.2777 — a gap well inside the
-  ~0.05 run-to-run spread of the small pools.
-- **Resolution is worth ~0.032**: the same 28 generated plans downscaled to a
-  640 long side scored 0.2330 versus 0.2650 native.
+- **The 28 generated plans are worth +0.033** on the full mix (t=2.94, p=0.043)
+  for a 1.6% increase in records.
+- **Per source, a generated plan ≈ a real plan** (0.2608 vs 0.2777 count-matched
+  at 28 sources — inside the ~0.05 spread of small pools).
+- **Resolution is worth ~0.032** (the same 28 at 640 long side: 0.2330 vs 0.2650).
 - **Count dominates**: 28 → 86 real sources buys +0.073.
-- Substituting the HF 20k synthetic source cost ~0.006 (`mix3148` 0.6001 mean vs
-  the historical 0.6127 single run), so the irrecoverable pools are not a loss.
+- The HF 20k synthetic substitution cost ~0.006, so the irrecoverable pools are
+  not a loss.
 
-Practical consequence for future data work: generate more, and generate large.
-Per-image value matches real plans, and resolution is a property you control at
-generation time but can never retrofit onto the 640px scraped pool.
+So: generate more, and generate large. Per-image value matches real plans, and
+resolution is a free choice at generation time that can never be retrofitted onto
+the 640px scraped pool. Adding *records* without adding sources does nothing —
+see the 2026-08-10 volume/ratio nulls in `synth_progress.md`.
 
 ## Evaluation rules
 
