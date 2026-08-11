@@ -146,6 +146,44 @@ number. `scripts/reference_quality_probe.py` shows unrepresentative crops
 usually score FINE (the least representative crop on HF14 scores 0.980), so this
 is not systematic.
 
+### Rebuilding what these findings used
+
+Nothing under `data/` survives a clone. Every number above came from
+`data/runs/ck_mix3652_noanchor_s31/epoch_7.pth` — the `noanchor` arm of
+`run_mix_planefix.sh`, i.e. the standard `startup.md` recipe at seed 31. Build
+`data/mixed/toparea1600_rf1548_gen504` per `startup.md`, then `./run_mix_planefix.sh`.
+
+The pools the ablations used, none of which `startup.md` covers:
+
+```bash
+TILES=~/.cache/huggingface/hub/datasets--abshetty--floz-assets/snapshots/*/reference_tiles_curated
+# disc / conn: one elevation pool split by connectivity, area-matched
+python3 generate_synthetic_v5.py --n 4000 --seed 31031 --tiles $TILES --workers 64 \
+  --mode-weights 100,0,0 --elev-repeat-prob 0.5 --out data/synthetic/elevpool4000
+PYTHONPATH=. python3 scripts/select_by_connectivity.py --source data/synthetic/elevpool4000 \
+  --out-low data/synthetic/elev889_disc --out-high data/synthetic/elev889_conn --n 889
+python3 scripts/select_toparea_local.py --sources data/synthetic/hf20k \
+  --out data/synthetic/rest711 --n 711 --mode-quotas roof_plan=540,freeform=171
+for A in disc conn; do python3 scripts/merge_local_datasets.py \
+  --sources data/synthetic/elev889_$A data/synthetic/rest711 \
+  --out data/synthetic/mix1600_$A; done          # then ./run_disc_ablation.sh
+
+# volume / ratio: scale the mode quotas, keep the real half fixed
+python3 scripts/select_toparea_local.py --sources data/synthetic/hf20k \
+  --out data/synthetic/toparea3200_balanced --n 3200 \
+  --mode-quotas elevation=1778,roof_plan=1080,freeform=342      # 400/800/6400 scale likewise
+python3 scripts/merge_local_datasets.py --sources data/synthetic/toparea3200_balanced \
+  data/roboflow/floz-real-pool-v2-strong18 data/roboflow/floz-genreal-v1-strong18 \
+  --out data/mixed/toparea3200_rf1548_gen504   # then ./run_volume_scaling.sh, ./run_ratio_scaling.sh
+
+# realaug2x / 4x: same 114 sources, more offline variants (--aug-per-scene 35 / 71)
+```
+
+Visual audits regenerate with `scripts/visualize_refunet_selection.py --indices 7,14`;
+per-image and per-family numbers with `faintness_probe.py`, `reference_quality_probe.py`,
+`anchor_vs_reference_probe.py` and `connectivity_stats.py`. Epochs for every
+comparison were chosen with `select_epoch_on_val.py`, never from a training log.
+
 ### New tooling
 
 `connectivity_stats.py` (share_local; needs full resolution — at 1024 nearby

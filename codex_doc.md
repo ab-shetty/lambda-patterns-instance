@@ -208,7 +208,10 @@ In `startup.md` — single copy, so the two cannot drift.
 
 ## Generated artifacts
 
-Datasets, checkpoints, logs, and evaluation JSON live under git-ignored `data/`
-and `logs*`. Preserve them between VMs for byte-identical artifacts, or
-regenerate with `startup.md`. Source and documentation are committed;
-credentials are never stored in the repo.
+**A clone has none of this.** Datasets, checkpoints, logs and evaluation JSON
+live under git-ignored `data/` and `logs*`, so every `data/...` path quoted in
+these docs is a provenance record, not a file you have. Preserve them between VMs
+for byte-identical artifacts, or rebuild: `startup.md` covers the headline recipe
+and `synth_progress.md` ("Rebuilding what these findings used") covers the
+ablation pools, which `startup.md` does not. Source, scripts and documentation
+are committed; credentials are never stored in the repo.
