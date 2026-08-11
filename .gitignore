@@ -42,3 +42,6 @@ events.out.tfevents.*
 # Regenerable experiment artifacts (conclusions live in synth_progress.md)
 *.log
 review_pairs/*/
+
+# Visual audits are regenerable; this branch keeps them under gitignored data/
+review_hf14/

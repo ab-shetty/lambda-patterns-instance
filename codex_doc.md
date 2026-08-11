@@ -39,6 +39,17 @@ boundaries. Consistent with more distinct labelled real sources being the
 binding constraint — re-augmenting the same 114 sources 18× → 36× → 72× buys
 nothing.
 
+**Pick up here: confusable materials.** Every image scoring under 0.65 in either
+split is multi-family, single-family images all score 0.92+, and the worst
+multi-family image in each split is the one holding a near-duplicate pair
+(HF14 img 14, similarity 0.908 → IoU 0.246; validation img 13, 0.886 → 0.385;
+corr −0.709 / −0.250, so necessary but not sufficient — img 19 pairs at 0.844 and
+still scores 0.915). Synthetic sheets have never contained such a pair, because
+`generate_synthetic_v5.py` picks distinct tiles per family by construction, so
+generating confusable pairs is the untried lever; measure with the pairwise-family
+probe in `synth_progress.md` (2026-08-10) and note the background-similarity
+variant of this did **not** replicate.
+
 Unresolved: `--anchor-dropout` was only ever run on top of the bug, so it has
 never been tested cleanly.
 

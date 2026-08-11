@@ -90,6 +90,62 @@ count is the lever" (+0.042) and "real fraction is monotone on validation" — a
 the binding constraint: re-augmenting the same 114 sources 18× → 36× → 72× buys
 nothing.
 
+### Confusable materials are where the score is lost
+
+Pairwise cosine similarity between families (ImageNet ResNet50 on 64px patches
+sampled inside each region), per image, against that image's mean IoU:
+
+| split | corr(IoU, max inter-family sim) | corr(IoU, max background sim) |
+|---|---:|---:|
+| HF14 | **-0.709** (n=7 multi-family) | -0.167 |
+| validation | **-0.250** (n=8) | -0.361 |
+
+Every image scoring under 0.65 in either split is multi-family; every
+single-family image scores 0.92+. The worst multi-family image in each split is
+the one holding a near-duplicate pair: HF14 img 14 (pair 0.908 -> IoU 0.246) and
+validation img 13 (0.886 -> 0.385). Necessary but NOT sufficient — img 19 pairs
+at 0.844 and scores 0.915, img 18 at 0.856 scores 0.780.
+
+Image 14's error decomposition matches the mechanism: its pattern2/pattern3 pair
+sits at 0.875-0.908, and both of those selections FLOOD (ref08 reaches 99.1%
+recall at 25% precision, predicting 3.96x its target) — asked for either family
+the model returns both. Its seven pattern1 selections instead land at 27-63%
+recall and 39-51% precision: right size, wrong place, excess scattered rather
+than concentrated on one partner.
+
+NOT explained by: resolution or aspect (img 16 downscales 4.80x and scores
+0.930), instance size (within img 14 the correlation is -0.219 and the LARGEST
+instance scores second-worst), faintness (see below), or localisation (the fixed
+anchor supplies it and only collapses variance). A "pattern resembles the
+background" variant was measured and did **not** replicate — img 14's 0.424 is
+unremarkable next to imgs 27/3/25 at 0.62/0.58/0.58, which score 0.82-0.87.
+
+**Untried lever:** `generate_synthetic_v5.py` picks *distinct* tiles per family
+by construction, so synthetic sheets contain no confusable pairs at all — the
+model has never trained on the case that costs it every point.
+`image_generation/README.md` already requires exactly this of generated plans
+("at least two intentionally similar/confusable families", "hard negatives").
+
+### Faintness is not the driver (checked 2026-08-10)
+
+Contrast normalisation at inference is neutral-to-harmful on validation (CLAHE
+0.7396, percentile stretch 0.6830, vs 0.7466 as-is; the stretch takes img 15 from
+0.980 to 0.071). Global ink-depth correlates -0.749 with IoU on HF14 but -0.003
+on validation, so it does not replicate; restricting the statistics to the
+pattern regions weakens every correlation rather than sharpening it. Sparse faint
+plans are mostly fine (imgs 11/16/1 have pattern coverage 0.048-0.096 and score
+0.926-0.952). `scripts/faintness_probe.py`.
+
+One genuine measurement artefact, not worth fixing: on HF14 img 7 the reference
+box lands on the words "UNDER FLOOR OF THE EXISTING GARAGE" printed over a
+stippled floor, so the crop is 25% ink (text) instead of 4% (stipple). Moving it
+down 0.75 box-heights onto clean stipple takes that selection from 0.122 to
+0.821 — worth ~+0.013 on the headline, inside noise, and changing the eval
+sampler to enforce clean crops would break comparability with every existing
+number. `scripts/reference_quality_probe.py` shows unrepresentative crops
+usually score FINE (the least representative crop on HF14 scores 0.980), so this
+is not systematic.
+
 ### New tooling
 
 `connectivity_stats.py` (share_local; needs full resolution — at 1024 nearby
