@@ -70,7 +70,7 @@ class RefUNet(nn.Module):
     """Shared ResNet features + multiscale reference-conditioned FPN."""
 
     def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0,
-                 anchor=False):
+                 anchor=False, anchor_dropout=0.0, anchor_ref_plane=1.0):
         super().__init__()
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
@@ -83,6 +83,25 @@ class RefUNet(nn.Module):
         # zero-initialised, making the model bit-identical to the baseline at
         # step 0 and leaving it free to learn how much to trust the anchor.
         self.anchor = anchor
+        # Anchor dropout: hide the anchor on a fraction of TRAINING samples so the
+        # model has to stay able to solve the task from the reference crop alone.
+        # Without it the anchor is the cheap route -- it settles ~84% of the
+        # training pool on its own -- so loss falls down that path and the
+        # reference-matching pathway gets correspondingly little gradient and
+        # never trains to baseline quality. That is why adding the anchor made
+        # the model WORSE than omitting it, even though the extra input plane is
+        # zero-initialised and could simply have been left unused.
+        self.anchor_dropout = float(anchor_dropout)
+        # Value of the anchor channel on the REFERENCE branch. It defaults to 1.0
+        # ("this crop is the target"), but the backbone is siamese: the same
+        # filters then see a sparse rectangle-in-a-field-of-zeros on the image
+        # branch and a constant 1.0 on the reference branch. Those are very
+        # different input statistics through shared weights, which can corrupt
+        # the reference features themselves -- the observed failure is a model
+        # whose matching pathway is still fully active (reference sensitivity
+        # 0.92) but whose masks are much worse, which is what that would look
+        # like. 0.0 matches the image plane's dominant value instead.
+        self.anchor_ref_plane = float(anchor_ref_plane)
         if anchor:
             old = self.stem[0]
             stem_conv = nn.Conv2d(4, old.out_channels, old.kernel_size,
@@ -147,13 +166,24 @@ class RefUNet(nn.Module):
         if self.anchor:
             if ref_box is None:
                 ref_box = image.new_zeros((image.shape[0], 1) + tuple(image_size))
+            keep = None
+            if self.training and self.anchor_dropout > 0.0:
+                keep = (torch.rand(image.shape[0], 1, 1, 1, device=image.device)
+                        >= self.anchor_dropout).to(image.dtype)
+                ref_box = ref_box * keep
             image = torch.cat([image, ref_box], 1)
             # The reference crop IS the rectangle, so its anchor plane is all-ones
             # -- the same siamese backbone then sees a consistent meaning for the
-            # channel on both inputs.
-            reference = torch.cat(
-                [reference, reference.new_ones(reference.shape[0], 1,
-                                               *reference.shape[-2:])], 1)
+            # channel on both inputs. When the anchor is dropped it must go to
+            # zero here too, or the pair is inconsistent: the reference would
+            # still assert "this is the target" while the image denies knowing
+            # where that is.
+            ref_plane = reference.new_full((reference.shape[0], 1,
+                                            *reference.shape[-2:]),
+                                           self.anchor_ref_plane)
+            if keep is not None:
+                ref_plane = ref_plane * keep
+            reference = torch.cat([reference, ref_plane], 1)
         image_features = self.features(image)
         reference_features = self.features(reference)
         reference_vectors = [f.mean((-2, -1)) for f in reference_features]

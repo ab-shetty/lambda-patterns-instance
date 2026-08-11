@@ -23,8 +23,13 @@ HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
 def load_refunet(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device)
     args = checkpoint.get("args", {})
+    # `anchor` must be rebuilt from the saved args: it widens the stem to 4
+    # channels, so an anchored checkpoint cannot load into a default model.
+    # Training's per-epoch diagnostic passes the live model and never hit this.
     model = RefUNet(width=int(args.get("width", 128)), pretrained=False,
-                    corr_grid=int(args.get("corr_grid", 0) or 0)).to(device)
+                    corr_grid=int(args.get("corr_grid", 0) or 0),
+                    anchor=bool(args.get("anchor", False)),
+                    anchor_ref_plane=float(args.get("anchor_ref_plane", 1.0))).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
     return model, checkpoint

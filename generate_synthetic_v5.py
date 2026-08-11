@@ -87,6 +87,29 @@ MODE_WEIGHTS = {
     'roof_plan': 30,
 }
 ROWHOUSE_ELEVATION_PROB = 0.50
+
+# Probability that an elevation deliberately REUSES one material on two surfaces
+# that do not touch, so the family has >1 connected component.
+#
+# Why: measured per selection as the share of the target union lying in the
+# component holding the user's rectangle, synth elevations score 0.975 (95%
+# single-component) against 0.492 (23%) on the real elevation-like plans. The
+# generator forbids it structurally -- `used_paths` makes every band of a wall a
+# distinct tile, 65% of elevations are a single building, and rowhouses are off
+# under the realstyle overrides -- so a material can essentially never recur
+# somewhere else in the drawing. Elevations are 57% of the real set and 56% of
+# the training pool, so this one mode drives the whole pool-level gap (0.898 vs
+# 0.537) and it cannot be fixed by selection: only 10.9% of synthetic elevations
+# have even one disconnected family.
+#
+# Real elevations do this constantly: stucco on the ground floor and again in
+# the gable with siding between, or one brick on both the house and a detached
+# garage. Repeats are placed only on NON-ADJACENT surfaces (band i and band i+2,
+# separated by a differently-materialled band, or across two buildings separated
+# by SEPARATOR), so the union is genuinely disconnected rather than merely split.
+# 0.0 = off, reproducing the previous behaviour exactly.
+ELEV_REPEAT_PROB = 0.0
+
 ELEVATION_EXCERPT_SHIFT_FRAC = 0.18   # random off-center crop around the facade bbox
 ELEVATION_PARTIAL_CROP_PROB = 0.22
 ELEVATION_PARTIAL_CROP_FRAC = 0.08
@@ -2452,6 +2475,12 @@ def build_elevation_scene(rng: random.Random, tiles):
     GAP = 0
     items = []
     n_buildings = 1 if rng.random() < 0.65 else 2
+    # Material repetition across non-touching surfaces (see ELEV_REPEAT_PROB).
+    # Two buildings give the cleanest disconnection, so bias toward them.
+    elev_repeat = rng.random() < ELEV_REPEAT_PROB
+    if elev_repeat and rng.random() < 0.5:
+        n_buildings = 2
+    repeat_pool = []          # tiles used by buildings already placed
     SEPARATOR = rng.randint(40, 180)
     cur_x = 0
     bldg_layouts = []
@@ -2510,6 +2539,10 @@ def build_elevation_scene(rng: random.Random, tiles):
             n_bands = rng.choice([1, 2, 2, 3])
         # Coarsen toward real: cap bands (3 at scale 1 -> 1 at scale 0).
         n_bands = max(1, min(n_bands, _inst_cap(3, 1)))
+        # Repeating within one wall needs three bands, so the pair can straddle a
+        # third: bands 0 and 2 never touch, bands 0 and 1 do.
+        if elev_repeat and not repeat_pool and _inst_cap(3, 1) >= 3:
+            n_bands = 3
         # Choose distinct tiles per band
         wall_tiles = []
         used_paths = set()
@@ -2520,6 +2553,17 @@ def build_elevation_scene(rng: random.Random, tiles):
                     wall_tiles.append(t); used_paths.add(t['path']); break
             else:
                 wall_tiles.append(pick_wall_tile(tiles, rng))
+
+        if elev_repeat:
+            if repeat_pool and rng.random() < 0.7:
+                # Carry a material over from an earlier building: the two
+                # buildings are SEPARATOR px apart, so this is always disconnected.
+                wall_tiles[rng.randrange(len(wall_tiles))] = rng.choice(repeat_pool)
+            elif n_bands >= 3:
+                # Bands 0 and 2 are separated by band 1, which `used_paths`
+                # guarantees is a different material.
+                wall_tiles[2] = wall_tiles[0]
+            repeat_pool.extend(wall_tiles)
 
         # Compute band y-breaks (in grade_y - distance space).
         # Bands listed from BOTTOM to TOP in y-decreasing order.
@@ -4353,7 +4397,7 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  clutter_boost=False, label_jitter=None,
                  resolution_scale=None, real_hard_crop_prob=None,
                  real_hard_crop_min_keep=None,
-                 real_hard_crop_max_keep=None):
+                 real_hard_crop_max_keep=None, elev_repeat_prob=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
@@ -4361,6 +4405,7 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
     global DRAW_INSTANCE_OUTLINE, DENSE_COLOR_FILL, DENSE_FILL_FRAC
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
+    global ELEV_REPEAT_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
     global NEGATIVE_TEXTURE_PROB, NEGATIVE_MATERIAL_FRAC, REALSTYLE_PROB
     global FREEFORM_TILE_OUTLINE_PROB
@@ -4394,6 +4439,8 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         ELEVATION_EXCERPT_SHIFT_FRAC = elevation_excerpt_shift
     if markup_overlay_prob is not None:
         MARKUP_OVERLAY_PROB = markup_overlay_prob
+    if elev_repeat_prob is not None:
+        ELEV_REPEAT_PROB = elev_repeat_prob
     if mono_image_prob is not None:
         MONO_IMAGE_PROB = mono_image_prob
     if instance_scale is not None:
@@ -4488,6 +4535,11 @@ def main():
                          '(0 = no added splitting)')
     ap.add_argument('--markup-overlay-prob', type=float, default=None,
                     help='probability of adding markup-style circles/notes')
+    ap.add_argument('--elev-repeat-prob', type=float, default=None,
+                    help='probability an elevation reuses one material on two '
+                         'NON-TOUCHING surfaces (bands 0 and 2 of a wall, or '
+                         'across two buildings), so the family has >1 connected '
+                         'component like real elevations do. 0 = off.')
     ap.add_argument('--mono-image-prob', type=float, default=None,
                     help='fraction of images rendered as pure black-and-white '
                          '(grayscale tiles only, gray fills/markup); ~50%% of real '
@@ -4573,7 +4625,7 @@ def main():
         _apply_smoke_overrides()
     global DRAW_INSTANCE_OUTLINE, DENSE_COLOR_FILL, DENSE_FILL_FRAC
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE, MODE_WEIGHTS
-    global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
+    global ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB, ELEV_REPEAT_PROB
     global MONO_IMAGE_PROB, INSTANCE_SCALE, DENSE_FILL_MIN_INK
     global NEGATIVE_TEXTURE_PROB, NEGATIVE_MATERIAL_FRAC, REALSTYLE_PROB
     global CLUTTER_BOOST, LABEL_JITTER
@@ -4613,6 +4665,8 @@ def main():
         ELEVATION_EXCERPT_SHIFT_FRAC = args.elevation_excerpt_shift
     if args.markup_overlay_prob is not None:
         MARKUP_OVERLAY_PROB = args.markup_overlay_prob
+    if args.elev_repeat_prob is not None:
+        ELEV_REPEAT_PROB = args.elev_repeat_prob
     if args.mono_image_prob is not None:
         MONO_IMAGE_PROB = args.mono_image_prob
     if not 0.0 <= MONO_IMAGE_PROB <= 1.0:
@@ -4669,6 +4723,8 @@ def main():
         raise ValueError('--elevation-excerpt-shift must be in [0, 1]')
     if not 0.0 <= MARKUP_OVERLAY_PROB <= 1.0:
         raise ValueError('--markup-overlay-prob must be in [0, 1]')
+    if not 0.0 <= ELEV_REPEAT_PROB <= 1.0:
+        raise ValueError('--elev-repeat-prob must be in [0, 1]')
     if args.split_scale is not None and not 0.0 <= args.split_scale <= 1.0:
         raise ValueError('--split-scale must be in [0, 1]')
     if not 0.0 <= REAL_HARD_CROP_PROB <= 1.0:
@@ -4702,6 +4758,7 @@ def main():
             args.recipe, args.clutter_boost, args.label_jitter,
             args.resolution_scale, args.real_hard_crop_prob,
             args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
+            ELEV_REPEAT_PROB,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -4733,6 +4790,7 @@ def main():
                   args.recipe, args.clutter_boost, args.label_jitter,
                   args.resolution_scale, args.real_hard_crop_prob,
                   args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
+                  ELEV_REPEAT_PROB,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):

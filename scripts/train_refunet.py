@@ -46,6 +46,17 @@ def parse_args():
                         "rectangle always lies inside an instance of the target "
                         "pattern, so it is a guaranteed-positive anchor; only the "
                         "crop was previously passed in.")
+    p.add_argument("--anchor-dropout", type=float, default=0.0,
+                   help="Fraction of TRAINING samples whose anchor plane is "
+                        "hidden, forcing the model to stay able to solve the "
+                        "task from the reference crop alone instead of leaning "
+                        "on the anchor. Requires --anchor. 0 = off.")
+    p.add_argument("--anchor-ref-plane", type=float, default=1.0,
+                   help="Value of the anchor channel on the REFERENCE branch. "
+                        "1.0 is the original ('this crop is the target'); 0.0 "
+                        "removes the statistics mismatch that constant channel "
+                        "creates against the sparse box the image branch sees "
+                        "through the same siamese filters.")
     p.add_argument("--corr-grid", type=int, default=0,
                    help="dense reference correlation: keep the reference as a "
                         "GxG token grid and cosine-match every image location "
@@ -155,7 +166,9 @@ def main():
     model = RefUNet(args.width, pretrained=args.init_from is None,
                     corr_grid=args.corr_grid,
                     metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
-                    anchor=args.anchor).to(device)
+                    anchor=args.anchor,
+                    anchor_dropout=args.anchor_dropout,
+                    anchor_ref_plane=args.anchor_ref_plane).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
