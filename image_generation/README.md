@@ -57,6 +57,44 @@ generation time that can never be retrofitted onto the 640px scraped pool.
 The 100 prompts in `prompts.jsonl` remain a valid distribution of *sheet types*;
 what needs rewriting is the framing and crop, not the subject list.
 
+## Update 2026-08-12 — v2 prompts exist, and a third defect was found
+
+`render_image_generation_prompts.py --version v2` renders `prompts_v2.jsonl` from
+the same unchanged `specs.jsonl`, with the framing fixed per the five aims above.
+v1 is untouched and its recorded SHA still validates.
+`scripts/generate_images_openai.py` drives generation end to end: resumable,
+receipted, 1536×1024, contact sheet for the visual gates.
+
+A 4-image smoke test (ids 1, 11, 21, 41) confirmed the framing fix — no title
+blocks, no legends, no sheet borders, no cropped fragments. It also exposed a
+defect neither the framing nor the subject list accounts for: **the image model
+substitutes realistic materials for drafting hatch, and ignores the confuser
+requirement.** Spec 1 asks for "close 45-degree hatch, wider 45-degree hatch,
+fine masonry stipple" with "similar diagonal spacings"; what came back was brick
+coursing, scalloped shingles and board siding, with no 45° hatch and no
+confusable pair.
+
+That is measurable, and it already happened once: the delivered 28 are the
+**least** confusable pool in the project (4.8% of multi-family images hold a pair
+at ≥0.90, against 24.4% for the scraped real plans —
+`scripts/family_similarity_probe.py --local-data`). Gate 5 was specified, not
+met, and nothing could tell until there was a probe.
+
+Before scaling, fix the prompt and re-smoke:
+
+1. name the hatch as *drafting notation* — parallel ruled lines at a stated angle
+   and spacing, explicitly not a depiction of the material's real appearance, and
+   explicitly no brick coursing, shingle scallops or photoreal texture;
+2. state the confuser tolerance — two families differing only slightly, e.g. 45°
+   hatch at 3mm against 4mm spacing;
+3. then re-measure the labelled pool with the probe rather than trusting the
+   prompt.
+
+Note the tension to respect: deliberately confusable *synthetic* data cost −0.104
+(`synth_progress.md`, 2026-08-12). The aim here is to match the real
+distribution, which the current generated pool undershoots — not to maximise
+confusability.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

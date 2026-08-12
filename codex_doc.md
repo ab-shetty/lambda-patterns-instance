@@ -1,57 +1,47 @@
 # Handoff
 
-Last updated: 2026-08-10
+Last updated: 2026-08-12
 
-Read `PROJECT_UNDERSTANDING.md` for task semantics and `startup.md` for complete,
-copy-paste reproduction commands, the data-rebuild path, and the full comparison
-table.
+`PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
+every number, command and reproduction path. This file holds only what changed
+and where to pick up — if a fact appears in one of those two, it is not repeated
+here.
 
-## Pick up here (2026-08-10)
+## Pick up here (2026-08-12)
 
-Nothing this session raised real IoU. The headline recipe is unchanged at
-**0.6860 ± 0.0175**. Full detail in `synth_progress.md` (2026-08-10 section).
+The 2026-08-10 lever — generate synthetic sheets with deliberately confusable
+material pairs — was implemented and tested. **It costs −0.104** (0.6823 →
+0.5787, 3 seeds, t=3.80, p=0.019, complete separation). The lever is closed;
+`--confusable-prob` is committed, default off, kept only so the negative
+reproduces. Detail in `synth_progress.md` (2026-08-12).
 
-| tried | verdict |
+Three things that reasoning got wrong are worth carrying forward:
+
+| claim | status |
 |---|---|
-| `--anchor` reference-plane bug, fixed by `--anchor-ref-plane 0.0` | **real bug, fixed**: +0.069 HF14 on mix3652 |
-| a *working* anchor vs no anchor | null / slightly negative, 3 seeds, 3 settings |
-| disconnected synthetic data | null, 3 seeds, mode- and area-matched |
-| data volume, 2,452 → 9,808 records | null |
-| mix ratio, 24% → 84% real | null |
-| `realaug2x` (2× real-derived records) | **retracted**: +0.015 at one seed, 0.6767 ± 0.0262 at three |
+| "synthetic sheets contain no confusable pairs at all" | **false** — the generator picks distinct *paths*, not distinct *appearances*; synthetic already sat at 19.2% vs real 24.4% |
+| "every image under 0.65 is multi-family" / "single-family all score 0.92+" | **false** on a rebuilt checkpoint — HF14 imgs 12/7/0 are single-family at 0.393/0.546/0.611 |
+| the confusability correlation | **replicates, and more strongly than recorded** (pooled r=−0.754, p=0.0018) — and the intervention still hurt |
 
-**The anchor was never a shortcut.** It collapsed because the anchor channel was
-1.0 across the whole reference crop while the image branch saw a sparse
-rectangle, through the same siamese stem. `scripts/anchor_vs_reference_probe.py`
-shows the model never obeys the anchor in any pool, including the connected one
-where the shortcut is on offer. The documented 0.433 did not reproduce (0.6088);
-do not quote it. `--anchor-ref-plane` now defaults to the fixed value, but the
-recipe still omits `--anchor` — fixed, it is not an improvement to adopt.
+**Where the error is now.** ~30% of multi-family images are not decidable from
+appearance at all: a family's own instances agree less than that family agrees
+with its most confusable neighbour, and those are the worst image in each split
+(HF14 14/18, validation 13/17). That matches the 2026-08-07 finding that
+`hatch_matcher` and `RefUNet` fail on the same inputs. **The open question is
+whether those cases are labelling inconsistencies or genuine semantic
+distinctions** — same hatch, different material by drawing context. Look at the
+four flagged pairs before designing anything else; if they are label errors that
+is a data-quality fix worth ~+0.105 on HF14 from image 14 alone, and if they are
+not, ~0.70 is close to the ceiling for a rectangle-only input.
 
-**Screening budget: run-to-run sd on `mix3652` is 0.0262** (seeds 7/31/99). Two
-wrong conclusions this session came from reading single-seed gaps of 0.02–0.04
-as signal. Run three seeds.
+**The lever with replicated positive evidence remains source count**: 28 → 86
+real sources bought +0.073, one generated plan ≈ one real plan, and re-augmenting
+the same 114 sources 18× → 72× buys nothing. `scripts/generate_images_openai.py`
+now drives that round end to end; read the status section of
+`image_generation/README.md` first.
 
-**Where the error is.** The fixed anchor collapses variance (HF14 sd 0.0051 vs
-0.0229) without moving the mean, and image 14's failures are wrong-region rather
-than fuzzy-boundary: the error is in appearance matching, not localisation or
-boundaries. Consistent with more distinct labelled real sources being the
-binding constraint — re-augmenting the same 114 sources 18× → 36× → 72× buys
-nothing.
-
-**Pick up here: confusable materials.** Every image scoring under 0.65 in either
-split is multi-family, single-family images all score 0.92+, and the worst
-multi-family image in each split is the one holding a near-duplicate pair
-(HF14 img 14, similarity 0.908 → IoU 0.246; validation img 13, 0.886 → 0.385;
-corr −0.709 / −0.250, so necessary but not sufficient — img 19 pairs at 0.844 and
-still scores 0.915). Synthetic sheets have never contained such a pair, because
-`generate_synthetic_v5.py` picks distinct tiles per family by construction, so
-generating confusable pairs is the untried lever; measure with the pairwise-family
-probe in `synth_progress.md` (2026-08-10) and note the background-similarity
-variant of this did **not** replicate.
-
-Unresolved: `--anchor-dropout` was only ever run on top of the bug, so it has
-never been tested cleanly.
+Unresolved from 2026-08-10: `--anchor-dropout` has still never been tested
+cleanly, having only ever run on top of the reference-plane bug.
 
 ## Superseded — 2026-08-08 (measurements sound, conclusions retracted)
 
@@ -83,83 +73,22 @@ Two levers were closed this session — see `synth_progress.md`: the auxiliary
 ranking loss (null, +0.007) and classical template matching (`scripts/hatch_matcher.py`
 beats the Gabor probe by a wide margin but is redundant with `RefUNet`).
 
-## Read this first
+## Facts that live elsewhere
 
-`sample_reference_box` — the function that turns a ground-truth instance into the
-user's reference rectangle — was returning rectangles partly or entirely outside
-the pattern they sampled. It was fixed on 2026-08-06.
+Single copies, so they cannot drift. Do not restate them here.
 
-**Every number measured before that date used the broken sampler, including the
-`>= 0.65` target.** Pre-fix and post-fix numbers are not comparable.
-`sample_reference_box_legacy` is retained so the old figures remain reproducible.
-Always say which sampler a number came from.
-
-## Current result
-
-Fixed sampler, `RefUNet`, 1,600 synthetic + 1,548 real + 504 generated-realistic:
-
-| Item | Value |
+| what | where |
 |---|---|
-| Recipe mean (seeds 7/31/99) | **0.6860 ± 0.0175** |
-| Best single checkpoint | **0.705407920670342** |
-| Checkpoint | `data/runs/ck_fix_mix3652_seed31/epoch_6.pth` |
-| Metrics | `data/evaluations/refunet_fix_mix3652_s31_e6.json` |
-| Visual audit | `data/visualizations/fix_mix3652_s31_e6/` |
-| Evaluation | fixed HF14, 52 reference selections, threshold 0.35 |
+| task semantics, metric definition, what does *not* count as evidence | `PROJECT_UNDERSTANDING.md` |
+| the `sample_reference_box` fix and why pre-2026-08-06 numbers are incomparable | `PROJECT_UNDERSTANDING.md`, mechanism in `startup.md` |
+| current result, both selection protocols, the checkpoint and its artifacts | `startup.md` |
+| every reproduction command, the data rebuild, the validation split | `startup.md` |
+| evaluation rules and the fixed HF14 indices | `startup.md` |
+| per-experiment history and the screened levers | `synth_progress.md` |
 
-Quote the 3-seed mean. Run-to-run noise is ~0.013–0.018 sd here, so the best
-checkpoint is the top of a spread rather than the expected value.
-
-That 0.6860 picks the epoch by HF14 score, which uses the acceptance set to
-choose the checkpoint. Selecting the epoch on the validation split instead gives
-**0.6783 ± 0.0081**. Both follow a defensible protocol — the project's metric is
-defined as "any checkpoint within ten epochs" — but quote the val-selected number
-when it has to hold up. See `startup.md` for the split and its correlation.
-
-Thirteen levers were screened against this baseline on 2026-08-06 (resolution,
-synthetic selection, volume, schedule, augmentation, threshold, boundary
-snapping, dense reference correlation, scale-matched reference) and **none beat
-it**; the table is in `synth_progress.md` and the reasoning in commit `b2d2f09`.
-Two of them, `--corr-grid` and `--scale-matched-ref`, are implemented and
-default-off. Read the warning above the reference resize in
-`refmask2former/dataset.py` before "fixing" the reference scale — it looks like a
-bug and correcting it costs 0.153.
-
-The `>= 0.65` target was defined under the broken sampler and has not been
-restated. On the fixed metric this recipe averages 0.686; whether that counts as
-meeting the goal is a product decision, not a measurement one.
-
-## What changed this session
-
-Starting point was 0.6127 (broken sampler, single run). Two independent gains,
-each replicated at three seeds with complete separation between arms:
-
-| Change | Effect | Evidence |
-|---|---|---|
-| +28 hand-labelled generated plans | +0.0330 | t=2.94, p=0.043 |
-| Reference-box sampler fix | +0.0529 | t=4.18, p=0.014 |
-
-The like-for-like progression on the broken sampler is 0.6001 (`mix3148`) →
-0.6331 (`mix3652`); the fixed sampler then takes `mix3652` to 0.6860.
-
-The synthetic pools `faintcad2500` / `cadneg2500` proved unrebuildable — their
-generator flags were never committed — so the synthetic half now comes from the
-20k HF config via the new `scripts/hf_to_local.py`. That substitution cost ~0.006.
-
-## Product and model semantics
-
-A reference rectangle identifies an image-local pattern. The target is the union
-of every region with that same image-local grouping ID. IDs such as `pattern1`
-have no meaning across plans. Roboflow `remove` polygons are subtracted as holes:
-`roboflow_to_local.py` attaches each to every containing pattern and
-`render_instance_mask` zeroes rings after the first.
-
-`RefUNet` predicts the selected union directly: a shared ResNet-50 extracts plan
-and reference features, four multiscale conditioning blocks combine image
-features with the pooled reference, and an FPN decoder emits one mask. Split it
-into connected components (preserving holes) if the product needs separate
-instances. The earlier query model, which grouped instance candidates by
-reference similarity, topped out at 0.5886 on mixed data.
+Two standing traps: the reference resize in `refmask2former/dataset.py` looks
+like a bug and "fixing" it costs 0.153, and `--corr-grid` / `--scale-matched-ref`
+are implemented but screened negative — read the warnings before touching either.
 
 ## Relevant implementation
 
@@ -174,7 +103,15 @@ reference similarity, topped out at 0.5886 on mixed data.
 - `scripts/hf_to_local.py` — HF parquet → local-data format.
 - `scripts/roboflow_to_local.py`, `augment_local_dataset.py`,
   `merge_local_datasets.py` — deterministic real-data pipeline.
-- `scripts/run_*.sh` — the four experiment drivers from this session.
+- `scripts/family_similarity_probe.py` — per-family appearance similarity:
+  `--metrics` (per-image confusability, intra/inter margin, correlations),
+  `--tiles` (tile-pool pairs; writes the table `--tile-sim` consumes),
+  `--local-data` (pool distribution at training resolution).
+- `scripts/generate_images_openai.py` — resumable generation of the unlabelled
+  realistic pool, with receipts and a contact sheet for the visual gates.
+- `scripts/render_image_generation_prompts.py` — `--version v2` is the reframed
+  prompt set; v1 is kept byte-identical so its recorded SHA still validates.
+- `scripts/run_*.sh`, `run_*.sh` — the experiment drivers, one per ablation.
 
 ## Data limitation and where to push next
 
@@ -200,7 +137,10 @@ mine. More data means generating a better round, not labelling what exists.
 
 Untested hypothesis worth pursuing on a validation split: the largest remaining
 clean failure is thin wall poche in dense floor plans (image 12), plausibly a
-1280px downscaling artifact. It must not be tuned against HF14.
+1280px downscaling artifact. It must not be tuned against HF14. This gained
+weight on 2026-08-12 — image 12 is **single-family** and still scores 0.393, so
+its failure cannot be a confusability effect and no appearance-matching lever
+will touch it.
 
 ## Evaluation rules
 

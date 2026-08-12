@@ -1,23 +1,15 @@
 # Startup Guide
 
-Read `PROJECT_UNDERSTANDING.md` first. The task is reference-conditioned region
-selection: a user selects a rectangle inside a material pattern and the model
-returns every matching region in the same plan. Pattern IDs are image-local.
-Roboflow `remove` polygons are holes, never foreground classes.
+Read `PROJECT_UNDERSTANDING.md` first — it defines the task, the metric, and what
+does not count as evidence. This file owns the numbers and the commands.
 
 ## Read this before quoting any number
 
-On 2026-08-06 a bug was found and fixed in `sample_reference_box`
-(`refmask2former/dataset.py`), the function that turns a ground-truth instance
-into the user's reference rectangle. It could return a rectangle lying partly or
-entirely **outside** the pattern it was supposed to sample — see
-"The reference-box fix" below.
-
-Every number measured before that date (`0.6127`, `0.5506`, `0.4646`, `0.3494`,
-`0.6432`) used the broken sampler, as did the `>= 0.65` target. They are **not
-comparable** to anything measured afterwards. `sample_reference_box_legacy` is
-retained so the old figures stay reproducible. Always state which sampler a
-number came from.
+Every number measured before 2026-08-06 (`0.6127`, `0.5506`, `0.4646`, `0.3494`,
+`0.6432`) used the broken `sample_reference_box`, as did the `>= 0.65` target,
+and is **not comparable** to anything measured afterwards. Always state which
+sampler a number came from. `PROJECT_UNDERSTANDING.md` explains why the fix
+matters; "The reference-box fix" below has the mechanism and its effect.
 
 ## Current reproducible result
 
@@ -33,6 +25,13 @@ Fixed sampler, `RefUNet`, trained on 1,600 synthetic + 1,548 Roboflow real +
 | Visual audit | `data/visualizations/fix_mix3652_s31_e6/` |
 | Evaluation | fixed HF14, 14 plans, all 52 reference selections |
 | Mask threshold | 0.35 |
+
+Rebuilt from a clean clone on 2026-08-12 (GH200, stack below): every pipeline
+count matched exactly and the recipe landed at **0.6954 ± 0.0023** val-selected
+(per-seed 0.6953 / 0.6931 / 0.6977), ~0.009 above the recorded figures with a
+tighter spread. Both sit inside the documented run-to-run noise. A rebuild
+landing in 0.68–0.70 is a pass; anything outside it means check the data counts
+against this file before believing a model change.
 
 Report the **3-seed mean** as the result. Run-to-run noise is ~0.013–0.018 sd on
 these mixes, so a single checkpoint is the top of a spread, not the expected
@@ -78,8 +77,20 @@ pip install --user -r requirements.txt roboflow
 ```
 
 Verified working stack: Python 3.10.12, torch 2.7.0, torchvision 0.22.0,
-datasets 5.0.1, OpenCV 4.10.0, Pillow 12.3.0, numpy 1.26.4, on one NVIDIA GH200
-with 64 CPUs. Minor nondeterminism can change the last decimals.
+datasets 5.0.1, OpenCV 4.10.0, Pillow 12.3.0, numpy 1.26.4, shapely 2.1.2, on one
+NVIDIA GH200 with 64 CPUs. Minor nondeterminism can change the last decimals.
+
+Anything that runs `generate_synthetic_v5.py` also needs the curated tiles, which
+are a separate HF dataset and are **not** fetched by the commands above:
+
+```bash
+python3 -c "from huggingface_hub import snapshot_download as d; \
+  print(d(repo_id='abshetty/floz-assets', repo_type='dataset'))"
+TILES=<printed path>/reference_tiles_curated        # 50 tiles
+```
+
+Add `openai` as well if you are generating the realistic pool
+(`scripts/generate_images_openai.py`).
 
 Cache the evaluation dataset (never put these HF images into training):
 
@@ -309,6 +320,9 @@ All rows are `RefUNet`, HF14, threshold 0.35. The sampler column is load-bearing
 | synth 1600 + real 1548 (`mix3148`) | old | 3 | 0.6001 ± 0.0143 |
 | synth 1600 + real 1548 + gen 504 (`mix3652`) | old | 3 | 0.6331 ± 0.0132 |
 | **`mix3652`** | **fixed** | **3** | **0.6860 ± 0.0175** |
+| `mix3652`, rebuilt 2026-08-12 | fixed | 3 | 0.6954 ± 0.0023 |
+| locally generated synth, no confusable pairs | fixed | 3 | 0.6823 ± 0.0190 |
+| locally generated synth, `--confusable-prob 1.0` | fixed | 3 | 0.5787 ± 0.0433 |
 
 Historical, broken sampler, earlier query-model lineage: synthetic-only 0.5506,
 Roboflow-only strong18 0.4646, 86 clean with live flips 0.3494, synth+Roboflow
@@ -323,7 +337,10 @@ query model 0.5886, synth+Roboflow `RefUNet` 0.6127.
 - **Resolution is worth ~0.032** (the same 28 at 640 long side: 0.2330 vs 0.2650).
 - **Count dominates**: 28 → 86 real sources buys +0.073.
 - The HF 20k synthetic substitution cost ~0.006, so the irrecoverable pools are
-  not a loss.
+  not a loss. Generating the synthetic half locally instead costs ~0.013.
+- **Deliberately confusable synthetic material pairs cost −0.104** (t=3.80,
+  p=0.019, complete separation). `--confusable-prob` exists but stays off; see
+  `synth_progress.md` (2026-08-12) before revisiting confusability at all.
 
 So: generate more, and generate large. Per-image value matches real plans, and
 resolution is a free choice at generation time that can never be retrofitted onto

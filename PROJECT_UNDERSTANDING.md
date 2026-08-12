@@ -66,15 +66,12 @@ reproduces the old behaviour for historical checks.
 
 The original target was **reference-conditioned union IoU >= 0.65** on the real
 HF14 holdout, at any checkpoint within ten training epochs. That target was set
-against the broken sampler and has not been restated.
+against the broken sampler and has not been restated, so whether the current
+result meets it is a product decision, not a measurement one.
 
-On the fixed metric the current recipe (1,600 synthetic + 1,548 real + 504
-generated-realistic) averages **0.6860 ± 0.0175** across three seeds, with a best
-single checkpoint of **0.705407920670342**. Report the multi-seed mean, not the
-best checkpoint: run-to-run noise is ~0.013-0.018 sd here.
-
-See `startup.md` for exact data, training, and evaluation commands, and
-`codex_doc.md` for what changed.
+Report a multi-seed mean, never a single best checkpoint: run-to-run noise is
+~0.013-0.018 sd. **The result itself lives in `startup.md`** — single copy, so
+this file and that one cannot drift. `codex_doc.md` says what changed last.
 
 ## Metrics that do not prove success
 
@@ -101,6 +98,16 @@ Heldout visualizations must show, for each evaluated reference selection:
 `scripts/visualize_refunet_selection.py` renders exactly these four views for a
 `RefUNet` checkpoint, reproducing the evaluator's RNG, resize, and threshold so
 each panel's IoU is the number feeding the reported mean. Files are named by IoU
-so failures sort first, alongside `manifest.csv` and `summary.txt`.
+so failures sort first, alongside `manifest.csv` and `summary.txt`. The path to
+the current artifacts is in `startup.md` with the result they belong to.
 
-Current artifacts: `data/visualizations/fix_mix3652_s31_e6/`.
+## A caution about per-image explanations
+
+Per-image failure stories are cheap to form on 14 images and have twice been
+wrong here. "Every image under 0.65 is multi-family" and "single-family images
+all score 0.92+" were both recorded as fact and are both false — on a rebuilt
+checkpoint, images 12, 7 and 0 are single-family and score 0.393, 0.546 and
+0.611. A correlation over 6-8 multi-family images is not a lever: the strongest
+one found so far replicated on both splits and the intervention it motivated
+still cost −0.104. Confirm on the validation split, at three seeds, before
+believing any story about *why* an image fails.

@@ -210,6 +210,20 @@ FILL_PALETTE = [
 # dense fills, and gray markup.
 MONO_IMAGE_PROB = 0.5
 MONO_FILL_GRAY_RANGE = (70, 205)  # poché-dark to light-hatch gray for dense fills
+
+# Per-image probability of drawing every family from ONE mutually-confusable
+# tile cluster, so the sheet holds a near-duplicate pair the way the hardest real
+# plans do (HF14 img14's pattern2/pattern3 sit at 0.875-0.908 similarity and
+# FLOOD into each other). Tile choice elsewhere is by distinct file PATH, which
+# is not the same as distinct APPEARANCE, so confusable pairs already occur here
+# by chance -- measured at ~19% of multi-family synthetic images against ~24% of
+# real ones (scripts/family_similarity_probe.py). This makes the case deliberate
+# rather than incidental. Needs --tile-sim; 0.0 = off (canonical recipe).
+CONFUSABLE_PROB = 0.0
+CONFUSABLE_MIN_SIM = 0.90     # cosine at/above which two tiles count as a pair
+CONFUSABLE_MIN_POOL = 4       # scene builders need a few tiles; smaller clusters
+                              # are skipped rather than padded with distinct ones
+_TILE_NEIGHBOURS = None       # {tile_name: [(sim, other_name)]} descending
 # Saturation below this (mean HSV S, 0-255) marks a tile as grayscale/B&W.
 TILE_GRAY_SAT_MAX = 8.0
 # Minimum interior ink coverage for a dense-filled region. Real instances have
@@ -546,6 +560,49 @@ def load_curated_tiles(tiles_dir=None):
             })
             cat_id += 1
     return tiles
+
+
+def load_tile_similarity(path):
+    """Load the pairwise tile similarity table written by
+    `scripts/family_similarity_probe.py --tiles ... --out ...`."""
+    global _TILE_NEIGHBOURS
+    with open(path) as f:
+        data = json.load(f)
+    neighbours = {}
+    for pair in data['pairs']:
+        neighbours.setdefault(pair['a'], []).append((pair['sim'], pair['b']))
+        neighbours.setdefault(pair['b'], []).append((pair['sim'], pair['a']))
+    for name in neighbours:
+        neighbours[name].sort(reverse=True)
+    _TILE_NEIGHBOURS = neighbours
+    return neighbours
+
+
+def confusable_pool(tiles_pool, rng, min_sim=None, min_pool=None):
+    """Restrict a tile pool to one mutually-confusable cluster.
+
+    Applied at the single per-image choke point, so every downstream selection
+    site (`rng.sample(tiles, ...)`, `pick_wall_tile`, band/wall assignment) keeps
+    its existing "distinct tiles" behaviour and simply draws from a pool whose
+    members all look alike. Returns the pool unchanged if no cluster is big
+    enough, so a sparse similarity table degrades to the canonical recipe rather
+    than to degenerate single-tile scenes.
+    """
+    if not _TILE_NEIGHBOURS:
+        return tiles_pool, False
+    min_sim = CONFUSABLE_MIN_SIM if min_sim is None else min_sim
+    min_pool = CONFUSABLE_MIN_POOL if min_pool is None else min_pool
+    by_name = {t['name']: t for t in tiles_pool}
+
+    def cluster_for(name):
+        return [by_name[name]] + [by_name[other]
+                                  for sim, other in _TILE_NEIGHBOURS.get(name, ())
+                                  if sim >= min_sim and other in by_name]
+
+    seeds = sorted(n for n in by_name if len(cluster_for(n)) >= min_pool)
+    if not seeds:
+        return tiles_pool, False
+    return cluster_for(rng.choice(seeds)), True
 
 
 def pick_wall_tile(tiles, rng, min_ink=0.05):
@@ -4003,6 +4060,12 @@ def compose_image(tiles_pool, rng: random.Random, image_id: int):
         else:
             mono = False  # not enough B&W tiles to build a scene; fall back
 
+    # Confusable sheet: every family drawn from one look-alike cluster, so the
+    # image poses the discrimination the model loses points on. Applied AFTER
+    # the mono narrowing so a mono image stays mono.
+    if CONFUSABLE_PROB > 0.0 and rng.random() < CONFUSABLE_PROB:
+        tiles_pool, _ = confusable_pool(tiles_pool, rng)
+
     # Real-style: mimic the hard real plans by REMOVING easy synth cues (dense
     # color, dark instance outlines) → faint outline-free regions where the model
     # must infer boundaries from texture, as on the failing real plans.
@@ -4397,11 +4460,13 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
                  clutter_boost=False, label_jitter=None,
                  resolution_scale=None, real_hard_crop_prob=None,
                  real_hard_crop_min_keep=None,
-                 real_hard_crop_max_keep=None, elev_repeat_prob=None):
+                 real_hard_crop_max_keep=None, elev_repeat_prob=None,
+                 confusable_prob=None, confusable_min_sim=None, tile_sim=None):
     """Pool initializer: loads tiles once per worker, applies smoke / no-outline
     overrides in the child process (forked globals don't propagate under 'spawn'
     start methods)."""
     global _WORKER_TILES, _WORKER_IMG_DIR, _WORKER_ANN_DIR
+    global CONFUSABLE_PROB, CONFUSABLE_MIN_SIM
     global DRAW_INSTANCE_OUTLINE, DENSE_COLOR_FILL, DENSE_FILL_FRAC
     global DENSE_FILL_OPACITY, DENSE_FILL_SCOPE
     global MODE_WEIGHTS, ELEVATION_EXCERPT_SHIFT_FRAC, MARKUP_OVERLAY_PROB
@@ -4443,6 +4508,14 @@ def _worker_init(tiles_dir, img_dir, ann_dir, smoke, no_outline=False,
         ELEV_REPEAT_PROB = elev_repeat_prob
     if mono_image_prob is not None:
         MONO_IMAGE_PROB = mono_image_prob
+    if confusable_min_sim is not None:
+        CONFUSABLE_MIN_SIM = confusable_min_sim
+    if tile_sim:
+        load_tile_similarity(tile_sim)
+    if confusable_prob is not None:
+        if confusable_prob > 0.0 and not _TILE_NEIGHBOURS:
+            raise ValueError('--confusable-prob needs --tile-sim')
+        CONFUSABLE_PROB = confusable_prob
     if instance_scale is not None:
         INSTANCE_SCALE = instance_scale
         _apply_split_scale(instance_scale)  # coarser surfaces + fewer splits
@@ -4540,6 +4613,17 @@ def main():
                          'NON-TOUCHING surfaces (bands 0 and 2 of a wall, or '
                          'across two buildings), so the family has >1 connected '
                          'component like real elevations do. 0 = off.')
+    ap.add_argument('--confusable-prob', type=float, default=None,
+                    help='per-image prob of drawing every family from ONE '
+                         'mutually-confusable tile cluster, so the sheet holds a '
+                         'near-duplicate pair like the real plans the model '
+                         'floods on. Requires --tile-sim. 0 = off.')
+    ap.add_argument('--confusable-min-sim', type=float, default=None,
+                    help='cosine similarity at/above which two tiles count as '
+                         'confusable (default 0.90; HF14 img14 sits at 0.908)')
+    ap.add_argument('--tile-sim', type=str, default=None,
+                    help='tile similarity table from '
+                         '`scripts/family_similarity_probe.py --tiles X --out Y`')
     ap.add_argument('--mono-image-prob', type=float, default=None,
                     help='fraction of images rendered as pure black-and-white '
                          '(grayscale tiles only, gray fills/markup); ~50%% of real '
@@ -4759,6 +4843,9 @@ def main():
             args.resolution_scale, args.real_hard_crop_prob,
             args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
             ELEV_REPEAT_PROB,
+            confusable_prob=args.confusable_prob,
+            confusable_min_sim=args.confusable_min_sim,
+            tile_sim=args.tile_sim,
         )
         print(f'Loaded {len(_WORKER_TILES)} curated tiles.', flush=True)
         t0 = time.time()
@@ -4791,6 +4878,9 @@ def main():
                   args.resolution_scale, args.real_hard_crop_prob,
                   args.real_hard_crop_min_keep, args.real_hard_crop_max_keep,
                   ELEV_REPEAT_PROB,
+                  # positional: initargs takes no keywords, so these must stay in
+                  # _worker_init's parameter order
+                  args.confusable_prob, args.confusable_min_sim, args.tile_sim,
               )) as pool:
         for n, (i, sz, na) in enumerate(
                 pool.imap_unordered(_worker_render, jobs, chunksize=4), 1):

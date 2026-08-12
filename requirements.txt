@@ -15,3 +15,7 @@ matplotlib>=3.7.0
 datasets>=2.18.0
 huggingface_hub>=0.20.0
 pyarrow>=14.0.0
+
+# Synthetic generation (generate_synthetic_v5.py imports shapely at module load,
+# so the generator is unrunnable from a clean install without it)
+shapely>=2.0.0

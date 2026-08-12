@@ -1,5 +1,59 @@
 # Synthetic Dataset Progress
 
+## 2026-08-12 — confusable synthetic pairs are HARMFUL; lever closed
+
+The 2026-08-10 handoff named this the untried lever. Tried at maximum dose, it
+costs **-0.104**. Same generator, seed and mode weights in both arms; only
+`--confusable-prob` differs. Rebuild: `./run_confusable_ablation.sh`.
+
+| arm | seeds | val | HF14 |
+|---|---:|---:|---:|
+| `confbase` (prob 0) | 3 | 0.7575 | 0.6823 +- 0.0190 |
+| `confpair` (prob 1.0) | 3 | 0.6273 | 0.5787 +- 0.0433 |
+
+t=3.80, p=0.019, complete separation, 4x the run-to-run sd, and validation moves
+the same way. Locally generated synthetic costs ~0.013 vs hf20k (0.6954 ->
+0.6823).
+
+**The premise was false.** The generator picks distinct tile *paths*, not
+distinct *appearances*, so confusable pairs already occurred by chance at close
+to the real rate. Per-image max inter-family similarity, at 1280, via
+`scripts/family_similarity_probe.py --local-data`:
+
+| pool | mean | images with a pair >=0.90 |
+|---|---:|---:|
+| synthetic `toparea1600` | 0.772 | 19.2% |
+| real 86 | 0.817 | 24.4% |
+| generated 28 | 0.760 | 4.8% |
+| `confpair1600` (as trained) | 0.897 | 65.0% |
+
+The likely mechanism for the loss: **~30% of multi-family images are not
+decidable from appearance** — a family's own instances agree less than it agrees
+with its neighbour (HF14 2/6, validation 2/8; they average 0.52-0.56 IoU against
+0.77-0.85). Those are the worst image in each split, and generating more of the
+case teaches a contradictory mapping. This matches the 2026-08-07 `hatch_matcher`
+finding that engineered matching and `RefUNet` fail on the same inputs.
+
+The correlation itself replicates *more* strongly than recorded (pooled n=14,
+r=-0.754, p=0.0018; validation -0.763 where -0.250 was documented). Standing
+example that a replicated correlation is not a lever. Also refuted en route: that
+synthetic pairs carry a fill-colour shortcut — they are *more* brightness-matched
+than real ones.
+
+**Three 2026-08-10 claims are wrong** on a rebuilt `ck_fix_mix3652_seed31/epoch_6`:
+"every image under 0.65 is multi-family" and "single-family images all score
+0.92+" (HF14 imgs 12/7/0 are single-family at 0.393/0.546/0.611, already
+explained by thin poche and a reference box on printed text), and "synthetic
+sheets contain no confusable pairs at all".
+
+Baseline reproduced from a clean clone at **0.6954 +- 0.0023** (val-selected;
+documented 0.6783 +- 0.0081), every pipeline count matching `startup.md` exactly.
+
+New: `scripts/family_similarity_probe.py` (`--metrics` per-image confusability and
+intra/inter margin, `--tiles` pool pairs, `--local-data` distribution) and
+`generate_synthetic_v5.py --confusable-prob/--tile-sim`, default off and verified
+byte-identical when off. Leave it off; it is kept so the negative is reproducible.
+
 ## 2026-08-10 — anchor plane bug found; disconnection, volume and ratio all null
 
 Epochs chosen on the validation split (`scripts/select_epoch_on_val.py`), never
@@ -91,6 +145,11 @@ the binding constraint: re-augmenting the same 114 sources 18× → 36× → 72�
 nothing.
 
 ### Confusable materials are where the score is lost
+
+> **Superseded 2026-08-12.** The correlation below replicates and is stronger
+> than recorded here; the *lever* it motivated is closed and cost −0.104, and the
+> "untried lever" premise at the end of this section is false. See the top of
+> this file before acting on any of it.
 
 Pairwise cosine similarity between families (ImageNet ResNet50 on 64px patches
 sampled inside each region), per image, against that image's mean IoU:
