@@ -1,5 +1,33 @@
 # Synthetic Dataset Progress
 
+## 2026-08-12 — four architecture levers from the matching literature: all null
+
+Screened on validation (HF14 never touched); `scripts/run_paper_levers.sh <arm> <seed>`.
+Flags are default-off and the baseline is bit-identical without them.
+
+| arm | mechanism | seeds | val peak |
+|---|---|---:|---:|
+| `base` | — | 5 | 0.7436 ± 0.0151 |
+| `self` | self-support prototype refinement (FSS review 3.2) | 5 | 0.7495 ± 0.0231 |
+| `dynamic` | hypernetwork-generated classifier (CS231n 2017) | 3 | 0.7416 ± 0.0087 |
+| `surround` | central-surround 3x reference (Zagoruyko 2015) | 1 | 0.7173 |
+| `shrink` | SimAM + soft threshold (Remote Sens. 16, 2831) | 1 | 0.7129 |
+
+`surround` and `shrink` lost at one seed and their **code was removed** — they
+have no flag and no arm, so re-testing either means re-implementing it. `self`
+and `dynamic` remain, default-off, so their negatives reproduce.
+
+`self` is +0.0058, p=0.65 — null, and not worth a second decode pass. `dynamic`
+looked like +0.0145 at one seed and flipped sign at three.
+
+One method note, since it nearly produced two false positives: a paired test over
+the 77 selections gave Wilcoxon p<0.0001 for `self`, but the same test between two
+**base** runs differing only in seed gives 56/14, p=0.0001. Pairing over selections
+measures run-to-run variation unless run against a same-recipe null control.
+
+With `--corr-grid`, `--scale-matched-ref`, the ranking loss and the anchor, that is
+six attempts at the conditioning mechanism, all null or negative.
+
 ## 2026-08-12 — confusable synthetic pairs are HARMFUL; lever closed
 
 The 2026-08-10 handoff named this the untried lever. Tried at maximum dose, it

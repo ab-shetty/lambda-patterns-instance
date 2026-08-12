@@ -29,7 +29,10 @@ def load_refunet(checkpoint_path, device):
     model = RefUNet(width=int(args.get("width", 128)), pretrained=False,
                     corr_grid=int(args.get("corr_grid", 0) or 0),
                     anchor=bool(args.get("anchor", False)),
-                    anchor_ref_plane=float(args.get("anchor_ref_plane", 1.0))).to(device)
+                    anchor_ref_plane=float(args.get("anchor_ref_plane", 1.0)),
+                    self_support=float(args.get("self_support", 0.0) or 0.0),
+                    self_support_thresh=float(args.get("self_support_thresh", 0.7)),
+                    dynamic_filter=bool(args.get("dynamic_filter", False))).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
     return model, checkpoint

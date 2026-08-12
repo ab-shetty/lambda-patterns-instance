@@ -70,7 +70,9 @@ class RefUNet(nn.Module):
     """Shared ResNet features + multiscale reference-conditioned FPN."""
 
     def __init__(self, width=128, pretrained=True, corr_grid=0, metric_dim=0,
-                 anchor=False, anchor_dropout=0.0, anchor_ref_plane=0.0):
+                 anchor=False, anchor_dropout=0.0, anchor_ref_plane=0.0,
+                 self_support=0.0, self_support_thresh=0.7,
+                 dynamic_filter=False):
         super().__init__()
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
@@ -132,6 +134,37 @@ class RefUNet(nn.Module):
             nn.Conv2d(width, width, 3, padding=1, bias=False),
             nn.GroupNorm(8, width), nn.GELU(),
             nn.Conv2d(width, 1, 1))
+        # Dynamic filter / hypernetwork conditioning. Hossler, "Where's Waldo? A
+        # Deep Learning approach to Template Matching" (CS231n 2017) feeds the
+        # template through a hypernetwork that GENERATES the last conv layer's
+        # weights for the query branch, and the same idea is the "conditional
+        # networks" family in Catalano & Matteucci's FSS review (sec. 3.1), where
+        # the support set produces a parameter set theta used as a per-pixel
+        # classifier. This model instead concatenates a reference vector into
+        # every level and lets a FIXED classifier read the result, so the decision
+        # boundary itself has never been reference-dependent. The generated 1x1
+        # kernel is zero-initialised, so the model starts bit-identical to the
+        # baseline and has to earn any use of the path.
+        self.dynamic_filter = bool(dynamic_filter)
+        if self.dynamic_filter:
+            self.filter_gen = nn.Sequential(
+                nn.Linear(channels[3], width), nn.GELU(),
+                nn.Linear(width, width + 1))
+            nn.init.zeros_(self.filter_gen[-1].weight)
+            nn.init.zeros_(self.filter_gen[-1].bias)
+        # Self-support prototype refinement (Fan et al., via the FSS review sec.
+        # 3.2: "update the prototypes by selecting the query features that
+        # self-match the prototypes with high confidence"). The reference is one
+        # small rectangle, so its prototype describes that rectangle's appearance,
+        # not the family's across the whole sheet -- the gap the review names as
+        # the core limitation of single-prototype models. A first pass predicts a
+        # mask, its confident pixels are pooled out of the QUERY's own features,
+        # and that self-prototype is mixed into the reference prototype for a
+        # second pass. It stays a global-average prototype throughout, so it does
+        # not reintroduce the spatial correspondence that `--corr-grid` showed to
+        # be harmful here (-0.037 at g=4, -0.049 at g=8).
+        self.self_support = float(self_support)
+        self.self_support_thresh = float(self_support_thresh)
         # Optional metric head for the auxiliary hard-pair ranking loss. Off by
         # default, so a model built without it is bit-identical to the baseline.
         # Fine + coarse rather than coarse alone: the query-model lineage
@@ -165,7 +198,47 @@ class RefUNet(nn.Module):
             self.metric_proj(reference_vector[:, :, None, None])[:, :, 0, 0], dim=1)
         return image_embedding, reference_embedding
 
-    def forward(self, image, reference, ref_box=None, return_embeddings=False):
+    def decode(self, image_features, prototypes, reference_features):
+        """Condition every level on `prototypes`, fuse top-down, emit logits."""
+        conditioned = [block(x, r, rf) for block, x, r, rf in zip(
+            self.condition, image_features, prototypes, reference_features)]
+        pyramid = conditioned[-1]
+        for level in range(2, -1, -1):
+            pyramid = F.interpolate(pyramid, size=conditioned[level].shape[-2:],
+                                    mode="bilinear", align_corners=False)
+            pyramid = self.smooth[level](pyramid + conditioned[level])
+        logits = self.head(pyramid)
+        if self.dynamic_filter:
+            generated = self.filter_gen(prototypes[-1])
+            kernel, bias = generated[:, :-1], generated[:, -1]
+            logits = logits + (torch.einsum("bc,bchw->bhw", kernel, pyramid)
+                               + bias[:, None, None])[:, None]
+        return logits
+
+    def self_prototypes(self, image_features, prototypes, logits):
+        """Pool the query's own confident pixels into a refined prototype.
+
+        Falls back to the reference prototype for any sample whose first pass
+        found nothing confident -- an empty prediction must not silently become a
+        prototype pooled over zero pixels.
+        """
+        probability = logits.detach().sigmoid()
+        refined = []
+        for features, prototype in zip(image_features, prototypes):
+            weight = F.interpolate(probability, size=features.shape[-2:],
+                                   mode="bilinear", align_corners=False)
+            weight = weight * (weight >= self.self_support_thresh)
+            mass = weight.flatten(1).sum(1)                            # [B]
+            pooled = ((features * weight).flatten(2).sum(2)
+                      / mass[:, None].clamp(min=1e-4))
+            found = (mass > 1.0).to(features.dtype)[:, None]
+            pooled = pooled * found + prototype * (1.0 - found)
+            refined.append((1.0 - self.self_support) * prototype
+                           + self.self_support * pooled)
+        return refined
+
+    def forward(self, image, reference, ref_box=None, return_embeddings=False,
+                return_aux=False):
         image_size = image.shape[-2:]
         if self.anchor:
             if ref_box is None:
@@ -190,19 +263,24 @@ class RefUNet(nn.Module):
             reference = torch.cat([reference, ref_plane], 1)
         image_features = self.features(image)
         reference_features = self.features(reference)
-        reference_vectors = [f.mean((-2, -1)) for f in reference_features]
-        conditioned = [block(x, r, rf) for block, x, r, rf in zip(
-            self.condition, image_features, reference_vectors, reference_features)]
-        pyramid = conditioned[-1]
-        for level in range(2, -1, -1):
-            pyramid = F.interpolate(pyramid, size=conditioned[level].shape[-2:],
-                                    mode="bilinear", align_corners=False)
-            pyramid = self.smooth[level](pyramid + conditioned[level])
-        logits = self.head(pyramid)
+        prototypes = [f.mean((-2, -1)) for f in reference_features]
+        logits = self.decode(image_features, prototypes, reference_features)
+        auxiliary = None
+        if self.self_support > 0.0:
+            auxiliary = logits
+            logits = self.decode(
+                image_features,
+                self.self_prototypes(image_features, prototypes, logits),
+                reference_features)
         out = F.interpolate(logits, size=image_size, mode="bilinear",
                             align_corners=False)
         if return_embeddings and self.metric_dim > 0:
             return (out,) + self.metric_embeddings(image_features, reference_features)
+        if return_aux:
+            if auxiliary is not None:
+                auxiliary = F.interpolate(auxiliary, size=image_size,
+                                          mode="bilinear", align_corners=False)
+            return out, auxiliary
         return out
 
     def parameter_groups(self, lr, backbone_lr_mult=0.1):

@@ -51,6 +51,14 @@ requirement, so fix the prompt and re-smoke before generating at scale.
 Unresolved from 2026-08-10: `--anchor-dropout` has still never been tested
 cleanly, having only ever run on top of the reference-plane bug.
 
+**Architecture is not the lever either (2026-08-12).** Four mechanisms from the
+matching / few-shot-segmentation literature — self-support prototypes, a
+hypernetwork-generated classifier, a central-surround two-stream reference, and
+SimAM shrinkage attention — were implemented and screened on validation. All
+null or negative; details and the two false positives they produced are in
+`synth_progress.md`. That makes six independent attempts at the conditioning
+mechanism, so prefer data supply over model surgery until something changes.
+
 ## Superseded — 2026-08-08 (measurements sound, conclusions retracted)
 
 Share of the target union lying in the connected component holding the user's

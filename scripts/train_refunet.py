@@ -64,6 +64,22 @@ def parse_args():
                         "GxG token grid and cosine-match every image location "
                         "against all tokens. 0 = the old globally-averaged "
                         "reference vector only.")
+    p.add_argument("--self-support", type=float, default=0.0,
+                   help="Self-support prototype refinement (FSS review sec. 3.2, "
+                        "Fan et al.): weight of the prototype pooled from the "
+                        "first pass's own confident query pixels, mixed into the "
+                        "reference prototype for a second decode. 0 = off.")
+    p.add_argument("--self-support-thresh", type=float, default=0.7,
+                   help="Confidence above which a first-pass pixel is pooled "
+                        "into the self-support prototype.")
+    p.add_argument("--self-support-aux", type=float, default=0.5,
+                   help="Loss weight on the FIRST pass when --self-support is on. "
+                        "The second pass depends on the first being roughly "
+                        "right, so the first is supervised too.")
+    p.add_argument("--dynamic-filter", action="store_true",
+                   help="Generate the final 1x1 classifier from the reference "
+                        "vector (hypernetwork conditioning, CS231n 2017 / FSS "
+                        "conditional networks). Zero-initialised.")
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--backbone-lr-mult", type=float, default=0.1)
     p.add_argument("--weight-decay", type=float, default=1e-4)
@@ -153,7 +169,8 @@ def main():
     train_ds, val_ds = build_datasets(
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
         train_split=args.train_split, seed=args.seed,
-        domain_random=args.domain_random, realism_aug=args.realism_aug, scale_matched_ref=args.scale_matched_ref)
+        domain_random=args.domain_random, realism_aug=args.realism_aug,
+        scale_matched_ref=args.scale_matched_ref)
     collate = partial(collate_fn, size_divisible=32)
     loader_options = ({"persistent_workers": True,
                        "prefetch_factor": args.prefetch_factor}
@@ -170,7 +187,10 @@ def main():
                     metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
                     anchor=args.anchor,
                     anchor_dropout=args.anchor_dropout,
-                    anchor_ref_plane=args.anchor_ref_plane).to(device)
+                    anchor_ref_plane=args.anchor_ref_plane,
+                    self_support=args.self_support,
+                    self_support_thresh=args.self_support_thresh,
+                    dynamic_filter=args.dynamic_filter).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
@@ -207,14 +227,22 @@ def main():
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 ref_boxes = (batch["ref_boxes"].to(device, non_blocking=True)
                              if args.anchor else None)
+                auxiliary = None
                 if args.rank_weight > 0:
                     logits, image_embedding, reference_embedding = model(
                         images, references, ref_box=ref_boxes,
                         return_embeddings=True)
+                elif args.self_support > 0 and args.self_support_aux > 0:
+                    logits, auxiliary = model(images, references,
+                                              ref_box=ref_boxes, return_aux=True)
                 else:
                     logits = model(images, references, ref_box=ref_boxes)
                 loss, bce, dice = mask_loss(logits, targets, valid,
                                             args.bce_weight, args.dice_weight)
+                if auxiliary is not None:
+                    aux_loss, _, _ = mask_loss(auxiliary, targets, valid,
+                                               args.bce_weight, args.dice_weight)
+                    loss = loss + args.self_support_aux * aux_loss
                 if args.rank_weight > 0:
                     rank = ranking_loss(image_embedding, reference_embedding,
                                         batch, device, args.rank_margin)
