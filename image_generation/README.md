@@ -62,8 +62,28 @@ what needs rewriting is the framing and crop, not the subject list.
 `render_image_generation_prompts.py --version v2` renders `prompts_v2.jsonl` from
 the same unchanged `specs.jsonl`, with the framing fixed per the five aims above.
 v1 is untouched and its recorded SHA still validates.
-`scripts/generate_images_openai.py` drives generation end to end: resumable,
-receipted, 1536×1024, contact sheet for the visual gates.
+`scripts/generate_images_openai.py` drives generation end to end:
+
+```bash
+set -a; . ~/.env; set +a          # OPENAI_API_KEY
+pip install --user openai
+python3 scripts/generate_images_openai.py --ids 1,11,21,41 \
+  --out data/image_generation/realistic_label_pool_v2 \
+  --report data/image_generation/smoke_v2_contact.png
+# --dry-run first; --limit N to cap; re-running skips accepted IDs
+```
+
+Defaults: `gpt-image-1`, landscape `1536x1024` (the model's largest long side,
+which clears the >=1500px aim with nothing to spare), quality `high`, roughly
+$0.19 an image. **Scale guidance: ~300 images is the round worth doing** — at the
+historical 29% yield that is ~86 usable sources, the same jump that bought
++0.073, for ~$50-60 and several hours of hand-labelling. The labelling, not the
+API, is the binding cost.
+
+Outputs and `generation_receipt.jsonl` land under git-ignored `data/`, so a
+clone has neither: resumability is per-VM, and the four smoke-test images from
+2026-08-12 (ids 1, 11, 21, 41) exist only on the VM that made them. Nothing has
+been uploaded to Roboflow.
 
 A 4-image smoke test (ids 1, 11, 21, 41) confirmed the framing fix — no title
 blocks, no legends, no sheet borders, no cropped fragments. It also exposed a

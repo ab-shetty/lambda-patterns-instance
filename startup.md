@@ -74,6 +74,7 @@ Credentials live in `~/.env` as `HF_TOKEN` and `ROBOFLOW_API_KEY`; load with
 
 ```bash
 pip install --user -r requirements.txt roboflow
+pip install --user openai          # only for scripts/generate_images_openai.py
 ```
 
 Verified working stack: Python 3.10.12, torch 2.7.0, torchvision 0.22.0,
@@ -89,8 +90,14 @@ python3 -c "from huggingface_hub import snapshot_download as d; \
 TILES=<printed path>/reference_tiles_curated        # 50 tiles
 ```
 
-Add `openai` as well if you are generating the realistic pool
-(`scripts/generate_images_openai.py`).
+`--tile-sim` (default off, and it should stay off — see the 2026-08-12 entry in
+`synth_progress.md`) additionally needs the pairwise table, which is not
+committed because it lives under `data/`:
+
+```bash
+PYTHONPATH=. python3 scripts/family_similarity_probe.py \
+  --tiles $TILES --out data/probes/tile_pairs.json
+```
 
 Cache the evaluation dataset (never put these HF images into training):
 
