@@ -9,6 +9,10 @@ here.
 
 ## Pick up here (2026-08-12)
 
+**Next step: generate a new round of realistic source plans through the OpenAI
+image API with `scripts/generate_images_openai.py`, since source count is the
+only lever in this project with replicated positive evidence.**
+
 The 2026-08-10 lever — generate synthetic sheets with deliberately confusable
 material pairs — was implemented and tested. **It costs −0.104** (0.6823 →
 0.5787, 3 seeds, t=3.80, p=0.019, complete separation). The lever is closed;
@@ -27,18 +31,22 @@ Three things that reasoning got wrong are worth carrying forward:
 appearance at all: a family's own instances agree less than that family agrees
 with its most confusable neighbour, and those are the worst image in each split
 (HF14 14/18, validation 13/17). That matches the 2026-08-07 finding that
-`hatch_matcher` and `RefUNet` fail on the same inputs. **The open question is
-whether those cases are labelling inconsistencies or genuine semantic
-distinctions** — same hatch, different material by drawing context. Look at the
-four flagged pairs before designing anything else; if they are label errors that
-is a data-quality fix worth ~+0.105 on HF14 from image 14 alone, and if they are
-not, ~0.70 is close to the ceiling for a rectangle-only input.
+`hatch_matcher` and `RefUNet` fail on the same inputs. Left open, and worth an
+hour whenever someone is in the labelling tool anyway: **are those cases
+labelling inconsistencies or genuine semantic distinctions** — same hatch,
+different material by drawing context? If they are label errors that is a
+data-quality fix worth ~+0.105 on HF14 from image 14 alone; if they are not,
+~0.70 is close to the ceiling for a rectangle-only input.
 
-**The lever with replicated positive evidence remains source count**: 28 → 86
-real sources bought +0.073, one generated plan ≈ one real plan, and re-augmenting
-the same 114 sources 18× → 72× buys nothing. `scripts/generate_images_openai.py`
-now drives that round end to end; read the status section of
-`image_generation/README.md` first.
+**Why generation is the next step.** 28 → 86 real sources bought +0.073, one
+generated plan ≈ one real plan, and re-augmenting the same 114 sources 18× → 72×
+buys nothing — so distinct sources, not records, are the constraint, and
+generation is the only supply that also picks its own resolution (worth ~0.032,
+and unretrofittable onto the natively-640px scraped pool). Read the status
+section of `image_generation/README.md` first: the framing is fixed in
+`prompts_v2.jsonl`, but a 2026-08-12 smoke test showed the model still
+substitutes realistic materials for drafting hatch and ignores the confuser
+requirement, so fix the prompt and re-smoke before generating at scale.
 
 Unresolved from 2026-08-10: `--anchor-dropout` has still never been tested
 cleanly, having only ever run on top of the reference-plane bug.
