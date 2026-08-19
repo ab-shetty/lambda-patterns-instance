@@ -14,6 +14,12 @@ are earlier framings kept so their results stay reproducible). Writes each image
 to its manifest `filename` and appends a receipt row, so a run is resumable and
 an accepted image is never silently overwritten.
 
+For a full round use `--batch submit`: the Batch API halves the token price
+($15 per 1M image output tokens against $30), which takes a 300-image round from
+~$60 to ~$30, in exchange for a 24-hour completion window. Submit, then fetch
+later -- the batch outlives this shell, and the state file in the output
+directory holds the id.
+
 Two things the manifest drives per image. A v4 row carries the aspect ratio it
 wants, and the eval set runs to 5:1 while the API stops at 3:1 -- so anything
 wider is generated at 3:1 and trimmed to width by dropping the emptiest rows,
@@ -237,6 +243,119 @@ def write_contact_sheet(out_dir, rows, path, cols=4, thumb=420):
     return path
 
 
+
+# --- Batch API ----------------------------------------------------------------
+# Half price, 24h window, and it survives the session that submitted it. The
+# output file carries every image as base64, so it is large: budget ~5.5MB per
+# 4-megapixel PNG, i.e. a couple of GB for a 300-image round.
+
+def batch_state_path(out_dir):
+    return Path(out_dir) / "batch_state.json"
+
+
+def build_batch_file(rows, out_dir, model, quality, output_format, per_spec_aspect,
+                     size):
+    """One JSONL line per image, in the Batch API's envelope format."""
+    path = Path(out_dir) / "batch_requests.jsonl"
+    with path.open("w") as handle:
+        for row in rows:
+            body = {"model": model, "prompt": row["prompt"], "n": 1,
+                    "quality": quality, "output_format": output_format,
+                    "size": (size_for_aspect(row["aspect"])
+                             if per_spec_aspect and row.get("aspect") else size)}
+            handle.write(json.dumps({"custom_id": f"item-{row['id']:03d}",
+                                     "method": "POST",
+                                     "url": "/v1/images/generations",
+                                     "body": body}) + "\n")
+    return path
+
+
+def batch_submit(client, rows, out_dir, args, size):
+    path = build_batch_file(rows, out_dir, args.model, args.quality,
+                            args.output_format, args.per_spec_aspect, size)
+    upload = client.files.create(file=path.open("rb"), purpose="batch")
+    batch = client.batches.create(input_file_id=upload.id,
+                                  endpoint="/v1/images/generations",
+                                  completion_window="24h",
+                                  metadata={"round": Path(out_dir).name})
+    state = {"batch_id": batch.id, "input_file_id": upload.id,
+             "requests": len(rows), "model": args.model, "quality": args.quality,
+             "submitted": datetime.now(timezone.utc).isoformat()}
+    batch_state_path(out_dir).write_text(json.dumps(state, indent=1))
+    print(f"submitted {len(rows)} requests as {batch.id} (status {batch.status})")
+    print(f"state: {batch_state_path(out_dir)}")
+    print(f"check with: --batch status --out {out_dir}")
+    return 0
+
+
+def resolve_batch_id(out_dir, batch_id):
+    if batch_id:
+        return batch_id
+    path = batch_state_path(out_dir)
+    if not path.exists():
+        raise SystemExit(f"no batch id given and no {path}")
+    return json.loads(path.read_text())["batch_id"]
+
+
+def batch_status(client, out_dir, batch_id):
+    batch = client.batches.retrieve(resolve_batch_id(out_dir, batch_id))
+    counts = batch.request_counts
+    print(f"{batch.id}  status={batch.status}  "
+          f"completed={counts.completed}/{counts.total}  failed={counts.failed}")
+    if batch.status == "completed":
+        print(f"fetch with: --batch fetch --out {out_dir}")
+    return 0 if batch.status in {"completed", "in_progress", "validating",
+                                 "finalizing"} else 1
+
+
+def batch_fetch(client, rows, out_dir, batch_id, output_format):
+    """Write every completed image, crop it, and append its receipt."""
+    batch = client.batches.retrieve(resolve_batch_id(out_dir, batch_id))
+    if batch.status != "completed":
+        print(f"batch is {batch.status}, not completed")
+        return 1
+    by_id = {f"item-{row['id']:03d}": row for row in rows}
+    payload = client.files.content(batch.output_file_id).text
+    written = failed = 0
+    with receipt_path(out_dir).open("a") as log:
+        for line in payload.splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            row = by_id.get(record["custom_id"])
+            if row is None:
+                continue
+            response = record.get("response") or {}
+            body = response.get("body") or {}
+            if response.get("status_code") != 200 or not body.get("data"):
+                failed += 1
+                receipt = {"id": row["id"], "filename": row["filename"],
+                           "status": "failed", "error": str(record.get("error") or
+                                                            body)[:400],
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+            else:
+                ext = "jpg" if output_format == "jpeg" else output_format
+                filename = Path(row["filename"]).with_suffix("." + ext).name
+                dest = Path(out_dir) / filename
+                blob = base64.b64decode(body["data"][0]["b64_json"])
+                tmp = dest.with_suffix(dest.suffix + ".part")
+                tmp.write_bytes(blob)
+                tmp.replace(dest)
+                cropped = (trim_to_aspect(dest, row["aspect"])
+                           if row.get("aspect", 0) > MAX_ASPECT else None)
+                written += 1
+                receipt = {"id": row["id"], "filename": filename,
+                           "status": "accepted", "model": body.get("model"),
+                           "size": body.get("size"), "via": "batch",
+                           "bytes": len(blob), "cropped_to": cropped,
+                           "usage": body.get("usage"),
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+            log.write(json.dumps(receipt) + "\n")
+            log.flush()
+    print(f"wrote {written} images, {failed} failed -> {out_dir}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -263,6 +382,10 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--attempts", type=int, default=3)
     ap.add_argument("--report", help="write a contact sheet here when done")
+    ap.add_argument("--batch", choices=["submit", "status", "fetch"],
+                    help="use the Batch API: half price, 24h window. submit, "
+                         "then status, then fetch")
+    ap.add_argument("--batch-id", help="override the id in the state file")
     ap.add_argument("--dry-run", action="store_true",
                     help="show what would be generated and exit")
     args = ap.parse_args()
@@ -281,6 +404,15 @@ def main():
         todo = todo[:args.limit]
 
     size = check_size(args.size or SIZES[args.orientation])
+    if args.batch in {"status", "fetch"}:                # nothing to plan here
+        from openai import OpenAI
+        if not os.environ.get("OPENAI_API_KEY"):
+            print("OPENAI_API_KEY is not set", file=sys.stderr)
+            return 2
+        client = OpenAI()
+        if args.batch == "status":
+            return batch_status(client, out_dir, args.batch_id)
+        return batch_fetch(client, rows, out_dir, args.batch_id, args.output_format)
     print(f"manifest={len(rows)}  already accepted={len(done)}  to generate={len(todo)}")
     per_spec = args.per_spec_aspect and any(r.get("aspect") for r in todo)
     print(f"model={args.model} size={'per-spec' if per_spec else size} "
@@ -305,6 +437,9 @@ def main():
 
     from openai import OpenAI
     client = OpenAI()
+
+    if args.batch == "submit":
+        return batch_submit(client, todo, out_dir, args, size)
 
     receipts, failures = [], 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool, \

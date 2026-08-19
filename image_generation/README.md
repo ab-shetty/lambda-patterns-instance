@@ -294,9 +294,46 @@ and grille tags — the same shape as eval image 12. The faint elevation keeps
 visible brick coursing across all four views instead of a roof that reads as
 blank page.
 
+**The consistency requirement is now its own block.** In v3 and the first v4 it
+was a clause inside a longer paragraph, describing the ideal. It now leads the
+prompt after the material list, names the failures rather than the ideal —
+wavering or hand-drawn lines, lines curving to follow a wall or bend around an
+opening, spacing opening up across a region, a fill changing weight or scale
+between two regions — and asks for the mechanism: draw each family as one
+continuous ruled field across the whole drawing and let the geometry mask it, so
+a fill interrupted by a window resumes on the same grid.
+
+Paired against the previous wording on the same three specs, regenerated:
+2,489 -> 3,772, 1,553 -> 2,035 and 5,363 -> 5,522 on fill regularity. All three
+moved the same way, but three pairs with no repeats is weak evidence and this
+repo has retracted better-supported wins; treat it as free and directionally
+right, not as established. A proper paired test is ~$2 in batch mode.
+
 Still a deliberate skew, left as is: 28 of 100 specs are colourised against 16
 of 28 in the eval set, because the images the model fails on are the monochrome
 ones.
+
+### Batch mode for the full round
+
+The Batch API halves the token price -- $15 per 1M image output tokens against
+$30 -- so a 300-image round is ~$30 rather than ~$60, in exchange for a 24-hour
+completion window. `/v1/images/generations` is supported; the limits that matter
+here are 50,000 requests and a 200MB input file, neither close.
+
+```bash
+python3 scripts/generate_images_openai.py --out data/image_generation/round1 \
+  --batch submit                      # writes batch_state.json with the id
+python3 scripts/generate_images_openai.py --out data/image_generation/round1 \
+  --batch status
+python3 scripts/generate_images_openai.py --out data/image_generation/round1 \
+  --batch fetch                       # writes images, crops, and receipts
+```
+
+The batch outlives the shell that submitted it, which is what makes this usable
+from a session that will not still be open in 24 hours. Two cautions: the output
+file carries every image as base64, so budget ~5.5MB per 4-megapixel PNG (a few
+GB for a full round), and output line order does not match input order — the
+fetch step maps by `custom_id`, never by position.
 
 ---
 

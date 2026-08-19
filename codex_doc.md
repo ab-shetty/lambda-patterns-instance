@@ -30,6 +30,11 @@ generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
 demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
 `--min-regularity` to re-roll, or better, let it order the labelling queue.
 
+**Generate the round through the Batch API** (`--batch submit|status|fetch`):
+half price, 24-hour window, and the batch outlives the session, so ~$30 for 300
+images rather than ~$60. Fetch maps results by `custom_id` because batch output
+order is not input order.
+
 **Tuned after review**: contrast is three levels (47 normal / 24 light / 29
 faint) rather than a flag, with a floor in the faint wording, and `plan_mep`
 demands a solid filled wall poche plus a second family — as one family of empty

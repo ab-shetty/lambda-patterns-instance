@@ -96,11 +96,26 @@ def render_v4(spec):
         "the same project.")
     parts.append(
         f"Materials: {spec['patterns']}. Every material family must appear in "
-        "several spatially separated places in the drawing, and each family must "
-        "be drawn IDENTICALLY everywhere it appears: the same line spacing, the "
-        "same angle, the same weight, ruled straight and evenly spaced from one "
-        "edge of a region to the other. A family that changes spacing or wanders "
-        "between two regions is the single worst failure for this dataset.")
+        "several spatially separated places in the drawing.")
+    # The consistency requirement gets its own block, ahead of the drawing's
+    # content, and names the failures rather than describing the ideal: v3 asked
+    # for "ONE constant angle and ONE constant spacing" inside the hatching
+    # paragraph and scored the worst fill regularity of any pool measured.
+    parts.append(
+        "PATTERN CONSISTENCY — THE MOST IMPORTANT REQUIREMENT, ABOVE REALISM: "
+        "each material family must be drawn EXACTLY THE SAME in every region it "
+        "appears in. One spacing, one angle, one line weight, chosen once and "
+        "held everywhere — in small regions as well as large, at the edges of a "
+        "region as well as in the middle. The lines must be machine-ruled and "
+        "perfectly straight, as if plotted from CAD. SPECIFICALLY FORBIDDEN: "
+        "lines that waver, wobble or look hand-drawn; lines that curve or bend "
+        "to follow a wall, a roof slope or an opening; spacing that opens up or "
+        "tightens across a region; a fill that fades out, changes weight, or "
+        "changes scale between two regions of the same material; two regions of "
+        "the same material that do not look like the same material. Where an "
+        "opening, a symbol or a note interrupts a region, the fill continues on "
+        "the far side ON THE SAME GRID — draw each family as one continuous "
+        "ruled field across the whole drawing, then let the geometry mask it.")
     parts.append(f"Deliberate difficulty: {spec['confuser']}.")
 
     if spec["presentation"] == "colourised":
