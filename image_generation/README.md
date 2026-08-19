@@ -265,11 +265,38 @@ image 14; id 2 is a sparse under-floor framing plan with note blocks at 4:1,
 like eval image 7. Copies are in `perceive-ai/floz-gen-v4-smoke` (disposable —
 `--delete-project --execute`).
 
-Two things to tune before the full round. The smoke's median ink is 0.025
-against the real pool's 0.111: at 61% faint the whole pool sits at the sparse
-extreme rather than spanning it, so consider dropping to ~45%. And 28 of 100
-specs are colourised against 16 of 28 in the eval set — a deliberate skew,
-since the worst images are monochrome, but it is a skew.
+### Tuned after review of the smoke
+
+Two defects in the first v4 draft, both found by looking at the images:
+
+**Faintness was a flag, and it went too far.** 61 of 100 specs were flat-out
+faint, which put the pool's median ink at 0.025 against the real pool's 0.111,
+and the roof of the smoke's faint elevation came back pale enough to read as
+empty page. Contrast is now three levels — 47 normal, 24 light, 29 faint — and
+the faint wording carries a floor: "every material fill must still be plainly
+visible on the paper, subtle, not vanishing, and never fading out to blank white
+in the middle of a region". A fill nobody can see is a region nobody can label.
+
+**`plan_mep` produced images with nothing in them.** The category asked for one
+family, the wall poche, and the model drew walls as empty double outlines — so
+the smoke's floor plan had no patterned region at all and could not have been
+annotated. All 14 now demand a SOLID FILLED dark gray poche ("filled in, not a
+pair of empty outlines") plus a second family, a floor finish in the wet rooms
+and garage, with the reason stated in the prompt: a plan whose walls are empty
+outlines has nothing in it to select.
+
+Both fixes were re-smoked (batch `v4-tuned` in `floz-gen-v4-smoke`). The
+tuned pool's ink is 0.089 against the first draft's 0.025 and the real pool's
+0.111, and contrast lands at 0.435 against the real 0.437. The regenerated
+`plan_mep` plan now carries solid filled wall poche broken into disconnected
+runs by every opening, plus a tile grid in the wet rooms, under dashed duct runs
+and grille tags — the same shape as eval image 12. The faint elevation keeps
+visible brick coursing across all four views instead of a roof that reads as
+blank page.
+
+Still a deliberate skew, left as is: 28 of 100 specs are colourised against 16
+of 28 in the eval set, because the images the model fails on are the monochrome
+ones.
 
 ---
 

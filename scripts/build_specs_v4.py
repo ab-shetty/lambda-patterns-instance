@@ -138,6 +138,22 @@ def plan_aspect(rng):
     return rng.choice([1.3, 1.4, 1.5, 1.5, 1.7, 2.0])
 
 
+def contrast_level(rng, faint_p, light_p):
+    """none / light / faint.
+
+    v4's first draft made 61 of 100 specs flat-out faint, which put the pool's
+    median ink at 0.025 against the real pool's 0.111 -- the whole round sat at
+    the sparse extreme instead of spanning it, and roofs came back so pale they
+    read as empty. `light` is the middle the real set is actually full of.
+    """
+    roll = rng.random()
+    if roll < faint_p:
+        return "faint"
+    if roll < faint_p + light_p:
+        return "light"
+    return "none"
+
+
 def elevation(rng, house, presentation, faint):
     mats = rng.sample(SIDING, 3)
     patterns = "; ".join(f"{name}, drawn as {how}" for name, how in mats)
@@ -165,7 +181,8 @@ def build(seed):
     # --- elevations, colourised, with markup (16) ---------------------------
     while sum(s['category'] == 'elev_colour_markup' for s in specs) < 16:
         house = rng.choice(HOUSE)
-        row = elevation(rng, house, "colourised", faint=rng.random() < 0.4)
+        row = elevation(rng, house, "colourised",
+                        faint=contrast_level(rng, 0.10, 0.35))
         row["colour"] = rng.choice(COLOURS)
         row["markup"] = rng.choice(MARKUP)
         row["ui_chrome"] = rng.choice(UI_CHROME) if rng.random() < 0.3 else ""
@@ -177,7 +194,7 @@ def build(seed):
     # --- elevations, colourised, no markup (12) -----------------------------
     while sum(s['category'] == 'elev_colour' for s in specs) < 12:
         row = elevation(rng, rng.choice(HOUSE), "colourised",
-                        faint=rng.random() < 0.3)
+                        faint=contrast_level(rng, 0.05, 0.30))
         row["colour"] = rng.choice(COLOURS)
         row["markup"] = ""
         row["ui_chrome"] = ""
@@ -188,7 +205,8 @@ def build(seed):
 
     # --- elevations, faint monochrome: the image-14 case (22) ---------------
     while sum(s['category'] == 'elev_faint' for s in specs) < 22:
-        row = elevation(rng, rng.choice(HOUSE), "monochrome", faint=True)
+        row = elevation(rng, rng.choice(HOUSE), "monochrome",
+                        faint=contrast_level(rng, 0.42, 0.48))
         row["colour"] = ""
         row["markup"] = ""
         row["ui_chrome"] = ""
@@ -199,7 +217,7 @@ def build(seed):
 
     # --- elevations, ordinary monochrome (8) --------------------------------
     while sum(s['category'] == 'elev_mono' for s in specs) < 8:
-        row = elevation(rng, rng.choice(HOUSE), "monochrome", faint=False)
+        row = elevation(rng, rng.choice(HOUSE), "monochrome", faint="none")
         row["colour"] = ""
         row["markup"] = ""
         row["ui_chrome"] = ""
@@ -209,15 +227,20 @@ def build(seed):
 
     # --- floor plans under an MEP overlay: the image-12 case (14) -----------
     while sum(s['category'] == 'plan_mep' for s in specs) < 14:
+        finish, how = rng.choice(PLAN_FINISH)
         add("plan_mep", subject=rng.choice(HOUSE),
             layout="a complete floor plan of the whole footprint",
-            patterns=("one family only: the walls, drawn as a thin solid gray "
-                      "poche about 6 inches thick, repeating around every room "
-                      "and separated into many disconnected runs by door and "
-                      "window openings"),
+            patterns=("two families. First, the walls: drawn as a SOLID FILLED "
+                      "dark gray poche about six inches thick -- filled in, not "
+                      "a pair of empty outlines -- repeating around every room "
+                      "and broken into many disconnected runs by door and window "
+                      "openings. Second, {finish} on the floor of the wet rooms "
+                      "and the garage, drawn as {how}. Both must be plainly "
+                      "visible: a plan whose walls are empty outlines has nothing "
+                      "in it to select").format(finish=finish, how=how),
             confuser=("furniture outlines, cabinet runs and the dashed overlay "
-                      "must not read as wall fill"),
-            presentation="monochrome", faint=True,
+                      "must not read as wall fill or as floor finish"),
+            presentation="monochrome", faint=contrast_level(rng, 0.25, 0.55),
             colour="", markup="", ui_chrome="",
             clutter=rng.choice(MEP_CLUTTER),
             artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
@@ -230,7 +253,7 @@ def build(seed):
             patterns="three floor finishes: " + "; ".join(
                 f"{name}, drawn as {how}" for name, how in mats),
             confuser=rng.choice(CONFUSERS), presentation="monochrome",
-            faint=False, colour="", markup="", ui_chrome="",
+            faint="none", colour="", markup="", ui_chrome="",
             clutter=("furniture, fixtures, appliance symbols and room name and "
                      "area labels interrupting the fills"),
             artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
@@ -243,7 +266,8 @@ def build(seed):
             patterns="three roof surfaces: " + "; ".join(
                 f"{name}, drawn as {how}" for name, how in mats),
             confuser=rng.choice(CONFUSERS), presentation="monochrome",
-            faint=rng.random() < 0.5, colour="", markup="", ui_chrome="",
+            faint=contrast_level(rng, 0.15, 0.45), colour="", markup="",
+            ui_chrome="",
             clutter=("ridge and valley lines, slope arrows with pitch labels, "
                      "vents, skylights and overflow scuppers"),
             artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
@@ -257,8 +281,8 @@ def build(seed):
                 f"{name}, drawn as {how}" for name, how in mats),
             confuser=("the two families must be told apart only by their fill, "
                       "not by where they sit in the drawing"),
-            presentation="monochrome", faint=True, colour="", markup="",
-            ui_chrome="",
+            presentation="monochrome", faint=contrast_level(rng, 0.35, 0.45),
+            colour="", markup="", ui_chrome="",
             clutter=("two or three blocks of small specification note text and "
                      "a few leader lines, with large areas of empty page"),
             artifacts=rng.choice(ARTIFACTS[:2] + ARTIFACTS[-1:]),
@@ -288,13 +312,14 @@ def main():
         "".join(json.dumps(s, ensure_ascii=False) + "\n" for s in specs))
 
     counts = Counter(s["category"] for s in specs)
-    faint = sum(1 for s in specs if s["faint"])
+    faint = sum(1 for s in specs if s["faint"] == "faint")
+    light = sum(1 for s in specs if s["faint"] == "light")
     wide = sum(1 for s in specs if s["aspect"] > 3)
     coloured = sum(1 for s in specs if s["presentation"] == "colourised")
     print(f"wrote {len(specs)} specs to {args.out}")
     for category, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {category:<20} {n}")
-    print(f"faint/sparse: {faint}   colourised: {coloured}   "
+    print(f"faint: {faint}   light: {light}   colourised: {coloured}   "
           f"wider than 3:1: {wide}   with markup: "
           f"{sum(1 for s in specs if s['markup'])}")
 

@@ -30,11 +30,12 @@ generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
 demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
 `--min-regularity` to re-roll, or better, let it order the labelling queue.
 
-**Two open judgement calls on the v4 mix**, both in the README: 61 of 100 specs
-are faint or sparse, which puts the pool's median ink at 0.025 against the real
-pool's 0.111 (probably too far — consider ~45%), and 28 of 100 are colourised
-against 16 of 28 in the eval set (a deliberate skew toward the monochrome images
-the model fails on).
+**Tuned after review**: contrast is three levels (47 normal / 24 light / 29
+faint) rather than a flag, with a floor in the faint wording, and `plan_mep`
+demands a solid filled wall poche plus a second family — as one family of empty
+double-outline walls it produced plans with nothing in them to label. Re-smoked:
+ink 0.089 against the real pool's 0.111, contrast 0.435 against 0.437. The one
+skew left deliberately is 28 of 100 colourised against 16 of 28.
 
 Confusability still has to be measured on the labelled pool, because
 `family_similarity_probe.py --local-data` needs annotations. Run it on the first

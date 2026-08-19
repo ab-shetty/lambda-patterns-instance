@@ -113,11 +113,19 @@ def render_v4(spec):
     else:
         parts.append("Presentation: black and gray linework on white paper, as "
                      "exported from CAD to PDF. No colour fills.")
-    if spec["faint"]:
+    # Three levels, not a flag. The first v4 draft treated faint as on/off and
+    # came back with roofs so pale they read as empty page -- a fill nobody can
+    # see is a region nobody can label, so faintness now has a floor.
+    if spec["faint"] == "faint":
         parts.append(
-            "Contrast: FAINT. Pale thin gray lines, low contrast, much of the "
-            "page empty white. The material fills are subtle rather than bold — "
-            "an annotator has to look closely to see where one ends.")
+            "Contrast: faint. Pale gray linework and low contrast, as if lightly "
+            "printed, with much of the page empty white. Every material fill "
+            "must still be plainly visible on the paper — subtle, not vanishing, "
+            "and never fading out to blank white in the middle of a region.")
+    elif spec["faint"] == "light":
+        parts.append(
+            "Contrast: light. Thin gray linework, lighter than a bold CAD plot "
+            "but fully legible, with the material fills easy to see at a glance.")
     if spec["markup"]:
         parts.append(
             f"Markup: the drawing has been marked up by hand in a review tool — "
