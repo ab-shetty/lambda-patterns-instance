@@ -76,29 +76,120 @@ Style/medium: crisp black and gray CAD linework rasterized from a professional c
 Composition/framing: the drawing fills the frame on white paper, landscape orientation, with only a thin margin and nothing important cropped at the edges.
 Constraints: no colored rendering, no photographic building, no watermark, no logo, no segmentation overlay, no bounding boxes, no colored masks, and no pre-existing annotation marks."""
 
-TEMPLATES = {"v1": TEMPLATE, "v2": TEMPLATE_V2, "v3": TEMPLATE_V3}
+
+# v4 assembles rather than formats: a spec carries optional parts (colour,
+# markup, tool chrome) and an empty one must leave no dangling sentence.
+def render_v4(spec):
+    parts = []
+    parts.append("Use case: scientific-educational")
+    parts.append("Asset type: unlabelled training image for reference-conditioned "
+                 "architectural-pattern segmentation")
+    parts.append(
+        "Primary request: Create one excerpt from a real residential construction "
+        "plan set — a single drawing as it looks when one page of the PDF is "
+        f"cropped down to it. This is dataset item {spec['id']:03d} of 100 and "
+        "must be visually unique, not a variation of another item.")
+    parts.append(f"Subject: {spec['subject']}")
+    parts.append(
+        f"Layout: {spec['layout']}. Every view present must be drawn COMPLETE — "
+        "nothing cut off mid-wall or mid-footprint — and all views must belong to "
+        "the same project.")
+    parts.append(
+        f"Materials: {spec['patterns']}. Every material family must appear in "
+        "several spatially separated places in the drawing, and each family must "
+        "be drawn IDENTICALLY everywhere it appears: the same line spacing, the "
+        "same angle, the same weight, ruled straight and evenly spaced from one "
+        "edge of a region to the other. A family that changes spacing or wanders "
+        "between two regions is the single worst failure for this dataset.")
+    parts.append(f"Deliberate difficulty: {spec['confuser']}.")
+
+    if spec["presentation"] == "colourised":
+        parts.append(
+            f"Presentation: a colourised permit-set drawing — the surfaces are "
+            f"filled with flat {spec['colour']} and other muted architectural "
+            "tints, with each material's line pattern drawn over its tint. This "
+            "is a coloured drawing, not black-and-white linework, and not a "
+            "photorealistic rendering.")
+    else:
+        parts.append("Presentation: black and gray linework on white paper, as "
+                     "exported from CAD to PDF. No colour fills.")
+    if spec["faint"]:
+        parts.append(
+            "Contrast: FAINT. Pale thin gray lines, low contrast, much of the "
+            "page empty white. The material fills are subtle rather than bold — "
+            "an annotator has to look closely to see where one ends.")
+    if spec["markup"]:
+        parts.append(
+            f"Markup: the drawing has been marked up by hand in a review tool — "
+            f"{spec['markup']}. The markup sits ON TOP of the drawing and does "
+            "not replace any material fill.")
+    if spec["ui_chrome"]:
+        parts.append(f"Screen capture: this is a screenshot of that review tool, "
+                     f"so {spec['ui_chrome']}.")
+    parts.append(
+        f"Drafting content: {spec['clutter']}. Some of it must cross patterned "
+        "regions so an annotator can label subtraction holes, and openings, "
+        "fixtures and symbols must interrupt the fills.")
+    parts.append(
+        "Excluded content: no title block, no legend, no material schedule, no "
+        "revision table, no sheet border or frame, and no large headline. This is "
+        "one drawing cropped out of a sheet, not the sheet.")
+    parts.append(f"Medium: {spec['artifacts']}; the texture of a scanned or "
+                 "exported construction document, not an illustration.")
+    if spec["aspect"] > 3.0:
+        # The API stops at 3:1, so the extra width is won back by trimming the
+        # margin afterwards -- which only works if the margin is there to trim.
+        parts.append(
+            f"Composition: landscape. The drawing itself must be a wide band of "
+            f"roughly {spec['aspect']:.1f}:1 sitting across the middle of the "
+            "frame, with empty white paper above and below it and nothing "
+            "important near the top or bottom edge.")
+    else:
+        parts.append(
+            f"Composition: landscape, roughly {spec['aspect']:.1f}:1, the drawing "
+            "filling the frame with a thin margin and nothing important cropped "
+            "at the edges.")
+    parts.append(
+        "Constraints: no photographic building, no watermark, no logo, no "
+        "segmentation overlay, no bounding boxes, no coloured region masks of the "
+        "kind an annotation tool draws, and no pre-existing polygon annotations.")
+    return "\n".join(parts)
+
+
+TEMPLATES = {"v1": TEMPLATE, "v2": TEMPLATE_V2, "v3": TEMPLATE_V3,
+             "v4": render_v4}
 DEFAULT_OUT = {"v1": "image_generation/prompts.jsonl",
                "v2": "image_generation/prompts_v2.jsonl",
-               "v3": "image_generation/prompts_v3.jsonl"}
+               "v3": "image_generation/prompts_v3.jsonl",
+               "v4": "image_generation/prompts_v4.jsonl"}
+# v1-v3 share one subject list; v4 is built from the evaluation set's shape.
+DEFAULT_SPECS = {"v4": "image_generation/specs_v4.jsonl"}
+DEFAULT_SPEC = "image_generation/specs.jsonl"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--specs", default="image_generation/specs.jsonl")
+    parser.add_argument("--specs", default=None,
+                        help="defaults to the spec list for the version")
     parser.add_argument("--version", choices=sorted(TEMPLATES), default="v1")
     parser.add_argument("--out", default=None,
                         help="defaults to prompts[_v2,_v3].jsonl for the version")
     args = parser.parse_args()
     if args.out is None:
         args.out = DEFAULT_OUT[args.version]
+    if args.specs is None:
+        args.specs = DEFAULT_SPECS.get(args.version, DEFAULT_SPEC)
     specs = [json.loads(line) for line in Path(args.specs).read_text().splitlines()
              if line.strip()]
     if [spec["id"] for spec in specs] != list(range(1, 101)):
         raise ValueError("spec IDs must be exactly 1 through 100 in order")
     template = TEMPLATES[args.version]
+    render = template if callable(template) else (lambda spec: template.format(**spec))
     rows = [{"id": spec["id"],
              "filename": f"floz_gen_{spec['id']:03d}.png",
-             "prompt": template.format(**spec)} for spec in specs]
+             "prompt": render(spec),
+             "aspect": spec.get("aspect"),
+             "category": spec.get("category")} for spec in specs]
     Path(args.out).write_text(
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows))
     print(f"wrote {len(rows)} prompts to {args.out}")

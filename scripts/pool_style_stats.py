@@ -82,13 +82,18 @@ def image_stats(path, tile=128, max_side=1280):
     coloured = gray < 0.98 * max(page, 1e-6)
     saturation = float(sat[coloured].mean()) if coloured.any() else 0.0
 
+    # The fill detector uses a gentler threshold than the `ink` statistic: a
+    # faint export draws its hatch in pale gray, and at 0.75 of page white those
+    # tiles look empty and the image scores nothing at all. Faint plans are the
+    # ones the model is worst on, so they have to be measurable.
+    faint_cut = 0.9 * max(page, 1e-6)
     peaks = []
     h, w = gray.shape
     for y in range(0, h - tile + 1, tile // 2):     # half-tile stride, fills are small
         for x in range(0, w - tile + 1, tile // 2):
             block = gray[y:y + tile, x:x + tile]
-            block_ink = (block < 0.75 * max(page, 1e-6)).mean()
-            if not 0.05 < block_ink < 0.75:         # blank, or solid poche/text
+            block_ink = (block < faint_cut).mean()
+            if not 0.02 < block_ink < 0.75:         # blank, or solid poche/text
                 continue
             peak = tile_regularity(block)
             if peak is not None and peak >= 30:     # below this there is no fill

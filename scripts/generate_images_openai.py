@@ -9,10 +9,19 @@ that can also choose its own resolution (worth ~0.032, and unretrofittable onto
 the natively-640px scraped pool).
 
 Reads the prompt manifest rendered by `render_image_generation_prompts.py`
-(use `--version v3`: v1 asked for whole sheets and yielded 29%, and v2 fixed the
-framing but not the drafting-hatch or confuser defects). Writes each image to its
-manifest `filename` and appends a receipt row, so a run is resumable and an
-accepted image is never silently overwritten.
+(use `--version v4`, which is aimed at the evaluation set's measured shape; v1-v3
+are earlier framings kept so their results stay reproducible). Writes each image
+to its manifest `filename` and appends a receipt row, so a run is resumable and
+an accepted image is never silently overwritten.
+
+Two things the manifest drives per image. A v4 row carries the aspect ratio it
+wants, and the eval set runs to 5:1 while the API stops at 3:1 -- so anything
+wider is generated at 3:1 and trimmed to width by dropping the emptiest rows,
+which is what a page excerpt is anyway. And `--min-regularity` re-rolls an image
+whose material fills are not periodic enough, measured the same way as
+`scripts/pool_style_stats.py`: the real plans read ~18,600, the delivered
+generated pool ~3,200. No prompt wording has closed that gap, so the lever is
+selection.
 
     export OPENAI_API_KEY=...        # or `set -a; . ~/.env; set +a`
     python3 scripts/generate_images_openai.py \
@@ -48,6 +57,45 @@ SIZES = {"landscape": "2496x1664",       # 3:2, the sheet-like default
          "square": "2048x2048",
          "legacy-landscape": "1536x1024"}  # what gpt-image-1 could do
 MAX_PIXELS = (3840, 2160)
+MAX_ASPECT = 3.0                          # the API's limit, not a choice
+
+
+def size_for_aspect(aspect, budget=4_150_000):
+    """Largest API-legal size at (or nearest to) this aspect, under a budget.
+
+    Billing is per output token and tokens track pixels, so the budget is what
+    keeps a wide image from costing more than the 2496x1664 default. Aspects
+    past 3:1 are generated at 3:1 and trimmed afterwards.
+    """
+    target = min(aspect, MAX_ASPECT)
+    height = int((budget / target) ** 0.5) // 16 * 16
+    height = max(16, min(height, MAX_PIXELS[1]))
+    width = int(height * target) // 16 * 16
+    if width > MAX_PIXELS[0]:
+        width = MAX_PIXELS[0] // 16 * 16
+        height = int(width / target) // 16 * 16
+    return f"{width}x{height}"
+
+
+def trim_to_aspect(path, aspect):
+    """Crop to a wider aspect by dropping the emptiest rows, top and bottom.
+
+    Real excerpts are pages cropped to one drawing, so the rows that go are the
+    empty margins rather than the building.
+    """
+    from PIL import Image
+    import numpy as np
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        width, height = im.size
+        keep = int(round(width / aspect))
+        if keep >= height:
+            return None
+        ink = (np.asarray(im.convert("L"), dtype=np.float32) < 200).mean(axis=1)
+        window = np.convolve(ink, np.ones(keep), "valid")   # densest band
+        top = int(window.argmax())
+        im.crop((0, top, width, top + keep)).save(path)
+    return f"{width}x{keep}"
 
 
 def check_size(size):
@@ -99,8 +147,18 @@ def is_retryable(exc):
     return status == 429 or status >= 500
 
 
+def regularity_of(path):
+    """Median fill periodicity, the same measure as scripts/pool_style_stats.py."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "pool_style_stats", Path(__file__).with_name("pool_style_stats.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.image_stats(Path(path))["regularity"]
+
+
 def generate_one(client, row, out_dir, model, size, quality, attempts,
-                 output_format="png"):
+                 output_format="png", min_regularity=0):
     """Return a receipt dict. Retries transient API failures with backoff."""
     # the manifest names every file .png; honour --output-format instead of
     # writing a jpeg under a .png name, and record what was actually written
@@ -123,11 +181,23 @@ def generate_one(client, row, out_dir, model, size, quality, attempts,
             tmp = dest.with_suffix(dest.suffix + ".part")
             tmp.write_bytes(blob)
             tmp.replace(dest)                        # never a half-written accept
+            cropped = None
+            if row.get("aspect") and row["aspect"] > MAX_ASPECT:
+                cropped = trim_to_aspect(dest, row["aspect"])
+            regularity = regularity_of(dest) if min_regularity else None
+            # `None` means the image held no measurable fill, which is not the
+            # same as a wobbly one -- do not re-roll for it.
+            if min_regularity and regularity is not None and regularity < min_regularity:
+                last_error = (f"regularity {regularity} below {min_regularity}")
+                if attempt < attempts:
+                    continue                         # re-roll: fills too wobbly
+                break
             usage = getattr(result, "usage", None)
             return {"id": row["id"], "filename": filename,
                     "status": "accepted", "model": model, "size": size,
                     "quality": quality, "attempt": attempt,
-                    "bytes": len(blob),
+                    "bytes": len(blob), "cropped_to": cropped,
+                    "regularity": regularity,
                     "usage": usage.model_dump() if usage else None,
                     "timestamp": datetime.now(timezone.utc).isoformat()}
         except Exception as exc:                     # noqa: BLE001 - reported below
@@ -170,8 +240,8 @@ def write_contact_sheet(out_dir, rows, path, cols=4, thumb=420):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--prompts", default="image_generation/prompts_v3.jsonl")
-    ap.add_argument("--out", default="data/image_generation/realistic_label_pool_v3")
+    ap.add_argument("--prompts", default="image_generation/prompts_v4.jsonl")
+    ap.add_argument("--out", default="data/image_generation/realistic_label_pool_v4")
     ap.add_argument("--model", default="gpt-image-2",
                     help="image model id; override if a newer one is available")
     ap.add_argument("--orientation", choices=sorted(SIZES), default="landscape",
@@ -179,6 +249,13 @@ def main():
     ap.add_argument("--size", help="explicit WIDTHxHEIGHT, e.g. 2496x1664 "
                                    "(gpt-image-2 only; axes divisible by 16)")
     ap.add_argument("--output-format", default="png", choices=["png", "jpeg", "webp"])
+    ap.add_argument("--per-spec-aspect", action="store_true", default=True,
+                    help="take each image's aspect from the manifest (v4 rows)")
+    ap.add_argument("--fixed-aspect", dest="per_spec_aspect", action="store_false",
+                    help="use one --size/--orientation for every image")
+    ap.add_argument("--min-regularity", type=int, default=0,
+                    help="re-roll images whose fills score below this "
+                         "(real plans ~18600, generated pool ~3200; 0 = off)")
     ap.add_argument("--quality", default="high", choices=["low", "medium", "high"])
     ap.add_argument("--ids", help="comma-separated manifest IDs (default: all)")
     ap.add_argument("--limit", type=int, default=0,
@@ -205,11 +282,18 @@ def main():
 
     size = check_size(args.size or SIZES[args.orientation])
     print(f"manifest={len(rows)}  already accepted={len(done)}  to generate={len(todo)}")
-    print(f"model={args.model} size={size} quality={args.quality} "
-          f"format={args.output_format}")
+    per_spec = args.per_spec_aspect and any(r.get("aspect") for r in todo)
+    print(f"model={args.model} size={'per-spec' if per_spec else size} "
+          f"quality={args.quality} format={args.output_format} "
+          f"min-regularity={args.min_regularity or 'off'}")
     if args.dry_run:
         for r in todo:
-            print(f"  would generate {r['id']:>3} {r['filename']}")
+            planned = (size_for_aspect(r["aspect"])
+                       if args.per_spec_aspect and r.get("aspect") else size)
+            note = (f" -> crop to {r['aspect']}:1" if r.get("aspect", 0) > MAX_ASPECT
+                    else "")
+            print(f"  would generate {r['id']:>3} {r['filename']} "
+                  f"{planned}{note}  {r.get('category', '')}")
         return 0
     if not todo:
         print("nothing to do")
@@ -226,8 +310,10 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as pool, \
             receipt_path(out_dir).open("a") as log:
         futures = {pool.submit(generate_one, client, r, out_dir, args.model,
-                               size, args.quality, args.attempts,
-                               args.output_format): r for r in todo}
+                               size_for_aspect(r["aspect"])
+                               if args.per_spec_aspect and r.get("aspect") else size,
+                               args.quality, args.attempts, args.output_format,
+                               args.min_regularity): r for r in todo}
         for n, future in enumerate(as_completed(futures), 1):
             receipt = future.result()
             log.write(json.dumps(receipt) + "\n")

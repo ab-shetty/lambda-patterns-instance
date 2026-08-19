@@ -188,6 +188,89 @@ Review copies of these four are in `perceive-ai/floz-gen-v3-smoke` (created
 2026-08-19, unlabelled). It is a disposable review project; delete it with
 `--delete-project --execute`.
 
+## Update 2026-08-19 (later) — v4, aimed at the evaluation set
+
+Everything above aims at an idea of what a construction drawing looks like.
+`scripts/pool_style_stats.py` and a look at all 28 evaluation images say the
+idea was wrong, and had been since v1. Measured, every image capped to 1280
+first (`data/probes/pool_style_2026-08-19.json`):
+
+| pool | aspect | over 3:1 | colourised | ink | fill regularity |
+|---|---:|---:|---:|---:|---:|
+| real 28 (the eval set) | 2.59 | 10/28 | 16/28 | 0.111 | **11,826** |
+| scraped 86 (training) | 1.00 | 0 | 9/88 | 0.139 | 8,552 |
+| generated 28 (v1 round) | 1.50 | 6/28 | 0/28 | 0.095 | 2,751 |
+| v3 smoke | 1.50 | 0/4 | 0/4 | 0.063 | 1,348 |
+| **v4 smoke** | **2.20** | **2/6** | **2/6** | 0.025 | **2,796** |
+
+Three things follow, and two of them contradict the sections above.
+
+**The eval set is mostly colourised elevations, not CAD hatch sheets.** Roughly
+two thirds of the 28 are elevations; 16 of 28 carry colour; their materials are
+lap siding, board-and-batten, shingle courses and flat painted fields as often as
+drafting hatch; several are markup-tool screenshots with highlighter fills,
+magenta dot markers and tool UI chrome inside the frame. Wall details, site
+plans, RCPs and structural sheets — 40 of the 100 v1 specs — do not appear at
+all. So v3's "flat line art only: not tonal, not grayscale-shaded, not rendered"
+aimed away from 16 of the 28, and the 2026-08-06 note calling the delivered
+pool's tonal skew "probably further from scanned real plans" has it backwards.
+
+**The model's worst images share a measurable trait.** The four worst HF14
+images are all monochrome (saturation ~0) and sparse: ink 0.026-0.12 against the
+pool median 0.23. Image 14 (0.291) is two nearly blank faint elevations at 4.2:1
+whose materials are named in callout text and barely differ; image 12 (0.393) is
+thin gray wall poche under a dense electrical overlay; image 7 (0.546) is a
+mostly empty under-floor plan. `specs_v4.jsonl` is weighted toward those traits —
+61 of 100 faint or sparse, 14 plans under an MEP overlay, 24 wider than 3:1 —
+on top of the eval set's overall shape. That weighting rests on four data points,
+so it is an aiming choice, not a theory; `PROJECT_UNDERSTANDING.md` records two
+per-image stories that were confidently wrong.
+
+**Pattern consistency is a generation defect that no prompt has moved.** Real
+fills read 11,826 on the dominant-FFT-peak measure; the delivered generated 28
+read 2,751 and the v3 smoke 1,348, and v3 was the version that asked in capitals
+for one constant angle and spacing. v4 reaches 2,796 — the level of the pool
+that already bought +0.033, still ~4x short of real — largely because siding
+courses and coursing lines are coarser and more periodic than fine 45-degree
+hatch. Treat this as a selection problem, not a wording problem:
+`--min-regularity N` re-rolls an image whose fills score below N, and since
+labelling is the binding cost, the cheaper move is to generate the whole round
+without a gate and then label in descending regularity order.
+
+### Running v4
+
+```bash
+python3 scripts/build_specs_v4.py                       # -> specs_v4.jsonl
+python3 scripts/render_image_generation_prompts.py --version v4
+python3 scripts/generate_images_openai.py --ids 3,8,12,2,1,4 \
+  --out data/image_generation/realistic_label_pool_v4
+python3 scripts/upload_unlabelled_roboflow.py \
+  --images data/image_generation/realistic_label_pool_v4 \
+  --project floz-gen-v4-smoke --batch v4-smoke --create \
+  --tags generated-realistic-v4,needs-labels --execute
+```
+
+Each v4 manifest row carries its own aspect, and the generator sizes the request
+from it under a fixed pixel budget, so an image costs about $0.20 rather than
+the $0.287 of a fixed 2496x1664. Anything past 3:1 — the API's limit — is asked
+for as a wide band with white margin above and below, generated at 3:1, and
+trimmed to width by dropping the emptiest rows. A 300-image round is ~$60.
+
+The six-image smoke covered `elev_colour_markup`, `elev_colour`, `elev_faint`,
+`plan_mep`, `roof_plan` and `section_sparse`. It reproduces the eval set's look
+far more closely than v3 did: id 8 is a colourised elevation with magenta dot
+markup and material callout leaders, like eval images 21/22; id 3 is four faint
+elevations whose materials are legible mainly from their callouts, like eval
+image 14; id 2 is a sparse under-floor framing plan with note blocks at 4:1,
+like eval image 7. Copies are in `perceive-ai/floz-gen-v4-smoke` (disposable —
+`--delete-project --execute`).
+
+Two things to tune before the full round. The smoke's median ink is 0.025
+against the real pool's 0.111: at 61% faint the whole pool sits at the sparse
+extreme rather than spanning it, so consider dropping to ~45%. And 28 of 100
+specs are colourised against 16 of 28 in the eval set — a deliberate skew,
+since the worst images are monochrome, but it is a skew.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

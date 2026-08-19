@@ -9,28 +9,40 @@ here.
 
 ## Pick up here (2026-08-19)
 
-**Next step: generate the ~300-image round with `--version v3` prompts and
-`gpt-image-2`, then label it.** The two defects that blocked the round on
-2026-08-12 are closed: `prompts_v3.jsonl` names every fill as drafting notation
-and states the confuser tolerance numerically, and a 4-image smoke test on the
-same IDs came back with ruled hatch, stipple and crosshatch instead of brick
-coursing and shingle scallops. Read the 2026-08-19 section of
-`image_generation/README.md` for the smoke evidence, the cost (now $0.287 an
-image at 2496x1664, so ~$86 for 300) and the one thing it could not check.
+**Next step: run the ~300-image v4 round, then label it in descending fill-
+regularity order.** `scripts/build_specs_v4.py` + `--version v4` produce a spec
+list built from the evaluation set's measured shape rather than from an idea of
+what a construction drawing looks like, and a six-image smoke spanning all its
+categories reproduces the eval look far more closely than v1-v3 did. Cost is
+~$0.20 an image, so ~$60 for 300. Read the second 2026-08-19 section of
+`image_generation/README.md` before changing any of it.
 
-That one thing: **confusability still has to be measured on the labelled pool**,
-because `family_similarity_probe.py --local-data` needs annotations. The prompt
-states the tolerance; nothing yet shows the images carry it. Run the probe on
-the first labelled slice against the real pool's 24.4%, before labelling 300.
+**What was wrong for three rounds.** The eval set is roughly two thirds
+elevations, 16 of 28 colourised, with markup screenshots and tool UI chrome, at
+median aspect 2.59 with ten images past 3:1 — while the v1 spec list spent 40 of
+100 specs on wall details, site plans, RCPs and structural sheets, which do not
+appear in the eval set at all, and v3 explicitly forbade colour and tone. Numbers
+in `data/probes/pool_style_2026-08-19.json` via `scripts/pool_style_stats.py`.
 
-`gpt-image-2` (2026-04-21) replaced `gpt-image-1` as the default: it takes an
-arbitrary size instead of three fixed ones, so the pool is now generated at
-2496x1664 rather than 1536x1024. Resolution is worth ~0.032 and can never be
-retrofitted, which is the whole reason to care.
+**The consistency defect is real and unfixed by prompting.** Repeating fills in
+the real plans score 11,826 on the dominant-FFT-peak measure; the delivered
+generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
+demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
+`--min-regularity` to re-roll, or better, let it order the labelling queue.
 
-The four smoke images live in the disposable Roboflow project
-`perceive-ai/floz-gen-v3-smoke` (unlabelled). Delete it when it has served its
-purpose: `scripts/upload_unlabelled_roboflow.py --project floz-gen-v3-smoke
+**Two open judgement calls on the v4 mix**, both in the README: 61 of 100 specs
+are faint or sparse, which puts the pool's median ink at 0.025 against the real
+pool's 0.111 (probably too far — consider ~45%), and 28 of 100 are colourised
+against 16 of 28 in the eval set (a deliberate skew toward the monochrome images
+the model fails on).
+
+Confusability still has to be measured on the labelled pool, because
+`family_similarity_probe.py --local-data` needs annotations. Run it on the first
+labelled slice against the real pool's 24.4% before labelling everything.
+
+Two disposable Roboflow review projects hold the smokes:
+`perceive-ai/floz-gen-v3-smoke` (4 images) and `perceive-ai/floz-gen-v4-smoke`
+(6). Delete with `scripts/upload_unlabelled_roboflow.py --project NAME
 --delete-project --execute`.
 
 The 2026-08-10 lever — generate synthetic sheets with deliberately confusable
@@ -148,9 +160,14 @@ are implemented but screened negative — read the warnings before touching eith
 - `scripts/upload_unlabelled_roboflow.py` — validates a batch whole, uploads it
   unlabelled to a named project (`--create` to make one), and disposes of a
   review project again with `--delete-project`.
-- `scripts/render_image_generation_prompts.py` — `--version v3` is the current
-  prompt set (v2 framing plus the hatch-as-notation and confuser-tolerance
-  blocks); v1 and v2 are kept byte-identical so v1's recorded SHA still validates.
+- `scripts/render_image_generation_prompts.py` — `--version v4` is the current
+  prompt set, rendered from `specs_v4.jsonl`; v1-v3 are kept so their results
+  stay reproducible and v1's recorded SHA still validates.
+- `scripts/build_specs_v4.py` — the v4 subject list, built to the evaluation
+  set's measured distribution and weighted toward the failure traits.
+- `scripts/pool_style_stats.py` — aspect, colour, ink, contrast and fill
+  regularity for a pool, so a generated round can be compared with the real 28
+  instead of judged by eye.
 - `scripts/run_*.sh`, `run_*.sh` — the experiment drivers, one per ablation.
 
 ## Data limitation and where to push next

@@ -30,8 +30,14 @@ from PIL import Image
 SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 
-def collect(root, expect):
-    """The batch, validated. Raises rather than uploading a partial round."""
+def collect(root, expect, min_long=1536, min_short=384):
+    """The batch, validated. Raises rather than uploading a partial round.
+
+    The size gate used to demand 1024 on both axes, which was written for the
+    v1 round's 3:2 sheets. The evaluation set runs to 5:1 and its short sides go
+    down to 407px, so a wide page excerpt is not a defect -- what matters is that
+    the long side carries enough resolution to survive training at 1280.
+    """
     if expect:
         paths = [root / f"floz_gen_{item:03d}.png" for item in range(1, expect + 1)]
         missing = [str(path) for path in paths if not path.is_file()]
@@ -50,10 +56,10 @@ def collect(root, expect):
                 width, height = image.size
         except Exception as error:
             raise SystemExit(f"invalid image {path}: {error}") from error
-        if width < 1024 or height < 1024 or width <= height:
+        if width <= height or width < min_long or height < min_short:
             raise SystemExit(
-                f"quality gate failed for {path}: expected landscape with both "
-                f"axes >=1024, got {width}x{height}")
+                f"quality gate failed for {path}: expected landscape at least "
+                f"{min_long}x{min_short}, got {width}x{height}")
     return paths
 
 
@@ -86,6 +92,9 @@ def main():
     parser.add_argument("--workspace", default="perceive-ai")
     parser.add_argument("--project", default="floz-real-pool")
     parser.add_argument("--batch")
+    parser.add_argument("--min-long-side", type=int, default=1536)
+    parser.add_argument("--min-short-side", type=int, default=384,
+                        help="the real pool's narrowest excerpt is 407px tall")
     parser.add_argument("--expect", type=int, default=0,
                         help="require exactly floz_gen_001..N.png (v1 round used 100)")
     parser.add_argument("--tags", default="generated-realistic-v1,needs-labels")
@@ -113,7 +122,7 @@ def main():
     if not args.images or not args.batch:
         raise SystemExit("--images and --batch are required unless --delete-project")
     root = Path(args.images)
-    paths = collect(root, args.expect)
+    paths = collect(root, args.expect, args.min_long_side, args.min_short_side)
     tags = [t.strip() for t in args.tags.split(",") if t.strip()]
 
     receipt = Path(args.receipt or root / "roboflow_upload_receipt.jsonl")
