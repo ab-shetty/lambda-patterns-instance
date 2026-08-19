@@ -9,14 +9,15 @@ that can also choose its own resolution (worth ~0.032, and unretrofittable onto
 the natively-640px scraped pool).
 
 Reads the prompt manifest rendered by `render_image_generation_prompts.py`
-(use `--version v2`: the v1 framing asked for whole sheets and yielded 29%).
-Writes each image to its manifest `filename` and appends a receipt row, so a run
-is resumable and an accepted image is never silently overwritten.
+(use `--version v3`: v1 asked for whole sheets and yielded 29%, and v2 fixed the
+framing but not the drafting-hatch or confuser defects). Writes each image to its
+manifest `filename` and appends a receipt row, so a run is resumable and an
+accepted image is never silently overwritten.
 
     export OPENAI_API_KEY=...        # or `set -a; . ~/.env; set +a`
     python3 scripts/generate_images_openai.py \
-        --prompts image_generation/prompts_v2.jsonl \
-        --out data/image_generation/realistic_label_pool_v2 --limit 4
+        --prompts image_generation/prompts_v3.jsonl \
+        --out data/image_generation/realistic_label_pool_v3 --limit 4
 
 Nothing here judges the drawings. Generation is stochastic and the failure modes
 that mattered last round (legends, title blocks, cropped fragments, tonal
@@ -34,10 +35,37 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
-# gpt-image-1's landscape option is 1536x1024. The README asks for >=1500px on
-# the long side because training runs at 1280 and downscaling the 640px scraped
-# plans is what costs ~0.032, so 1536 clears the bar with nothing to spare.
-SIZES = {"landscape": "1536x1024", "portrait": "1024x1536", "square": "1024x1024"}
+# gpt-image-1 offered three fixed sizes and its landscape option, 1536x1024,
+# cleared the README's >=1500px aim with nothing to spare. gpt-image-2 takes an
+# arbitrary WIDTHxHEIGHT instead, so resolution is now a real choice: both axes
+# divisible by 16, aspect ratio within 1:3..3:1, up to 3840x2160. Training runs
+# at 1280 and downscaling the 640px scraped plans is what costs ~0.032, so
+# generate well above 1280 -- the hatch spacing has to survive the downscale, and
+# resolution can never be retrofitted onto a pool once it exists.
+SIZES = {"landscape": "2496x1664",       # 3:2, the sheet-like default
+         "wide": "2560x1440",            # 16:9
+         "portrait": "1664x2496",
+         "square": "2048x2048",
+         "legacy-landscape": "1536x1024"}  # what gpt-image-1 could do
+MAX_PIXELS = (3840, 2160)
+
+
+def check_size(size):
+    """Reject a size the API would reject, before spending a request on it."""
+    try:
+        width, height = (int(v) for v in size.lower().split("x"))
+    except ValueError:
+        raise SystemExit(f"--size must look like 2496x1664, got {size!r}")
+    if width % 16 or height % 16:
+        raise SystemExit(f"--size {size}: both axes must be divisible by 16")
+    if not 1 / 3 <= width / height <= 3:
+        raise SystemExit(f"--size {size}: aspect ratio must be within 1:3..3:1")
+    if width * height > MAX_PIXELS[0] * MAX_PIXELS[1]:
+        raise SystemExit(f"--size {size}: above the {MAX_PIXELS[0]}x{MAX_PIXELS[1]} maximum")
+    if min(width, height) < 1024:
+        print(f"warning: {size} has a short side under 1024; the upload gate "
+              f"in scripts/upload_unlabelled_roboflow.py rejects those")
+    return size
 
 
 def receipt_path(out_dir):
@@ -59,14 +87,32 @@ def load_done(out_dir):
     return done
 
 
-def generate_one(client, row, out_dir, model, size, quality, attempts):
+def is_retryable(exc):
+    """Rate limits, timeouts and 5xx are worth another attempt; a 400 is not.
+
+    A rejected size or a refused prompt fails identically three times, so
+    retrying one only wastes wall-clock on a run of 300.
+    """
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        return True                                  # connection/timeout/unknown
+    return status == 429 or status >= 500
+
+
+def generate_one(client, row, out_dir, model, size, quality, attempts,
+                 output_format="png"):
     """Return a receipt dict. Retries transient API failures with backoff."""
-    dest = Path(out_dir) / row["filename"]
+    # the manifest names every file .png; honour --output-format instead of
+    # writing a jpeg under a .png name, and record what was actually written
+    ext = "jpg" if output_format == "jpeg" else output_format
+    filename = Path(row["filename"]).with_suffix("." + ext).name
+    dest = Path(out_dir) / filename
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
             result = client.images.generate(model=model, prompt=row["prompt"],
-                                            size=size, quality=quality, n=1)
+                                            size=size, quality=quality,
+                                            output_format=output_format, n=1)
             payload = result.data[0]
             if getattr(payload, "b64_json", None):
                 blob = base64.b64decode(payload.b64_json)
@@ -77,18 +123,22 @@ def generate_one(client, row, out_dir, model, size, quality, attempts):
             tmp = dest.with_suffix(dest.suffix + ".part")
             tmp.write_bytes(blob)
             tmp.replace(dest)                        # never a half-written accept
-            return {"id": row["id"], "filename": row["filename"],
+            usage = getattr(result, "usage", None)
+            return {"id": row["id"], "filename": filename,
                     "status": "accepted", "model": model, "size": size,
                     "quality": quality, "attempt": attempt,
                     "bytes": len(blob),
+                    "usage": usage.model_dump() if usage else None,
                     "timestamp": datetime.now(timezone.utc).isoformat()}
         except Exception as exc:                     # noqa: BLE001 - reported below
             last_error = f"{type(exc).__name__}: {exc}"
-            if attempt < attempts:
+            if attempt < attempts and is_retryable(exc):
                 time.sleep(min(2 ** attempt, 30))
-    return {"id": row["id"], "filename": row["filename"], "status": "failed",
+                continue
+            break
+    return {"id": row["id"], "filename": filename, "status": "failed",
             "model": model, "size": size, "quality": quality,
-            "attempt": attempts, "error": last_error,
+            "attempt": attempt, "error": last_error,
             "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
@@ -120,11 +170,15 @@ def write_contact_sheet(out_dir, rows, path, cols=4, thumb=420):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--prompts", default="image_generation/prompts_v2.jsonl")
-    ap.add_argument("--out", default="data/image_generation/realistic_label_pool_v2")
-    ap.add_argument("--model", default="gpt-image-1",
+    ap.add_argument("--prompts", default="image_generation/prompts_v3.jsonl")
+    ap.add_argument("--out", default="data/image_generation/realistic_label_pool_v3")
+    ap.add_argument("--model", default="gpt-image-2",
                     help="image model id; override if a newer one is available")
-    ap.add_argument("--orientation", choices=sorted(SIZES), default="landscape")
+    ap.add_argument("--orientation", choices=sorted(SIZES), default="landscape",
+                    help="named preset; ignored when --size is given")
+    ap.add_argument("--size", help="explicit WIDTHxHEIGHT, e.g. 2496x1664 "
+                                   "(gpt-image-2 only; axes divisible by 16)")
+    ap.add_argument("--output-format", default="png", choices=["png", "jpeg", "webp"])
     ap.add_argument("--quality", default="high", choices=["low", "medium", "high"])
     ap.add_argument("--ids", help="comma-separated manifest IDs (default: all)")
     ap.add_argument("--limit", type=int, default=0,
@@ -149,9 +203,10 @@ def main():
     if args.limit:
         todo = todo[:args.limit]
 
-    size = SIZES[args.orientation]
+    size = check_size(args.size or SIZES[args.orientation])
     print(f"manifest={len(rows)}  already accepted={len(done)}  to generate={len(todo)}")
-    print(f"model={args.model} size={size} quality={args.quality}")
+    print(f"model={args.model} size={size} quality={args.quality} "
+          f"format={args.output_format}")
     if args.dry_run:
         for r in todo:
             print(f"  would generate {r['id']:>3} {r['filename']}")
@@ -171,7 +226,8 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as pool, \
             receipt_path(out_dir).open("a") as log:
         futures = {pool.submit(generate_one, client, r, out_dir, args.model,
-                               size, args.quality, args.attempts): r for r in todo}
+                               size, args.quality, args.attempts,
+                               args.output_format): r for r in todo}
         for n, future in enumerate(as_completed(futures), 1):
             receipt = future.result()
             log.write(json.dumps(receipt) + "\n")
@@ -184,6 +240,11 @@ def main():
 
     accepted = [r for r in receipts if r["status"] == "accepted"]
     print(f"\naccepted={len(accepted)} failed={failures} -> {out_dir}")
+    billed = [r["usage"] for r in accepted if r.get("usage")]
+    if billed:
+        print(f"tokens: input={sum(u.get('input_tokens', 0) for u in billed)} "
+              f"output={sum(u.get('output_tokens', 0) for u in billed)} "
+              f"over {len(billed)} images")
     if args.report and accepted:
         path = write_contact_sheet(out_dir, accepted, args.report)
         if path:

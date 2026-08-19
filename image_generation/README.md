@@ -115,6 +115,79 @@ Note the tension to respect: deliberately confusable *synthetic* data cost −0.
 distribution, which the current generated pool undershoots — not to maximise
 confusability.
 
+## Update 2026-08-19 — v3 prompts, and gpt-image-2
+
+Two changes, both to things the 2026-08-12 smoke test found wanting.
+
+**`--version v3` renders `prompts_v3.jsonl`** from the same unchanged
+`specs.jsonl`. It is v2 plus the two blocks that smoke test asked for, and
+nothing else: a *Hatching* block that defines every fill as drafting notation —
+ruled parallel lines, crosshatch or dots at one constant angle and spacing,
+identical wherever the family recurs, explicitly not brick coursing, shingle
+scallops, board siding, grain, or tonal texture — and a *Confusable families*
+block that states the tolerance as a number (45 degrees at 3 mm against 4 mm, or
+45 against 40 degrees at the same spacing) because "similar" did not survive the
+model's reading of it. v1 and v2 are untouched and v1's recorded SHA still
+validates.
+
+Do not raise the confuser dose further. Deliberately confusable *synthetic* data
+cost -0.104 (`synth_progress.md`, 2026-08-12). The aim is the real distribution
+— 24.4% of multi-family images holding a pair at >=0.90 — which the delivered 28
+undershoot at 4.8%, not the maximum.
+
+**`generate_images_openai.py` now defaults to `gpt-image-2`** (2026-04-21),
+which takes an arbitrary `WIDTHxHEIGHT` instead of gpt-image-1's three fixed
+sizes: both axes divisible by 16, aspect ratio within 1:3..3:1, up to 3840x2160.
+That turns resolution from a constraint into a choice. The default is now
+`2496x1664` (3:2) against gpt-image-1's 1536x1024, which had cleared the
+>=1500px aim with nothing to spare; `--size` overrides it and is validated
+locally before a request is spent, and `--orientation legacy-landscape`
+reproduces the old geometry. Billing is per token — $30/1M image output tokens
+against gpt-image-1's $40 — so the receipt now records the `usage` block per
+image and the run prints the total.
+
+**Review a generated batch in Roboflow.** On a headless box the contact sheet is
+not enough to apply the visual gates. `upload_unlabelled_roboflow.py` now takes
+`--project` with `--create`, uploads whatever images are in the directory
+(`--expect 100` restores the strict v1-round manifest check), and can remove a
+disposable review project again with `--delete-project --execute` — which moves
+it to Roboflow's trash, recoverable there for 30 days.
+
+```bash
+python3 scripts/generate_images_openai.py --ids 1,11,21,41 \
+  --out data/image_generation/realistic_label_pool_v3
+python3 scripts/upload_unlabelled_roboflow.py \
+  --images data/image_generation/realistic_label_pool_v3 \
+  --project floz-gen-v3-smoke --batch v3-smoke --create \
+  --tags generated-realistic-v3,needs-labels --execute
+```
+
+### The v3 smoke test (same four IDs, so the prompt is the only variable)
+
+4 of 4 accepted at 2496x1664, about three minutes wall-clock at `--workers 4`
+and **$0.287 an image** (9,452 image output tokens each) — so the round guidance
+below is now ~$86 for 300, not $50-60. That buys 2.4x the pixels of the v2
+geometry; drop to `--size 1536x1024` if the ratio matters more than the pixels.
+
+**The drafting-hatch defect is fixed.** Inspected at 100%, id 1 draws its walls
+as ruled 45-degree hatch and fine stipple, id 11 as diagonal hatch against two
+tile grids, id 21 as diagonal ruled fills against a dot membrane, id 41 as
+crosshatch, concrete dots and batt insulation. No brick coursing, no shingle
+scallops, no board siding, no tonal shading anywhere in the four. The framing
+gains from v2 held: no title block, legend or sheet border, complete views, and
+tags and dimension strings interrupting fills for `remove` holes.
+
+**Confusability is still unverified, and cannot be verified here.**
+`family_similarity_probe.py --local-data` reads per-family masks, so it needs
+annotations; the prompt now states the tolerance but only the probe run on the
+labelled pool proves it landed. That is the same mistake as last round if it is
+skipped — gate 5 was specified and unmet for a year before anyone measured it.
+Run the probe on the first labelled slice, not on the whole round.
+
+Review copies of these four are in `perceive-ai/floz-gen-v3-smoke` (created
+2026-08-19, unlabelled). It is a disposable review project; delete it with
+`--delete-project --execute`.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

@@ -1,17 +1,37 @@
 # Handoff
 
-Last updated: 2026-08-12
+Last updated: 2026-08-19
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-08-12)
+## Pick up here (2026-08-19)
 
-**Next step: generate a new round of realistic source plans through the OpenAI
-image API with `scripts/generate_images_openai.py`, since source count is the
-only lever in this project with replicated positive evidence.**
+**Next step: generate the ~300-image round with `--version v3` prompts and
+`gpt-image-2`, then label it.** The two defects that blocked the round on
+2026-08-12 are closed: `prompts_v3.jsonl` names every fill as drafting notation
+and states the confuser tolerance numerically, and a 4-image smoke test on the
+same IDs came back with ruled hatch, stipple and crosshatch instead of brick
+coursing and shingle scallops. Read the 2026-08-19 section of
+`image_generation/README.md` for the smoke evidence, the cost (now $0.287 an
+image at 2496x1664, so ~$86 for 300) and the one thing it could not check.
+
+That one thing: **confusability still has to be measured on the labelled pool**,
+because `family_similarity_probe.py --local-data` needs annotations. The prompt
+states the tolerance; nothing yet shows the images carry it. Run the probe on
+the first labelled slice against the real pool's 24.4%, before labelling 300.
+
+`gpt-image-2` (2026-04-21) replaced `gpt-image-1` as the default: it takes an
+arbitrary size instead of three fixed ones, so the pool is now generated at
+2496x1664 rather than 1536x1024. Resolution is worth ~0.032 and can never be
+retrofitted, which is the whole reason to care.
+
+The four smoke images live in the disposable Roboflow project
+`perceive-ai/floz-gen-v3-smoke` (unlabelled). Delete it when it has served its
+purpose: `scripts/upload_unlabelled_roboflow.py --project floz-gen-v3-smoke
+--delete-project --execute`.
 
 The 2026-08-10 lever — generate synthetic sheets with deliberately confusable
 material pairs — was implemented and tested. **It costs −0.104** (0.6823 →
@@ -43,10 +63,9 @@ generated plan ≈ one real plan, and re-augmenting the same 114 sources 18× �
 buys nothing — so distinct sources, not records, are the constraint, and
 generation is the only supply that also picks its own resolution (worth ~0.032,
 and unretrofittable onto the natively-640px scraped pool). Read the status
-section of `image_generation/README.md` first: the framing is fixed in
-`prompts_v2.jsonl`, but a 2026-08-12 smoke test showed the model still
-substitutes realistic materials for drafting hatch and ignores the confuser
-requirement, so fix the prompt and re-smoke before generating at scale.
+sections of `image_generation/README.md` in order: v1 asked for whole sheets, v2
+fixed the framing, v3 fixed the drafting-hatch and confuser defects the v2 smoke
+test exposed. Generate with v3.
 
 Unresolved from 2026-08-10: `--anchor-dropout` has still never been tested
 cleanly, having only ever run on top of the reference-plane bug.
@@ -124,9 +143,14 @@ are implemented but screened negative — read the warnings before touching eith
   `--tiles` (tile-pool pairs; writes the table `--tile-sim` consumes),
   `--local-data` (pool distribution at training resolution).
 - `scripts/generate_images_openai.py` — resumable generation of the unlabelled
-  realistic pool, with receipts and a contact sheet for the visual gates.
-- `scripts/render_image_generation_prompts.py` — `--version v2` is the reframed
-  prompt set; v1 is kept byte-identical so its recorded SHA still validates.
+  realistic pool on `gpt-image-2`, arbitrary `--size`, receipts carrying the
+  billed token usage, and a contact sheet for the visual gates.
+- `scripts/upload_unlabelled_roboflow.py` — validates a batch whole, uploads it
+  unlabelled to a named project (`--create` to make one), and disposes of a
+  review project again with `--delete-project`.
+- `scripts/render_image_generation_prompts.py` — `--version v3` is the current
+  prompt set (v2 framing plus the hatch-as-notation and confuser-tolerance
+  blocks); v1 and v2 are kept byte-identical so v1's recorded SHA still validates.
 - `scripts/run_*.sh`, `run_*.sh` — the experiment drivers, one per ablation.
 
 ## Data limitation and where to push next

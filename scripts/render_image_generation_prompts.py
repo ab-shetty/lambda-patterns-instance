@@ -12,6 +12,14 @@ v2  the rewrite the README's "Aim the next round at" section asks for: the
     drawing region itself, one complete coherent building, no title block or
     legend or sheet border, crisp vector-like CAD hatching rather than tonal
     shading. The subject list was never the problem, so it is reused verbatim.
+
+v3  v2 plus the two defects the 2026-08-12 smoke test exposed, which v2's
+    framing does not address: the model draws each material's REAL APPEARANCE
+    (brick coursing, shingle scallops, board siding) instead of drafting hatch,
+    and it ignores the confuser requirement entirely -- the delivered pool is
+    the least confusable in the project, 4.8% of multi-family images against
+    24.4% for the scraped real plans. So v3 names the fills as notation and
+    states the confuser tolerance numerically. Current version; use this one.
 """
 
 import argparse
@@ -45,9 +53,33 @@ Style/medium: crisp black and gray CAD linework rasterized from a professional c
 Composition/framing: the drawing fills the frame on white paper, landscape orientation, with only a thin margin and nothing important cropped at the edges.
 Constraints: no colored rendering, no photographic building, no watermark, no logo, no segmentation overlay, no bounding boxes, no colored masks, and no pre-existing annotation marks."""
 
-TEMPLATES = {"v1": TEMPLATE, "v2": TEMPLATE_V2}
+
+# v3 = v2 + the "Hatching" and "Confusable families" blocks. Those two are the
+# whole delta: the smoke test showed that framing alone gets a clean drawing of
+# the wrong thing -- real materials rendered realistically, every family easy to
+# tell apart. The tolerance is stated as a number because "similar" did not
+# survive the model's interpretation. Do not raise it further: deliberately
+# confusable SYNTHETIC data cost -0.104 (synth_progress.md, 2026-08-12). The aim
+# is to match the real distribution, which this pool undershoots.
+TEMPLATE_V3 = """Use case: scientific-educational
+Asset type: unlabelled training image for reference-conditioned architectural-pattern segmentation
+Primary request: Create one highly realistic excerpt of an architectural construction drawing — the DRAWING REGION ITSELF as it sits inside a sheet, never the whole sheet. This is dataset item {id:03d} of 100 and must be visually unique, not a variation of another item.
+Subject: {family}
+Layout: {layout}. Every view present must be drawn COMPLETE — no facade cut off mid-wall, no plan truncated mid-footprint, no zoomed-in fragment of a larger building — and all views must belong to the same project.
+Patterns: {patterns}. Every pattern family must recur in 2-6 spatially disconnected regions. Preserve enough clean interior in each family for both tiny and medium user reference rectangles.
+Hatching — the most important requirement: every material fill is DRAFTING NOTATION, not a picture of the material. Draw each family as a regular field of ruled straight parallel lines, crosshatch, or evenly spaced dots, at ONE constant angle and ONE constant spacing, identical everywhere that family appears. Do NOT draw what the material actually looks like: no brick coursing or individual bricks, no shingle scallops or roof tiles, no board or lap siding, no stone or block outlines, no wood grain, no photoreal or tonal texture, no shading or gradients inside a region. A wall of brick is a field of 45-degree ruled lines, not a picture of bricks.
+Confusable families: at least two families must be deliberately hard to tell apart, differing only in one small parameter — for example 45-degree ruled hatch at 3 mm spacing against 45-degree at 4 mm, or 45-degree against 40-degree at the same spacing. They must stay genuinely distinguishable when looked at closely, and hard to separate at a glance. Do not make every family obviously different.
+Difficulty: {difficulty}.
+Drafting content: plausible professional dimensions, leaders, level marks, detail bubbles, symbols, fixtures, openings, tags, and notes, at the density of a working drawing. Some of these must interrupt patterned regions so an annotator can label subtraction holes. Include visually confusing unpatterned hard negatives.
+Excluded content: no title block, no legend, no material schedule, no revision table, no sheet border or frame, and no large readable headline. The drawing itself fills essentially the whole image.
+Style/medium: crisp black and gray CAD linework rasterized from a professional construction-document PDF — vector-like hatching at consistent spacing with mixed line weights, {artifacts}. Flat line art only: not tonal, not grayscale-shaded, not rendered, not an illustration, not blueprint artwork, not a photograph.
+Composition/framing: the drawing fills the frame on white paper, landscape orientation, with only a thin margin and nothing important cropped at the edges.
+Constraints: no colored rendering, no photographic building, no watermark, no logo, no segmentation overlay, no bounding boxes, no colored masks, and no pre-existing annotation marks."""
+
+TEMPLATES = {"v1": TEMPLATE, "v2": TEMPLATE_V2, "v3": TEMPLATE_V3}
 DEFAULT_OUT = {"v1": "image_generation/prompts.jsonl",
-               "v2": "image_generation/prompts_v2.jsonl"}
+               "v2": "image_generation/prompts_v2.jsonl",
+               "v3": "image_generation/prompts_v3.jsonl"}
 
 
 def main():
@@ -55,7 +87,7 @@ def main():
     parser.add_argument("--specs", default="image_generation/specs.jsonl")
     parser.add_argument("--version", choices=sorted(TEMPLATES), default="v1")
     parser.add_argument("--out", default=None,
-                        help="defaults to prompts.jsonl / prompts_v2.jsonl")
+                        help="defaults to prompts[_v2,_v3].jsonl for the version")
     args = parser.parse_args()
     if args.out is None:
         args.out = DEFAULT_OUT[args.version]
