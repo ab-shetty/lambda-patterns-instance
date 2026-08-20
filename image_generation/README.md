@@ -405,6 +405,25 @@ all machine-regular, at 10,246 — the first generated image in this project to
 come near the real pool. The elevation it lost on adds a faint paper texture
 that the measure reads as noise.
 
+### Ten images through Gemini, on the new family distribution
+
+`perceive-ai/floz-gen-gemini-r1`, `gemini-3-pro-image` at 2K, one or two per
+category, unlabelled. Against the eval set and the gpt-image-2 round:
+
+| | real 28 | gpt round 1 (50) | gemini (10) |
+|---|---:|---:|---:|
+| aspect | 2.59 | 2.50 | 2.50 |
+| ink | 0.111 | 0.056 | **0.107** |
+| contrast | 0.437 | 0.360 | 0.385 |
+| fill regularity | 11,826 | 3,122 | 2,605 |
+
+**Ink density lands on the real set**, where the gpt pool drew at half its
+weight — that gap had survived every prompt change. Regularity reads below the
+gpt-50, but these are different specs under the new family distribution, so it
+is not the paired comparison; the four-pair test above is, and it went the other
+way three times out of four. Aspect handling works: 21:9 generations trimmed to
+4.6:1, 3.8:1 and 3.4:1 as the manifest asked.
+
 Caveats before treating this as settled: four pairs, one draw each, and this
 repo has retracted better-supported results. Gemini also constrains aspect to a
 fixed list whose widest is 21:9 (2.33:1, narrower than the eval median of 2.59),

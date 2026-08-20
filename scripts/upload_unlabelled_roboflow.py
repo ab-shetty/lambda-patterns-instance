@@ -80,13 +80,35 @@ def project_handle(workspace_name, name, api_key):
     second time, and Roboflow silently minted `...-round1-pcfow` for the
     colliding name, splitting a 50-image round across two projects.
     """
+    import time
+
     import requests
     from roboflow.core.project import Project
-    response = requests.get(f"https://api.roboflow.com/{workspace_name}/{name}",
-                            params={"api_key": api_key}, timeout=30)
-    if response.status_code != 200:
-        return None
-    record = response.json().get("project")
+
+    def fetch():
+        response = requests.get(f"https://api.roboflow.com/{workspace_name}/{name}",
+                                params={"api_key": api_key}, timeout=30)
+        if response.status_code != 200:
+            return None
+        return response.json().get("project")
+
+    record = fetch()
+    if record is None:
+        # A just-created project can be missing from this endpoint while already
+        # present in the workspace listing. Treating that as "absent" is what
+        # created a duplicate project on 2026-08-19, so trust the listing and
+        # wait for the record rather than making a second project.
+        listing = requests.get(f"https://api.roboflow.com/{workspace_name}",
+                               params={"api_key": api_key}, timeout=30)
+        known = {p["id"].split("/")[-1]
+                 for p in listing.json().get("workspace", {}).get("projects", [])
+                 } if listing.status_code == 200 else set()
+        if name in known:
+            for delay in (1, 2, 4, 8):
+                time.sleep(delay)
+                record = fetch()
+                if record is not None:
+                    break
     return Project(api_key, record, "coco") if record else None
 
 
