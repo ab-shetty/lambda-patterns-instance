@@ -42,18 +42,9 @@ double-outline walls it produced plans with nothing in them to label. Re-smoked:
 ink 0.089 against the real pool's 0.111, contrast 0.435 against 0.437. The one
 skew left deliberately is 28 of 100 colourised against 16 of 28.
 
-**Pre-labelling is closed, do not rebuild it.** Texture clustering over tile
-descriptors was tried on 2026-08-19 (`5facd10`, code removed in the commit after).
-It grouped the same wall material across two separate elevations, but on a floor
-plan it tracked furniture, text and stair treads as readily as the fills, and
-correcting that costs more than drawing the polygons. The number that decides
-this: the median annotation in both labelled pools has FOUR vertices — labelling
-here is drawing ~6 boxes an image, not tracing outlines, so there is little for
-an automatic proposal to save.
-
-What does cut labelling cost, measured: **label one family per image, not all of
-them.** `refmask2former/dataset.py:302-324` picks one target family per image and
-treats everything unlabelled as background, so a single fully-labelled family is
+**Labelling cost: label one family per image, not all of them.**
+`refmask2former/dataset.py:302-324` picks one target family per image and treats
+everything unlabelled as background, so a single fully-labelled family is
 a correct record. That leaves 64-71% of the instance polygons. Every occurrence
 of the family that IS labelled must be caught, or it teaches false negatives.
 Untested and worth an afternoon on a GPU before labelling 300: `remove` holes are
