@@ -461,7 +461,26 @@ specs through `gemini-3-pro-image`:
 | **gemini, four simplified** | **7,727** |
 
 That is three times the previous best generated figure and two thirds of the
-real pool, from prompts that differ only in asking for less. The mechanism is
+real pool, from prompts that differ only in asking for less.
+
+Two defects in that first simplified batch, both in this repo rather than in the
+model, and both fixed:
+
+* **The crop was cutting the drawings.** `trim_to_aspect` took the densest band
+  of the requested height, which is fine when the generation is already close to
+  the target -- but Gemini caps at 21:9, so reaching a 4.6:1 spec meant slicing
+  the bottom off the building. The ink now decides: rows carrying drawing are
+  never removed, and if the target would cut them the crop stops at the widest
+  aspect the margins allow and the receipt records what was achieved (those four
+  landed at 3.0:1 and 2.5:1 rather than their nominal targets). The "wide band
+  with white margin above and below" instruction also now applies from 2.3:1,
+  since that is where Gemini's cap bites, not 3:1.
+* **The highlighter markup came back as green smudges.** The markup wording now
+  demands a flat, even, hard-edged translucent fill that stops at the region
+  boundary, "like a digital highlighter rectangle: no soft brush strokes, no
+  airbrush, no smudges, no smears, no feathered or faded edges, no gradients".
+  Regenerated, it reads like the markup in eval images 24-27: a clean bounded
+  rectangle with the linework fully visible through it. The mechanism is
 plausible -- one view and one or two families means large uninterrupted regions,
 and less for the model to keep consistent -- but it is four images of one
 category, so treat it as the most promising lead here rather than a settled

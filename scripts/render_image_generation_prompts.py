@@ -143,9 +143,14 @@ def render_v4(spec):
             "but fully legible, with the material fills easy to see at a glance.")
     if spec["markup"]:
         parts.append(
-            f"Markup: the drawing has been marked up by hand in a review tool — "
-            f"{spec['markup']}. The markup sits ON TOP of the drawing and does "
-            "not replace any material fill.")
+            f"Markup: the drawing has been marked up in a review tool — "
+            f"{spec['markup']}. The markup is a FLAT, EVEN, HARD-EDGED "
+            "translucent fill that stops exactly at the edges of the region it "
+            "covers, like a digital highlighter rectangle: no soft brush "
+            "strokes, no airbrush, no smudges, no smears, no feathered or faded "
+            "edges, no gradients, and nothing painted freehand across the "
+            "drawing. It sits ON TOP and does not replace any material fill, and "
+            "the linework stays fully visible through it.")
     if spec["ui_chrome"]:
         parts.append(f"Screen capture: this is a screenshot of that review tool, "
                      f"so {spec['ui_chrome']}.")
@@ -169,7 +174,7 @@ def render_v4(spec):
         "one drawing cropped out of a sheet, not the sheet.")
     parts.append(f"Medium: {spec['artifacts']}; the texture of a scanned or "
                  "exported construction document, not an illustration.")
-    if spec["aspect"] > 3.0:
+    if spec["aspect"] > 2.3:                    # both APIs cap below the eval tail
         # The API stops at 3:1, so the extra width is won back by trimming the
         # margin afterwards -- which only works if the margin is there to trim.
         parts.append(

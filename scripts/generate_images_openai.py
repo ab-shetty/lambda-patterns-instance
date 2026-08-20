@@ -66,6 +66,25 @@ MAX_PIXELS = (3840, 2160)
 MAX_ASPECT = 3.0                          # the API's limit, not a choice
 
 
+def check_size(size):
+    """Reject a size the API would reject, before spending a request on it."""
+    try:
+        width, height = (int(v) for v in size.lower().split("x"))
+    except ValueError:
+        raise SystemExit(f"--size must look like 2496x1664, got {size!r}")
+    if width % 16 or height % 16:
+        raise SystemExit(f"--size {size}: both axes must be divisible by 16")
+    if not 1 / 3 <= width / height <= 3:
+        raise SystemExit(f"--size {size}: aspect ratio must be within 1:3..3:1")
+    if width * height > MAX_PIXELS[0] * MAX_PIXELS[1]:
+        raise SystemExit(f"--size {size}: above the "
+                         f"{MAX_PIXELS[0]}x{MAX_PIXELS[1]} maximum")
+    if min(width, height) < 384:
+        print(f"warning: {size} has a short side under 384; the upload gate in "
+              f"scripts/upload_unlabelled_roboflow.py rejects those")
+    return size
+
+
 def size_for_aspect(aspect, budget=4_150_000):
     """Largest API-legal size at (or nearest to) this aspect, under a budget.
 
@@ -84,42 +103,40 @@ def size_for_aspect(aspect, budget=4_150_000):
 
 
 def trim_to_aspect(path, aspect):
-    """Crop to a wider aspect by dropping the emptiest rows, top and bottom.
+    """Crop toward a wider aspect WITHOUT cutting the drawing.
 
-    Real excerpts are pages cropped to one drawing, so the rows that go are the
-    empty margins rather than the building.
+    The trim exists because the APIs cap aspect (3:1 on gpt-image-2, 21:9 on
+    Gemini) below the eval set's tail. It used to take the densest band of the
+    requested height, which on a 21:9 generation asked to reach 4.6:1 meant
+    slicing the bottom off the building. So the ink decides: rows carrying
+    drawing are never removed, and if reaching the target would cut them, the
+    crop stops at the widest aspect the margins allow and the receipt records
+    what was actually achieved.
     """
     from PIL import Image
     import numpy as np
     with Image.open(path) as im:
         im = im.convert("RGB")
         width, height = im.size
-        keep = int(round(width / aspect))
+        wanted = int(round(width / aspect))
+        if wanted >= height:
+            return None
+        gray = np.asarray(im.convert("L"), dtype=np.float32)
+        page = float(np.percentile(gray, 95))
+        row_ink = (gray < 0.92 * max(page, 1e-6)).mean(axis=1)
+        drawn = np.flatnonzero(row_ink > 0.002)          # rows holding anything
+        if drawn.size == 0:
+            return None
+        pad = max(8, int(0.01 * height))
+        top_limit = max(0, int(drawn[0]) - pad)
+        bottom_limit = min(height, int(drawn[-1]) + pad)
+        keep = max(wanted, bottom_limit - top_limit)     # never cut the drawing
         if keep >= height:
             return None
-        ink = (np.asarray(im.convert("L"), dtype=np.float32) < 200).mean(axis=1)
-        window = np.convolve(ink, np.ones(keep), "valid")   # densest band
-        top = int(window.argmax())
+        centre = (top_limit + bottom_limit) / 2
+        top = int(min(max(0, centre - keep / 2), height - keep))
         im.crop((0, top, width, top + keep)).save(path)
     return f"{width}x{keep}"
-
-
-def check_size(size):
-    """Reject a size the API would reject, before spending a request on it."""
-    try:
-        width, height = (int(v) for v in size.lower().split("x"))
-    except ValueError:
-        raise SystemExit(f"--size must look like 2496x1664, got {size!r}")
-    if width % 16 or height % 16:
-        raise SystemExit(f"--size {size}: both axes must be divisible by 16")
-    if not 1 / 3 <= width / height <= 3:
-        raise SystemExit(f"--size {size}: aspect ratio must be within 1:3..3:1")
-    if width * height > MAX_PIXELS[0] * MAX_PIXELS[1]:
-        raise SystemExit(f"--size {size}: above the {MAX_PIXELS[0]}x{MAX_PIXELS[1]} maximum")
-    if min(width, height) < 1024:
-        print(f"warning: {size} has a short side under 1024; the upload gate "
-              f"in scripts/upload_unlabelled_roboflow.py rejects those")
-    return size
 
 
 def receipt_path(out_dir):
