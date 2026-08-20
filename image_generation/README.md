@@ -562,6 +562,25 @@ or corners, no drop shadows, no curl or creases, no uneven or angled lighting,
 no desk, table or background visible, and no paper grain." Regenerating the
 worst offender took its lighting swing from 0.047 to 0.024.
 
+## Round 3 — 50 clean images (2026-08-19)
+
+`perceive-ai/floz-gen-gemini-r3`, unlabelled. Same recipe as round 2 with the
+scan wording removed and the simplified spec list. Round 2 is kept as it is.
+
+| | real 28 | round 2 | round 3 |
+|---|---:|---:|---:|
+| fill regularity | 11,826 | 7,270 | **8,302** |
+| ink | 0.111 | 0.104 | 0.104 |
+| contrast | 0.437 | 0.411 | 0.390 |
+| aspect | 2.59 | 2.36 | 2.43 |
+| page-lighting swing | 0.016 | 0.035 | **0.024** |
+
+One bug fixed on the way: `choose_ratio` took the widest ratio *not exceeding*
+the target, which sent a 1.3 target to 1:1 because 4:3 sits just above it — four
+plans came back square and the upload gate caught them. It now picks the nearest
+ratio in log space and trims only when the pick is narrower. The batch receipt
+records the ratio as well, so this is visible next time.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

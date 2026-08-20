@@ -54,11 +54,18 @@ RATIOS = {"1:1": 1.0, "2:3": 2 / 3, "3:2": 1.5, "3:4": 0.75, "4:3": 4 / 3,
 
 
 def choose_ratio(target):
-    """Widest allowed ratio not exceeding the target; trimming does the rest."""
-    below = [(value, name) for name, value in RATIOS.items() if value <= target]
-    if not below:
-        return min(RATIOS.items(), key=lambda kv: kv[1])[0]
-    return max(below)[1]
+    """The allowed ratio closest to the target in log space.
+
+    "Widest ratio not exceeding the target" sounds right -- trimming can only
+    make an image wider, never narrower -- but it sends a 1.3 target to 1:1,
+    because 4:3 sits a hair above it. That produced a square plan in round 3
+    which the upload gate rejected. Being slightly wider than asked is harmless;
+    being square is not, so pick the nearest ratio and trim only if the pick
+    came out narrower.
+    """
+    import math
+    return min(RATIOS.items(),
+               key=lambda kv: abs(math.log(kv[1] / target)))[0]
 
 
 def generate_one(client, types, row, out_dir, model, image_size, attempts,
@@ -208,6 +215,8 @@ def batch_fetch(client, rows, out_dir, job_name):
                 written += 1
                 receipt = {"id": row["id"], "filename": row["filename"],
                            "status": "accepted", "model": job.model, "via": "batch",
+                           "aspect_ratio": (choose_ratio(target) if target
+                                            else None),
                            "bytes": len(blob), "cropped_to": cropped,
                            "timestamp": datetime.now(timezone.utc).isoformat()}
             log.write(json.dumps(receipt) + "\n")
