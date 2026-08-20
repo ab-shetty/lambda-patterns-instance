@@ -430,6 +430,43 @@ fixed list whose widest is 21:9 (2.33:1, narrower than the eval median of 2.59),
 so wide images still need trimming, and there is no batch discount — pro at 2K
 is ~$0.13 an image against the $0.097 measured on gpt-image-2 batch.
 
+## Simplicity, taken from the eval set (2026-08-19)
+
+Family count was only one axis. The real 28 are simpler than the round in three
+ways, and the spec list now matches all three:
+
+| | real 28 | v4 before | v4 now |
+|---|---|---|---|
+| families / image | 1.8, 13 of 28 single | 2.7, none single | 1.9, 33 single |
+| views / sheet | mostly ONE (25, 26, 27 among them) | every elevation >=2, 13 of 100 at four | 45% single, 48% two, 7% four |
+| drafting clutter | a few leaders and level marks | full apparatus on every spec | sparse on 60% of elevations |
+
+Two mechanics were needed to make it stick. The prompt now carries a
+**restraint clause** — "draw ONLY what is listed above: exactly the views named
+and no others, exactly the material families named and no others... Empty white
+paper around and between the views is correct and expected" — because the model
+embellishes: asked for two elevations it draws four. And `VIEWS_ONE` is kept
+deliberately wide, since the spec builder rejects duplicate
+subject+layout+patterns triples and a short single-view list loses draws to
+collisions, quietly pulling the round back toward multi-view sheets.
+
+**Simplicity is also what finally moved fill regularity.** Four single-view
+specs through `gemini-3-pro-image`:
+
+| pool | fill regularity |
+|---|---:|
+| real 28 | 11,826 |
+| gpt-image-2 round 1 (50) | 3,122 |
+| gemini, first 10 | 2,605 |
+| **gemini, four simplified** | **7,727** |
+
+That is three times the previous best generated figure and two thirds of the
+real pool, from prompts that differ only in asking for less. The mechanism is
+plausible -- one view and one or two families means large uninterrupted regions,
+and less for the model to keep consistent -- but it is four images of one
+category, so treat it as the most promising lead here rather than a settled
+result. They are in `perceive-ai/floz-gen-gemini-r1`, batch `gemini-simple`.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

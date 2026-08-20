@@ -49,12 +49,49 @@ HOUSE = ["single-storey ranch house", "two-storey house with a gabled roof",
          "cottage with a steep gable", "carriage house over a garage",
          "L-shaped ranch house", "two-storey house with a wraparound deck"]
 
-VIEWS = ["front and rear elevations side by side",
-         "left and right side elevations side by side",
-         "all four elevations in a row",
-         "front elevation with the adjacent side elevation",
-         "two proposed elevations above one another",
-         "an existing and a proposed elevation side by side"]
+# The real excerpts are mostly ONE view. Counted over the 28: about half show a
+# single elevation, most of the rest two, and only one shows four. The first v4
+# list had no single-view option at all and put four views on 13 of 100.
+# Kept wide on purpose: the uniqueness check rejects repeated
+# subject+layout+patterns triples, so a short single-view list loses draws to
+# collisions and the round drifts back toward multi-view sheets.
+VIEWS_ONE = ["a single front elevation, on its own",
+             "a single rear elevation, on its own",
+             "one side elevation, on its own",
+             "a single proposed front elevation, on its own",
+             "one street-facing elevation, on its own",
+             "a single garage-side elevation, on its own",
+             "one courtyard-facing elevation, on its own",
+             "a single elevation of the addition only, on its own",
+             "one rear elevation showing the deck, on its own",
+             "a single north elevation, on its own",
+             "one south elevation, on its own",
+             "a single elevation with the neighbouring property line shown"]
+VIEWS_TWO = ["front and rear elevations side by side",
+             "left and right side elevations side by side",
+             "front elevation with the adjacent side elevation",
+             "two proposed elevations above one another",
+             "an existing and a proposed elevation side by side"]
+VIEWS_FOUR = ["all four elevations in a row"]
+
+
+def choose_views(rng):
+    roll = rng.random()
+    if roll < 0.50:
+        return rng.choice(VIEWS_ONE)
+    if roll < 0.95:                                  # only 1 of the real 28 shows four
+        return rng.choice(VIEWS_TWO)
+    return rng.choice(VIEWS_FOUR)
+
+
+# Clutter, likewise, is drawn rather than maximised: a permit-set elevation
+# carries a handful of leaders and level marks, not the full apparatus. Only the
+# MEP plans are meant to be dense -- that density is the point of that category.
+ELEV_CLUTTER_SPARSE = [
+    "a few material callout leaders naming the finishes, level marks at floor "
+    "and plate, and one dimension string",
+    "two or three callout leaders and level marks, and nothing else",
+    "level marks, a single overall dimension string, and one or two labels"]
 
 # Materials as the real plans draw them: line families and flat fields, not
 # always drafting hatch. Each entry is (name, how it is drawn).
@@ -191,7 +228,7 @@ def contrast_level(rng, faint_p, light_p):
 
 def elevation(rng, house, presentation, faint):
     count = family_count(rng)
-    return {"subject": house, "layout": rng.choice(VIEWS),
+    return {"subject": house, "layout": choose_views(rng),
             "patterns": materials_clause(rng, SIDING, count),
             "confuser": difficulty_clause(rng, count),
             "presentation": presentation, "faint": faint,
@@ -220,8 +257,9 @@ def build(seed):
         row["colour"] = rng.choice(COLOURS)
         row["markup"] = rng.choice(MARKUP)
         row["ui_chrome"] = rng.choice(UI_CHROME) if rng.random() < 0.3 else ""
-        row["clutter"] = ("dimension strings, level marks and material callout "
-                          "leaders naming each finish")
+        row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
+                          else "dimension strings, level marks and material "
+                               "callout leaders naming each finish")
         row["artifacts"] = rng.choice(ARTIFACTS)
         add("elev_colour_markup", **row)
 
@@ -232,8 +270,9 @@ def build(seed):
         row["colour"] = rng.choice(COLOURS)
         row["markup"] = ""
         row["ui_chrome"] = ""
-        row["clutter"] = ("dimension strings, level marks, window tags and "
-                          "material callout leaders")
+        row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
+                          else "dimension strings, level marks, window tags and "
+                               "material callout leaders")
         row["artifacts"] = rng.choice(ARTIFACTS)
         add("elev_colour", **row)
 
@@ -244,8 +283,9 @@ def build(seed):
         row["colour"] = ""
         row["markup"] = ""
         row["ui_chrome"] = ""
-        row["clutter"] = ("thin callout leaders naming each material in small "
-                          "text, level marks, and a property-line symbol")
+        row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
+                          else "thin callout leaders naming each material in "
+                               "small text, level marks, and a property-line symbol")
         row["artifacts"] = rng.choice(ARTIFACTS[:2] + ARTIFACTS[-1:])
         add("elev_faint", **row)
 
@@ -255,7 +295,8 @@ def build(seed):
         row["colour"] = ""
         row["markup"] = ""
         row["ui_chrome"] = ""
-        row["clutter"] = "dimension strings, level marks, window and door tags"
+        row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
+                          else "dimension strings, level marks, window and door tags")
         row["artifacts"] = rng.choice(ARTIFACTS)
         add("elev_mono", **row)
 
@@ -360,6 +401,10 @@ def main():
     counts = Counter(n_fam(s) for s in specs)
     print(f"families/image: mean {_st.mean([n_fam(s) for s in specs]):.1f}  "
           f"dist {dict(sorted(counts.items()))}   (real 28: mean 1.8, 13 single)")
+    views = Counter("four" if "four" in s["layout"] else
+                    "one" if "on its own" in s["layout"] else "two/plan"
+                    for s in specs)
+    print(f"views: {dict(views)}")
     print(f"faint: {faint}   light: {light}   colourised: {coloured}   "
           f"wider than 3:1: {wide}   with markup: "
           f"{sum(1 for s in specs if s['markup'])}")

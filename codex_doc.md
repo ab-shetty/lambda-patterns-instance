@@ -30,6 +30,14 @@ generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
 demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
 `--min-regularity` to re-roll, or better, let it order the labelling queue.
 
+**Simpler drawings score far better on fill regularity.** Four single-view,
+one-or-two-family specs through `gemini-3-pro-image` read **7,727** against the
+real pool's 11,826, the 50-image gpt round's 3,122 and Gemini's own first ten at
+2,605. The spec list now matches the eval set on all three simplicity axes
+(families 1.9, 45% single-view elevations, sparse clutter on 60%), and the prompt
+carries a restraint clause because the model embellishes what it is asked for.
+Four images of one category -- promising, not settled. Details in the README.
+
 **Round 1 (50 images) is in `perceive-ai/floz-gen-v4-round1`, unlabelled**, and
 the 28 evaluation images with their polygons are in
 `perceive-ai/floz-eval28-reference` — tagged `eval-only`/`do-not-train`, never to

@@ -153,6 +153,16 @@ def render_v4(spec):
         f"Drafting content: {spec['clutter']}. Some of it must cross patterned "
         "regions so an annotator can label subtraction holes, and openings, "
         "fixtures and symbols must interrupt the fills.")
+    # The model embellishes: asked for two elevations it draws four, asked for
+    # three materials it invents a fourth. The eval set is plainer than that --
+    # 1.8 families per image, most excerpts a single view -- so the restraint has
+    # to be stated as a requirement rather than implied by the spec.
+    parts.append(
+        "Restraint — draw ONLY what is listed above: exactly the views named and "
+        "no others, exactly the material families named and no others, and no "
+        "extra annotation beyond what the drafting content asks for. This is a "
+        "plain working drawing, not a showcase sheet. Empty white paper around "
+        "and between the views is correct and expected.")
     parts.append(
         "Excluded content: no title block, no legend, no material schedule, no "
         "revision table, no sheet border or frame, and no large headline. This is "
