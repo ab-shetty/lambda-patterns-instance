@@ -547,14 +547,16 @@ shadow in a corner, a visible sheet edge, uneven lighting. Two lines caused it:
   document" — and "texture of a scanned document" is an invitation to draw the
   paper rather than the drawing.
 
-The eval set does not support that. Measured page-lighting swing (a photograph
-carries a slow gradient across the sheet; a digital export does not): real 28
-median **0.016**, gemini round 2 median 0.035. Five of the 28 real images are
-genuinely scanned, so degradation belongs in the mix — at about a fifth, not
-two thirds.
+The eval set does not support that at any share. **None of the 28 is a scanned
+or photographed sheet** — they are digital PDF excerpts. A page-lighting
+measurement (real 28 median 0.016 against round 2's 0.035) appeared to flag five
+real images as scan-like, but those five were 3, 6, 17, 18 and 19: the
+colourised elevations. The metric was reading colour fills, not paper. Do not
+repeat that inference — low-frequency brightness variation tracks tinted regions
+as readily as page lighting.
 
-Now: the artifact list is clean digital exports with a `SCANNED` list drawn 20%
-of the time, and the medium line says what the page is not — "This is the
+Now: the artifact list is clean digital exports only, with no scan or photocopy
+option at all, and the medium line says what the page is not — "This is the
 digital page itself... It is NOT a photograph of a printed sheet: no page edges
 or corners, no drop shadows, no curl or creases, no uneven or angled lighting,
 no desk, table or background visible, and no paper grain." Regenerating the

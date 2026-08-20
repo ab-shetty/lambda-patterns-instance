@@ -159,16 +159,20 @@ ARTIFACTS = ["a clean vector PDF export at moderate line weight",
              "a clean vector PDF export with crisp thin linework",
              "a clean digital export, uniform line weights",
              "a clean vector PDF export with fine hairline work",
-             "faint PDF export with pale gray linework",
-             "a slightly soft digital export, lines a little thin"]
-SCANNED = ["light scan skew and slightly soft lines",
-           "a pale photocopy-like export with thin lines",
-           "JPEG ringing around the darker lines"]
-
-
+             "a clean vector PDF export, pale gray linework",
+             "a clean digital export, lines on the thin side",
+             "a clean vector PDF export with mixed line weights",
+             "a clean digital export at fine resolution"]
+# No scan look at all: NONE of the real 28 is a scanned or photographed sheet.
+# They are digital PDF excerpts. A page-lighting measurement appeared to flag
+# five of them, but the five were 3, 6, 17, 18 and 19 -- the colourised
+# elevations -- so the metric was reading colour fills, not paper. Degradation
+# has no share of the eval distribution to match, and the model renders "scan"
+# as a photograph of a printed sheet anyway: corner shadow, visible sheet edge,
+# uneven lighting.
 def artifact(rng):
-    """One in five drawings is a scan, matching 5 of the real 28."""
-    return rng.choice(SCANNED) if rng.random() < 0.2 else rng.choice(ARTIFACTS)
+    """Always a clean digital export."""
+    return rng.choice(ARTIFACTS)
 
 CONFUSERS = [
     "two of the material families differ only in course spacing -- one about "
