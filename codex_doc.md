@@ -30,6 +30,16 @@ generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
 demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
 `--min-regularity` to re-roll, or better, let it order the labelling queue.
 
+**Round 1 (50 images) is in `perceive-ai/floz-gen-v4-round1`, unlabelled**, and
+the 28 evaluation images with their polygons are in
+`perceive-ai/floz-eval28-reference` — tagged `eval-only`/`do-not-train`, never to
+be merged into a training pool. Two changes since: family counts now come from
+the eval distribution (mean 1.9, 36 single-family, against the 2.7 round 1 used),
+and `gemini-3-pro-image` beat `gpt-image-2` on fill regularity in 3 of 4 paired
+prompts — including a roof plan at 10,246 against the real pool's 11,826, the
+first generated image here to come close. Four pairs is not a decision; the
+README has the numbers and the caveats.
+
 **Generate the round through the Batch API** (`--batch submit|status|fetch`):
 half price, 24-hour window, and the batch outlives the session, so ~$30 for 300
 images rather than ~$60. Fetch maps results by `custom_id` because batch output

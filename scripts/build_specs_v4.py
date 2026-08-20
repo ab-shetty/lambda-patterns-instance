@@ -138,6 +138,41 @@ def plan_aspect(rng):
     return rng.choice([1.3, 1.4, 1.5, 1.5, 1.7, 2.0])
 
 
+def family_count(rng):
+    """How many material families this drawing carries.
+
+    Drawn from the eval set rather than from an idea of a rich sheet. The real
+    28 hold 1.8 families on average -- 13 of 28 have exactly ONE -- against the
+    2.7 the first v4 list asked for. The difficulty there comes from faintness,
+    clutter and materials that differ barely, not from stacking families, and a
+    two-family image is also a third less to label.
+    """
+    roll = rng.random()
+    return 1 if roll < 0.45 else 2 if roll < 0.80 else 3
+
+
+def materials_clause(rng, pool, count):
+    """`patterns` text for however many families were drawn."""
+    picked = rng.sample(pool, count)
+    body = "; ".join(f"{name}, drawn as {how}" for name, how in picked)
+    word = {1: "one material family", 2: "two material families",
+            3: "three material families"}[count]
+    return f"{word}: {body}"
+
+
+def difficulty_clause(rng, count):
+    """A one-family image cannot have a confusable pair; it needs the other trap."""
+    if count == 1:
+        return rng.choice([
+            "the single family recurs in several separated regions and must be "
+            "told apart from plain unfilled surfaces that look similar at a glance",
+            "every other surface in the drawing is plain or unfilled, so the trap "
+            "is deciding where the one filled material stops",
+            "the one filled material appears in both large and very small "
+            "regions, some only a few lines wide"])
+    return rng.choice(CONFUSERS)
+
+
 def contrast_level(rng, faint_p, light_p):
     """none / light / faint.
 
@@ -155,11 +190,10 @@ def contrast_level(rng, faint_p, light_p):
 
 
 def elevation(rng, house, presentation, faint):
-    mats = rng.sample(SIDING, 3)
-    patterns = "; ".join(f"{name}, drawn as {how}" for name, how in mats)
+    count = family_count(rng)
     return {"subject": house, "layout": rng.choice(VIEWS),
-            "patterns": f"three material families: {patterns}",
-            "confuser": rng.choice(CONFUSERS),
+            "patterns": materials_clause(rng, SIDING, count),
+            "confuser": difficulty_clause(rng, count),
             "presentation": presentation, "faint": faint,
             "aspect": wide_aspect(rng)}
 
@@ -247,12 +281,12 @@ def build(seed):
 
     # --- floor plans with room finishes (6) ---------------------------------
     while sum(s['category'] == 'plan_finish' for s in specs) < 6:
-        mats = rng.sample(PLAN_FINISH, 3)
+        count = max(2, family_count(rng))        # a finish plan needs two to differ
         add("plan_finish", subject=rng.choice(HOUSE),
             layout="a complete floor plan with the room finishes filled in",
-            patterns="three floor finishes: " + "; ".join(
-                f"{name}, drawn as {how}" for name, how in mats),
-            confuser=rng.choice(CONFUSERS), presentation="monochrome",
+            patterns=materials_clause(rng, PLAN_FINISH, count).replace(
+                "material famil", "floor finish famil"),
+            confuser=difficulty_clause(rng, count), presentation="monochrome",
             faint="none", colour="", markup="", ui_chrome="",
             clutter=("furniture, fixtures, appliance symbols and room name and "
                      "area labels interrupting the fills"),
@@ -260,12 +294,12 @@ def build(seed):
 
     # --- roof plans (8) ------------------------------------------------------
     while sum(s['category'] == 'roof_plan' for s in specs) < 8:
-        mats = rng.sample(ROOF_FILL, 3)
+        count = family_count(rng)
         add("roof_plan", subject=rng.choice(HOUSE),
             layout="a complete roof plan over the whole footprint",
-            patterns="three roof surfaces: " + "; ".join(
-                f"{name}, drawn as {how}" for name, how in mats),
-            confuser=rng.choice(CONFUSERS), presentation="monochrome",
+            patterns=materials_clause(rng, ROOF_FILL, count).replace(
+                "material famil", "roof surface famil"),
+            confuser=difficulty_clause(rng, count), presentation="monochrome",
             faint=contrast_level(rng, 0.15, 0.45), colour="", markup="",
             ui_chrome="",
             clutter=("ridge and valley lines, slope arrows with pitch labels, "
@@ -274,13 +308,13 @@ def build(seed):
 
     # --- sparse sections and framing sheets: the image-7 case (14) ----------
     while sum(s['category'] == 'section_sparse' for s in specs) < 14:
-        mats = rng.sample(SIDING, 2)
+        count = min(2, family_count(rng))        # a sparse sheet holds one or two
         add("section_sparse", subject=rng.choice(HOUSE),
             layout=rng.choice(SPARSE_SUBJECT),
-            patterns="two material families only: " + "; ".join(
-                f"{name}, drawn as {how}" for name, how in mats),
+            patterns=materials_clause(rng, SIDING, count),
             confuser=("the two families must be told apart only by their fill, "
-                      "not by where they sit in the drawing"),
+                      "not by where they sit in the drawing") if count == 2 else
+                     difficulty_clause(rng, 1),
             presentation="monochrome", faint=contrast_level(rng, 0.35, 0.45),
             colour="", markup="", ui_chrome="",
             clutter=("two or three blocks of small specification note text and "
@@ -319,6 +353,13 @@ def main():
     print(f"wrote {len(specs)} specs to {args.out}")
     for category, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {category:<20} {n}")
+    def n_fam(spec):
+        return (1 if spec["patterns"].startswith("one") else
+                2 if spec["patterns"].startswith("two") else 3)
+    import statistics as _st
+    counts = Counter(n_fam(s) for s in specs)
+    print(f"families/image: mean {_st.mean([n_fam(s) for s in specs]):.1f}  "
+          f"dist {dict(sorted(counts.items()))}   (real 28: mean 1.8, 13 single)")
     print(f"faint: {faint}   light: {light}   colourised: {coloured}   "
           f"wider than 3:1: {wide}   with markup: "
           f"{sum(1 for s in specs if s['markup'])}")

@@ -369,6 +369,48 @@ SDK call. Also note the upload receipt records the project **name that was
 asked for**, not the one Roboflow used, so it could not detect this: the
 reconciliation had to read both projects back.
 
+## 2026-08-19, later still — family counts, and a Gemini comparison
+
+**The round was more complicated than the thing it imitates.** The eval set
+holds **1.8 material families per image, and 13 of 28 have exactly one**; the
+first v4 list asked for three on 72% of specs. The real difficulty there is
+faintness, clutter and materials that differ barely — not stacked families.
+`build_specs_v4.py` now draws the count from that distribution (45/35/20 for
+one/two/three), landing at mean 1.9 with 36 single-family specs. It also cuts
+labelling by roughly a third, which is the binding cost.
+
+**The 28 evaluation images are now in Roboflow** as
+`perceive-ai/floz-eval28-reference`: 28 images, 207 polygons, families as
+`pattern1..N` with holes as separate `remove` polygons, built by
+`scripts/upload_eval28_roboflow.py`. Every image is tagged `eval-only` and
+`do-not-train`, and the 14 acceptance images additionally `hf14-acceptance`.
+**It must never be merged into a training pool** — `startup.md`'s rule that
+these are evaluation-only has not changed; this exists so a generated round can
+be compared against the target by eye, in the same tool.
+
+**Gemini holds a ruled fill better on 3 of 4 paired prompts.**
+`scripts/generate_images_gemini.py` runs the identical manifest through
+`gemini-3-pro-image` at 2K. Fill regularity, same prompt, same measurement:
+
+| spec | gpt-image-2 | gemini-3-pro-image |
+|---|---:|---:|
+| 006 `plan_mep` | 2,081 | **6,168** |
+| 011 `roof_plan` | 5,033 | **10,246** |
+| 019 `elev_colour_markup` | 2,487 | **3,122** |
+| 042 `elev_faint` | **3,550** | 1,992 |
+
+For scale, the real plans read 11,826 and round 1 as a whole 3,122. The roof
+plan is the striking one: shingle courses, a dot field and standing-seam lines,
+all machine-regular, at 10,246 — the first generated image in this project to
+come near the real pool. The elevation it lost on adds a faint paper texture
+that the measure reads as noise.
+
+Caveats before treating this as settled: four pairs, one draw each, and this
+repo has retracted better-supported results. Gemini also constrains aspect to a
+fixed list whose widest is 21:9 (2.33:1, narrower than the eval median of 2.59),
+so wide images still need trimming, and there is no batch discount — pro at 2K
+is ~$0.13 an image against the $0.097 measured on gpt-image-2 batch.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images
