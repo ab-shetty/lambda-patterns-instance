@@ -535,6 +535,31 @@ slicing the building, so they stop where the margins run out. Reaching the real
 set's wide tail needs the model to draw a wide band inside a 21:9 frame, not a
 harder crop.
 
+## The prompt was asking for photographs of paper (2026-08-19)
+
+Round 2 returned drawings that read as a phone photo of a printed sheet — page
+shadow in a corner, a visible sheet edge, uneven lighting. Two lines caused it:
+
+* the artifact vocabulary asked **69 of 100 specs** for degradation ("light scan
+  skew", "pale photocopy-like export", "JPEG ringing"), with only 10 asking for
+  a clean vector export;
+* the medium line asked for "the texture of a scanned or exported construction
+  document" — and "texture of a scanned document" is an invitation to draw the
+  paper rather than the drawing.
+
+The eval set does not support that. Measured page-lighting swing (a photograph
+carries a slow gradient across the sheet; a digital export does not): real 28
+median **0.016**, gemini round 2 median 0.035. Five of the 28 real images are
+genuinely scanned, so degradation belongs in the mix — at about a fifth, not
+two thirds.
+
+Now: the artifact list is clean digital exports with a `SCANNED` list drawn 20%
+of the time, and the medium line says what the page is not — "This is the
+digital page itself... It is NOT a photograph of a printed sheet: no page edges
+or corners, no drop shadows, no curl or creases, no uneven or angled lighting,
+no desk, table or background visible, and no paper grain." Regenerating the
+worst offender took its lighting swing from 0.047 to 0.024.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

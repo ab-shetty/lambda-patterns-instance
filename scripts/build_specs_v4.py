@@ -150,11 +150,25 @@ SPARSE_SUBJECT = [
     "a stair section with one hatched wall running through it",
     "a garage under-floor plan with one filled region and a large note block"]
 
-ARTIFACTS = ["faint PDF export with pale gray linework",
-             "light scan skew and slightly soft lines",
-             "JPEG ringing around the darker lines",
-             "a clean vector PDF export at moderate line weight",
-             "a pale photocopy-like export with thin lines"]
+# Weighted toward clean digital exports, because that is what the eval set is.
+# Measured page-lighting swing: real 28 median 0.016, and only 5 of the 28 are
+# genuinely scanned. The first list asked 69 of 100 specs for degradation and
+# got photographs of printed sheets back, complete with page shadows and sheet
+# edges. Degradation stays, at roughly the real share, and never as "texture".
+ARTIFACTS = ["a clean vector PDF export at moderate line weight",
+             "a clean vector PDF export with crisp thin linework",
+             "a clean digital export, uniform line weights",
+             "a clean vector PDF export with fine hairline work",
+             "faint PDF export with pale gray linework",
+             "a slightly soft digital export, lines a little thin"]
+SCANNED = ["light scan skew and slightly soft lines",
+           "a pale photocopy-like export with thin lines",
+           "JPEG ringing around the darker lines"]
+
+
+def artifact(rng):
+    """One in five drawings is a scan, matching 5 of the real 28."""
+    return rng.choice(SCANNED) if rng.random() < 0.2 else rng.choice(ARTIFACTS)
 
 CONFUSERS = [
     "two of the material families differ only in course spacing -- one about "
@@ -263,7 +277,7 @@ def build(seed):
         row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
                           else "dimension strings, level marks and material "
                                "callout leaders naming each finish")
-        row["artifacts"] = rng.choice(ARTIFACTS)
+        row["artifacts"] = artifact(rng)
         add("elev_colour_markup", **row)
 
     # --- elevations, colourised, no markup (12) -----------------------------
@@ -276,7 +290,7 @@ def build(seed):
         row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
                           else "dimension strings, level marks, window tags and "
                                "material callout leaders")
-        row["artifacts"] = rng.choice(ARTIFACTS)
+        row["artifacts"] = artifact(rng)
         add("elev_colour", **row)
 
     # --- elevations, faint monochrome: the image-14 case (22) ---------------
@@ -289,7 +303,7 @@ def build(seed):
         row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
                           else "thin callout leaders naming each material in "
                                "small text, level marks, and a property-line symbol")
-        row["artifacts"] = rng.choice(ARTIFACTS[:2] + ARTIFACTS[-1:])
+        row["artifacts"] = artifact(rng)
         add("elev_faint", **row)
 
     # --- elevations, ordinary monochrome (8) --------------------------------
@@ -300,7 +314,7 @@ def build(seed):
         row["ui_chrome"] = ""
         row["clutter"] = (rng.choice(ELEV_CLUTTER_SPARSE) if rng.random() < 0.7
                           else "dimension strings, level marks, window and door tags")
-        row["artifacts"] = rng.choice(ARTIFACTS)
+        row["artifacts"] = artifact(rng)
         add("elev_mono", **row)
 
     # --- floor plans under an MEP overlay: the image-12 case (14) -----------
@@ -321,7 +335,7 @@ def build(seed):
             presentation="monochrome", faint=contrast_level(rng, 0.25, 0.55),
             colour="", markup="", ui_chrome="",
             clutter=rng.choice(MEP_CLUTTER),
-            artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
+            artifacts=artifact(rng), aspect=plan_aspect(rng))
 
     # --- floor plans with room finishes (6) ---------------------------------
     while sum(s['category'] == 'plan_finish' for s in specs) < 6:
@@ -334,7 +348,7 @@ def build(seed):
             faint="none", colour="", markup="", ui_chrome="",
             clutter=("furniture, fixtures, appliance symbols and room name and "
                      "area labels interrupting the fills"),
-            artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
+            artifacts=artifact(rng), aspect=plan_aspect(rng))
 
     # --- roof plans (8) ------------------------------------------------------
     while sum(s['category'] == 'roof_plan' for s in specs) < 8:
@@ -348,7 +362,7 @@ def build(seed):
             ui_chrome="",
             clutter=("ridge and valley lines, slope arrows with pitch labels, "
                      "vents, skylights and overflow scuppers"),
-            artifacts=rng.choice(ARTIFACTS), aspect=plan_aspect(rng))
+            artifacts=artifact(rng), aspect=plan_aspect(rng))
 
     # --- sparse sections and framing sheets: the image-7 case (14) ----------
     while sum(s['category'] == 'section_sparse' for s in specs) < 14:
@@ -363,7 +377,7 @@ def build(seed):
             colour="", markup="", ui_chrome="",
             clutter=("two or three blocks of small specification note text and "
                      "a few leader lines, with large areas of empty page"),
-            artifacts=rng.choice(ARTIFACTS[:2] + ARTIFACTS[-1:]),
+            artifacts=artifact(rng),
             aspect=rng.choice([2.0, 2.5, 2.7, 3.0, 3.4, 4.0, 5.0]))
 
     rng.shuffle(specs)

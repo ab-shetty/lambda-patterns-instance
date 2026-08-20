@@ -176,8 +176,12 @@ def render_v4(spec):
         "Excluded content: no title block, no legend, no material schedule, no "
         "revision table, no sheet border or frame, and no large headline. This is "
         "one drawing cropped out of a sheet, not the sheet.")
-    parts.append(f"Medium: {spec['artifacts']}; the texture of a scanned or "
-                 "exported construction document, not an illustration.")
+    parts.append(
+        f"Medium: {spec['artifacts']}. This is the digital page itself — flat, "
+        "evenly lit, uniformly white paper filling the frame. It is NOT a "
+        "photograph of a printed sheet: no page edges or corners, no drop "
+        "shadows, no curl or creases, no uneven or angled lighting, no desk, "
+        "table or background visible, and no paper grain.")
     if spec["aspect"] > 2.3:                    # both APIs cap below the eval tail
         # The API stops at 3:1, so the extra width is won back by trimming the
         # margin afterwards -- which only works if the margin is there to trim.
