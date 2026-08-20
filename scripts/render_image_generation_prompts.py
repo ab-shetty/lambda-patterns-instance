@@ -122,9 +122,12 @@ def render_v4(spec):
         parts.append(
             f"Presentation: a colourised permit-set drawing — the surfaces are "
             f"filled with flat {spec['colour']} and other muted architectural "
-            "tints, with each material's line pattern drawn over its tint. This "
-            "is a coloured drawing, not black-and-white linework, and not a "
-            "photorealistic rendering.")
+            "tints, with each material's line pattern drawn ON TOP of its tint. "
+            "This is a coloured drawing, not black-and-white linework, and not a "
+            "photorealistic rendering. Each material named above is drawn with "
+            "its own line pattern over its tint — a roof of shingles is course "
+            "lines over a tint, not a plain coloured plane. Other surfaces may "
+            "be plain colour.")
     else:
         parts.append("Presentation: black and gray linework on white paper, as "
                      "exported from CAD to PDF. No colour fills.")
@@ -143,14 +146,15 @@ def render_v4(spec):
             "but fully legible, with the material fills easy to see at a glance.")
     if spec["markup"]:
         parts.append(
-            f"Markup: the drawing has been marked up in a review tool — "
-            f"{spec['markup']}. The markup is a FLAT, EVEN, HARD-EDGED "
-            "translucent fill that stops exactly at the edges of the region it "
-            "covers, like a digital highlighter rectangle: no soft brush "
-            "strokes, no airbrush, no smudges, no smears, no feathered or faded "
-            "edges, no gradients, and nothing painted freehand across the "
-            "drawing. It sits ON TOP and does not replace any material fill, and "
-            "the linework stays fully visible through it.")
+            f"Markup: one of the material families has been colour-filled for "
+            f"review — {spec['markup']}. Fill it the way a paint-bucket fills a "
+            "shape: every region of that one family is SOLID GREEN THROUGHOUT "
+            "its interior, from one edge of the region to the other, with the "
+            "green stopping exactly at the region outline and leaving the "
+            "windows, doors and openings inside it unfilled. The family's own "
+            "lines stay drawn on top of the green at full strength. Not an "
+            "outline, not a glow or halo around the edges, not a brush stroke, "
+            "not a soft or faded wash — the interior is green.")
     if spec["ui_chrome"]:
         parts.append(f"Screen capture: this is a screenshot of that review tool, "
                      f"so {spec['ui_chrome']}.")
@@ -188,6 +192,9 @@ def render_v4(spec):
             "filling the frame with a thin margin and nothing important cropped "
             "at the edges.")
     parts.append(
+        "Never write any of this brief onto the drawing: labels must be ordinary "
+        "architectural callouts naming materials, never words like 'pattern', "
+        "'family', 'no pattern', 'markup' or 'typical of this dataset'.\n"
         "Constraints: no photographic building, no watermark, no logo, no "
         "segmentation overlay, no bounding boxes, no coloured region masks of the "
         "kind an annotation tool draws, and no pre-existing polygon annotations.")

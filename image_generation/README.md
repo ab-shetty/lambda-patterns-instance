@@ -475,6 +475,22 @@ model, and both fixed:
   landed at 3.0:1 and 2.5:1 rather than their nominal targets). The "wide band
   with white margin above and below" instruction also now applies from 2.3:1,
   since that is where Gemini's cap bites, not 3:1.
+* **The green was modelled wrong, twice.** In the real set the colour is not a
+  highlighter swipe over part of a drawing: it is a SOLID FILL OF WHOLE PATTERN
+  REGIONS, with the material's own lines drawn on top at full strength and the
+  windows and doors inside left unfilled. Eval 27 is 21.9% green with ink
+  density 0.99 inside it; eval 24 is 31.2%. Asking for a partial highlighter
+  produced smudges, and asking for "hard edges" produced an outline glow around
+  the regions. Describing it as a paint-bucket fill of one family — "every
+  region of that one family is SOLID GREEN THROUGHOUT its interior... not an
+  outline, not a glow or halo around the edges" — lands at 20.6% coverage
+  against the real 21.9%. Note also that a flat coloured plane in the image is
+  not a defect: it is simply a surface nobody annotates. Only the families named
+  in the spec have to carry a pattern.
+* **Instruction language leaked onto the sheet.** Telling the model that
+  unnamed surfaces "will not be annotated" produced a drawing labelled "METAL
+  ROOF (NO PATTERN)". The prompt now forbids writing the brief into the drawing:
+  callouts name materials, never `pattern`, `family` or `markup`.
 * **The highlighter markup came back as green smudges.** The markup wording now
   demands a flat, even, hard-edged translucent fill that stops at the region
   boundary, "like a digital highlighter rectangle: no soft brush strokes, no
