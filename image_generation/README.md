@@ -502,6 +502,39 @@ and less for the model to keep consistent -- but it is four images of one
 category, so treat it as the most promising lead here rather than a settled
 result. They are in `perceive-ai/floz-gen-gemini-r1`, batch `gemini-simple`.
 
+## Round 2 — 50 images through Gemini Batch (2026-08-19)
+
+`perceive-ai/floz-gen-gemini-r2`, unlabelled. `gemini-3-pro-image` at 2K,
+submitted with `--batch submit` and fetched with `--batch fetch`: Gemini's Batch
+API is the same bargain as OpenAI's — half the token price, a 24-hour target
+window, and a job that outlives the shell. Requests go up as a JSONL file, not
+inline, because inline batches cap at 20MB and fifty 2K images come back far
+past that. 50 of 50 returned, none failed, ~$0.067 an image.
+
+Stratified across all eight categories, on the simplified spec list: families
+mean 1.9, 45% of elevations single-view, markup cut to 6 of 100 specs.
+
+| | real 28 | gpt-image-2 round 1 | **gemini round 2** |
+|---|---:|---:|---:|
+| ink | 0.111 | 0.056 | **0.104** |
+| contrast | 0.437 | 0.360 | **0.411** |
+| fill regularity | 11,826 | 3,122 | **7,270** |
+| aspect | 2.59 | 2.50 | 2.36 |
+| over 3:1 | 10/28 | 11/50 | 5/50 |
+
+**The simplicity result held at scale.** 7,270 across 50 images and every
+category, against 7,727 on the four-image probe and 3,122 for the gpt round —
+so the jump was the simpler drawings, not a lucky draw. Ink and contrast now sit
+on the real pool as well; the pool that had been half the weight of real plans
+for three rounds is no longer distinguishable on either.
+
+The one measure that moved the wrong way is aspect: 5 of 50 past 3:1 against the
+real 10 of 28. That is the ink-aware crop refusing to cut drawings — Gemini caps
+at 21:9 and the specs asking for 4:1 and wider simply cannot be reached without
+slicing the building, so they stop where the margins run out. Reaching the real
+set's wide tail needs the model to draw a wide band inside a 21:9 frame, not a
+harder crop.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

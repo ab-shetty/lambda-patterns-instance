@@ -30,6 +30,12 @@ generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
 demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
 `--min-regularity` to re-roll, or better, let it order the labelling queue.
 
+**Round 2 is 50 Gemini images in `perceive-ai/floz-gen-gemini-r2`, unlabelled,
+and it is the best pool this project has generated**: fill regularity 7,270
+against the real 11,826 and the gpt round's 3,122, with ink 0.104 vs 0.111 and
+contrast 0.411 vs 0.437. Cost ~$0.067 an image through Gemini's Batch API. Label
+this one.
+
 **Simpler drawings score far better on fill regularity.** Four single-view,
 one-or-two-family specs through `gemini-3-pro-image` read **7,727** against the
 real pool's 11,826, the 50-image gpt round's 3,122 and Gemini's own first ten at

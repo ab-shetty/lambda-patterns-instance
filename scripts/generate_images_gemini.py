@@ -21,11 +21,14 @@ Two differences from the OpenAI path, both handled here:
 * Size is `1K`/`2K`/`4K` rather than pixels. 2K is the closest match to the
   ~4 megapixels round 1 used; 4K is nearer the real pool's 5.9 median.
 
-There is no batch discount here, so a full round costs more per image than the
-$0.097 measured on gpt-image-2 batch. This is a probe, not a migration.
+`--batch submit|status|fetch` uses Gemini's Batch API: half the token price, a
+24-hour target window, and the job outlives the shell that submitted it. The
+requests go up as a JSONL file rather than inline, because inline batches cap at
+20MB and fifty 2K images come back far larger than that.
 """
 
 import argparse
+import base64
 import importlib.util
 import json
 import os
@@ -107,6 +110,112 @@ def generate_one(client, types, row, out_dir, model, image_size, attempts,
             "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
+
+# --- Batch API ----------------------------------------------------------------
+
+def batch_state_path(out_dir):
+    return Path(out_dir) / "batch_state.json"
+
+
+def build_batch_file(rows, out_dir, image_size, default_ratio):
+    """One JSONL line per image, in the Gemini batch envelope."""
+    path = Path(out_dir) / "batch_requests.jsonl"
+    with path.open("w") as handle:
+        for row in rows:
+            ratio = choose_ratio(row["aspect"]) if row.get("aspect") else default_ratio
+            handle.write(json.dumps({
+                "key": f"item-{row['id']:03d}",
+                "request": {
+                    "contents": [{"parts": [{"text": row["prompt"]}], "role": "user"}],
+                    "generation_config": {
+                        "response_modalities": ["IMAGE"],
+                        "image_config": {"aspect_ratio": ratio,
+                                         "image_size": image_size}}}}) + "\n")
+    return path
+
+
+def batch_submit(client, rows, out_dir, model, image_size, default_ratio):
+    path = build_batch_file(rows, out_dir, image_size, default_ratio)
+    uploaded = client.files.upload(file=str(path),
+                                   config={"mime_type": "application/jsonl"})
+    job = client.batches.create(model=model, src=uploaded.name,
+                                config={"display_name": Path(out_dir).name})
+    state = {"job": job.name, "input_file": uploaded.name, "requests": len(rows),
+             "model": model, "image_size": image_size,
+             "submitted": datetime.now(timezone.utc).isoformat()}
+    batch_state_path(out_dir).write_text(json.dumps(state, indent=1))
+    print(f"submitted {len(rows)} requests as {job.name} (state {job.state})")
+    print(f"check with: --batch status --out {out_dir}")
+    return 0
+
+
+def resolve_job(out_dir, job_name):
+    if job_name:
+        return job_name
+    path = batch_state_path(out_dir)
+    if not path.exists():
+        raise SystemExit(f"no job name given and no {path}")
+    return json.loads(path.read_text())["job"]
+
+
+def batch_status(client, out_dir, job_name):
+    job = client.batches.get(name=resolve_job(out_dir, job_name))
+    print(f"{job.name}  state={job.state}")
+    if str(job.state).endswith("SUCCEEDED"):
+        print(f"fetch with: --batch fetch --out {out_dir}")
+    return 0
+
+
+def batch_fetch(client, rows, out_dir, job_name):
+    """Write every returned image, crop it, and append its receipt."""
+    job = client.batches.get(name=resolve_job(out_dir, job_name))
+    if not str(job.state).endswith("SUCCEEDED"):
+        print(f"job is {job.state}, not finished")
+        return 1
+    by_key = {f"item-{row['id']:03d}": row for row in rows}
+    payload = client.files.download(file=job.dest.file_name).decode("utf-8")
+    written = failed = 0
+    with receipt_path(out_dir).open("a") as log:
+        for line in payload.splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            row = by_key.get(record.get("key"))
+            if row is None:
+                continue
+            blob = None
+            for candidate in ((record.get("response") or {}).get("candidates") or []):
+                for part in (candidate.get("content") or {}).get("parts", []):
+                    data = part.get("inlineData") or part.get("inline_data")
+                    if data and data.get("data"):
+                        blob = base64.b64decode(data["data"])
+                        break
+                if blob:
+                    break
+            if blob is None:
+                failed += 1
+                receipt = {"id": row["id"], "filename": row["filename"],
+                           "status": "failed",
+                           "error": str(record.get("error") or record)[:400],
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+            else:
+                dest = Path(out_dir) / row["filename"]
+                tmp = dest.with_suffix(dest.suffix + ".part")
+                tmp.write_bytes(blob)
+                tmp.replace(dest)
+                target = row.get("aspect")
+                cropped = trim_to_aspect(dest, target) if target else None
+                written += 1
+                receipt = {"id": row["id"], "filename": row["filename"],
+                           "status": "accepted", "model": job.model, "via": "batch",
+                           "bytes": len(blob), "cropped_to": cropped,
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+            log.write(json.dumps(receipt) + "\n")
+            log.flush()
+    print(f"wrote {written} images, {failed} failed -> {out_dir}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -122,6 +231,9 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--attempts", type=int, default=3)
     ap.add_argument("--report", help="write a contact sheet here when done")
+    ap.add_argument("--batch", choices=["submit", "status", "fetch"],
+                    help="use Gemini's Batch API: half price, 24h window")
+    ap.add_argument("--batch-id", help="override the job name in the state file")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -137,6 +249,15 @@ def main():
     if args.limit:
         todo = todo[:args.limit]
 
+    if args.batch in {"status", "fetch"}:
+        if not os.environ.get("GEMINI_API_KEY"):
+            print("GEMINI_API_KEY is not set", file=sys.stderr)
+            return 2
+        from google import genai
+        client = genai.Client()
+        if args.batch == "status":
+            return batch_status(client, out_dir, args.batch_id)
+        return batch_fetch(client, rows, out_dir, args.batch_id)
     print(f"manifest={len(rows)}  already accepted={len(done)}  to generate={len(todo)}")
     print(f"model={args.model} size={args.image_size}")
     if args.dry_run:
@@ -157,6 +278,10 @@ def main():
     from google import genai
     from google.genai import types
     client = genai.Client()
+
+    if args.batch == "submit":
+        return batch_submit(client, todo, out_dir, args.model, args.image_size,
+                            args.aspect)
 
     receipts, failures = [], 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool, \

@@ -250,7 +250,10 @@ def build(seed):
         return True
 
     # --- elevations, colourised, with markup (16) ---------------------------
-    while sum(s['category'] == 'elev_colour_markup' for s in specs) < 16:
+    # A few is enough: 3 of the 14 acceptance images carry review colour, but
+    # the pool does not need to match that share to teach robustness to it, and
+    # green images are the least representative thing to over-produce.
+    while sum(s['category'] == 'elev_colour_markup' for s in specs) < 6:
         house = rng.choice(HOUSE)
         row = elevation(rng, house, "colourised",
                         faint=contrast_level(rng, 0.10, 0.35))
@@ -264,7 +267,7 @@ def build(seed):
         add("elev_colour_markup", **row)
 
     # --- elevations, colourised, no markup (12) -----------------------------
-    while sum(s['category'] == 'elev_colour' for s in specs) < 12:
+    while sum(s['category'] == 'elev_colour' for s in specs) < 18:
         row = elevation(rng, rng.choice(HOUSE), "colourised",
                         faint=contrast_level(rng, 0.05, 0.30))
         row["colour"] = rng.choice(COLOURS)
@@ -290,7 +293,7 @@ def build(seed):
         add("elev_faint", **row)
 
     # --- elevations, ordinary monochrome (8) --------------------------------
-    while sum(s['category'] == 'elev_mono' for s in specs) < 8:
+    while sum(s['category'] == 'elev_mono' for s in specs) < 12:
         row = elevation(rng, rng.choice(HOUSE), "monochrome", faint="none")
         row["colour"] = ""
         row["markup"] = ""
