@@ -335,6 +335,40 @@ file carries every image as base64, so budget ~5.5MB per 4-megapixel PNG (a few
 GB for a full round), and output line order does not match input order — the
 fetch step maps by `custom_id`, never by position.
 
+## Round 1, 2026-08-19 — 50 images through Batch
+
+Stratified across all eight v4 categories (11 `elev_faint`, 8
+`elev_colour_markup`, 7 `plan_mep`, 7 `section_sparse`, 6 `elev_colour`, 4
+`roof_plan`, 4 `elev_mono`, 3 `plan_finish`). **50 images, $4.83, $0.097 each,
+zero failures**, and the batch came back in about half an hour rather than
+anywhere near its 24-hour window. Eleven were generated at the API's 3:1 limit
+and trimmed to their wider target aspect.
+
+| | real 28 | round 1 |
+|---|---:|---:|
+| aspect | 2.59 | 2.50 |
+| over 3:1 | 10/28 | 11/50 |
+| colourised | 16/28 | 13/50 |
+| ink | 0.111 | 0.056 |
+| contrast | 0.437 | 0.360 |
+| fill regularity | 11,826 | 3,122 |
+
+Aspect now matches. The pool is still lighter and sparser than the real set, and
+fill regularity is where it has always been -- above the delivered generated 28
+(2,751), a quarter of the real plans. Images live in
+`perceive-ai/floz-gen-v4-round1`, unlabelled.
+
+**One operational trap, fixed in `upload_unlabelled_roboflow.py`.** The upload
+was interrupted and resumed; on the resume `workspace.project(name)` raised
+`does not exist or cannot be loaded` for a project that plainly existed -- raw
+HTTP returns it fine -- so the `--create` path made it a second time, and
+Roboflow answered the colliding name by silently minting
+`floz-gen-v4-round1-pcfow`. The round ended up split 29/22 with one image in
+both. The project handle now comes from the raw project record instead of that
+SDK call. Also note the upload receipt records the project **name that was
+asked for**, not the one Roboflow used, so it could not detect this: the
+reconciliation had to read both projects back.
+
 ---
 
 This directory is the portable source of truth for the 100 unlabelled images

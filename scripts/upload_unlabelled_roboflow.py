@@ -70,13 +70,34 @@ def get_workspace(workspace):
     return Roboflow(api_key=api_key).workspace(workspace)
 
 
+def project_handle(workspace_name, name, api_key):
+    """A Project built from the raw project record.
+
+    `workspace.project(name)` raises `does not exist or cannot be loaded` for
+    projects that plainly do exist -- raw HTTP returns them fine. Going through
+    the API directly avoids that, and avoids the failure mode it caused on
+    2026-08-19: the caller read the exception as "absent", created the project a
+    second time, and Roboflow silently minted `...-round1-pcfow` for the
+    colliding name, splitting a 50-image round across two projects.
+    """
+    import requests
+    from roboflow.core.project import Project
+    response = requests.get(f"https://api.roboflow.com/{workspace_name}/{name}",
+                            params={"api_key": api_key}, timeout=30)
+    if response.status_code != 200:
+        return None
+    record = response.json().get("project")
+    return Project(api_key, record, "coco") if record else None
+
+
 def open_project(workspace, name, create, annotation="pattern"):
     """Existing project, or a new empty one when --create is given."""
-    try:
-        return workspace.project(name)
-    except Exception:
-        if not create:
-            raise SystemExit(f"project {name!r} not found (pass --create to make it)")
+    api_key = os.environ["ROBOFLOW_API_KEY"]
+    existing = project_handle(workspace.url, name, api_key)
+    if existing is not None:
+        return existing
+    if not create:
+        raise SystemExit(f"project {name!r} not found (pass --create to make it)")
     project = workspace.create_project(project_name=name,
                                        project_type="instance-segmentation",
                                        project_license="CC BY 4.0",
