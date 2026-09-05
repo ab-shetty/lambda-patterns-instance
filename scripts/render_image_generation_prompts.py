@@ -101,21 +101,42 @@ def render_v4(spec):
     # content, and names the failures rather than describing the ideal: v3 asked
     # for "ONE constant angle and ONE constant spacing" inside the hatching
     # paragraph and scored the worst fill regularity of any pool measured.
-    parts.append(
+    # A roof plan is the one drawing where a single material legitimately runs at
+    # many angles: the courses follow each plane's slope. The real eval roof
+    # plans (15 and 16) are labelled that way -- one family spanning every
+    # orientation, with the flat roof excluded as a different material -- so
+    # demanding one fixed angle here would ask for something the target does not
+    # contain. Spacing and weight still have to hold.
+    if spec.get("category") == "roof_plan":
+        parts.append(
+            "PATTERN CONSISTENCY — THE MOST IMPORTANT REQUIREMENT, ABOVE "
+            "REALISM: each roof material keeps ONE spacing and ONE line weight "
+            "everywhere it appears. Its direction, and only its direction, "
+            "follows the slope of each roof plane, turning at hips and ridges "
+            "the way roof courses really do — constant within any one plane, "
+            "never wandering inside a plane. The lines must be machine-ruled and "
+            "perfectly straight. SPECIFICALLY FORBIDDEN: lines that waver, wobble "
+            "or look hand-drawn; spacing that opens up or tightens across a "
+            "plane; a fill that fades out, changes weight, or changes scale from "
+            "one plane to the next; two planes of the same material that do not "
+            "read as the same material apart from their direction.")
+    else:
+        parts.append(
         "PATTERN CONSISTENCY — THE MOST IMPORTANT REQUIREMENT, ABOVE REALISM: "
-        "each material family must be drawn EXACTLY THE SAME in every region it "
-        "appears in. One spacing, one angle, one line weight, chosen once and "
-        "held everywhere — in small regions as well as large, at the edges of a "
-        "region as well as in the middle. The lines must be machine-ruled and "
-        "perfectly straight, as if plotted from CAD. SPECIFICALLY FORBIDDEN: "
-        "lines that waver, wobble or look hand-drawn; lines that curve or bend "
-        "to follow a wall, a roof slope or an opening; spacing that opens up or "
-        "tightens across a region; a fill that fades out, changes weight, or "
-        "changes scale between two regions of the same material; two regions of "
-        "the same material that do not look like the same material. Where an "
-        "opening, a symbol or a note interrupts a region, the fill continues on "
-        "the far side ON THE SAME GRID — draw each family as one continuous "
-        "ruled field across the whole drawing, then let the geometry mask it.")
+            "each material family must be drawn EXACTLY THE SAME in every "
+            "region it appears in. One spacing, one angle, one line weight, "
+            "chosen once and held everywhere — in small regions as well as "
+            "large, at the edges of a region as well as in the middle. The "
+            "lines must be machine-ruled and perfectly straight, as if plotted "
+            "from CAD. SPECIFICALLY FORBIDDEN: lines that waver, wobble or look "
+            "hand-drawn; lines that curve or bend to follow a wall, a roof slope "
+            "or an opening; spacing that opens up or tightens across a region; a "
+            "fill that fades out, changes weight, or changes scale between two "
+            "regions of the same material; two regions of the same material that "
+            "do not look like the same material. Where an opening, a symbol or a "
+            "note interrupts a region, the fill continues on the far side ON THE "
+            "SAME GRID — draw each family as one continuous ruled field across "
+            "the whole drawing, then let the geometry mask it.")
     parts.append(f"Deliberate difficulty: {spec['confuser']}.")
 
     if spec["presentation"] == "colourised":

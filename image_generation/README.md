@@ -719,3 +719,10 @@ annotation.
   as a material class.
 - Do not label text, dimensions, furniture, fixtures, openings, or blank regions
   as patterns unless they are genuinely part of the material fill.
+- **Group by material, not by fill direction.** A roof plan's courses turn with
+  each plane's slope, so one material appears at several orientations and stays
+  ONE pattern — that is how eval 15 and 16 are labelled, one family spanning
+  every orientation with the flat roof excluded as a different material. In an
+  elevation a change of direction almost always means a different material
+  (board-and-batten against lap siding), which is why "different orientation,
+  different pattern" holds there. The material decides, not the angle.

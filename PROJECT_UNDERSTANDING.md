@@ -25,6 +25,12 @@ one another.
 Roboflow `remove` polygons are not patterns. They are holes cut out of enclosing
 pattern masks during import.
 
+Grouping follows the **material**, not the direction its fill runs. A roof plan's
+courses turn with each plane's slope, and eval images 15 and 16 label all of it
+as one family while excluding the flat roof as a different material. In
+elevations a change of direction almost always accompanies a change of material,
+so the two rules agree there; where they appear to conflict, the material wins.
+
 ## Primary evaluation
 
 For each heldout user reference selection:
