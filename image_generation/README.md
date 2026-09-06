@@ -593,6 +593,30 @@ Generation is stochastic. The prompt set, filenames, distribution, and quality
 gates are exact and reproducible, but a second run will not produce byte-identical
 pixels.
 
+## Labelling outcome for rounds 2 and 3 (2026-09-05)
+
+**80 of the 100 images were worth labelling** — 36 of 50 in r2, 44 of 50 in r3 —
+against 28 of 98 in the v1 round. That is the round's real verdict; fill
+regularity (8,302 against the real 11,826) predicted it correctly.
+
+| | r2 | r3 |
+|---|---|---|
+| labelled | 36 | 44 |
+| instances | 231 | 247 |
+| `remove` holes | 100 | 205 |
+| families / image | 1.75 | 1.52 |
+| labelled-area fraction | 0.314 | 0.278 |
+| long side, median | 3168 | 3168 |
+
+Skipped by category across both rounds: section_sparse 4, elev_faint 4,
+roof_plan 4, elev_colour 3, elev_mono 3, plan_finish 1, elev_colour_markup 1.
+Roof plans are the weakest category by yield — 3 labelled, 4 skipped — and the
+only one where the labelling convention itself was in doubt (see the annotation
+contract below: group by material, not by fill direction).
+
+Roboflow versions are pinned at v1 for both projects; `startup.md` has the
+download, conversion and mix commands.
+
 ## Files
 
 - `specs.jsonl`: 100 ordered, unique sheet specifications.

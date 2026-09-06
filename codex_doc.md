@@ -1,40 +1,60 @@
 # Handoff
 
-Last updated: 2026-08-19
+Last updated: 2026-09-05
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-08-19)
+## Pick up here (2026-09-05)
 
-**Next step: run the ~300-image v4 round, then label it in descending fill-
-regularity order.** `scripts/build_specs_v4.py` + `--version v4` produce a spec
-list built from the evaluation set's measured shape rather than from an idea of
-what a construction drawing looks like, and a six-image smoke spanning all its
-categories reproduces the eval look far more closely than v1-v3 did. Cost is
-~$0.20 an image, so ~$60 for 300. Read the second 2026-08-19 section of
-`image_generation/README.md` before changing any of it.
+**Next step: a GPU box.** Rounds 2 and 3 are labelled and converted, and nothing
+further can be learned from them on CPU. 80 of the 100 Gemini images were worth
+labelling — 36 of 50 in r2, 44 of 50 in r3, against 28 of 98 in the v1 round —
+and they carry 478 pattern instances at a 3168px median long side. Unique
+real-ish sources go **114 -> 194**, the first increase since 28 -> 86 bought
++0.073.
 
-**What was wrong for three rounds.** The eval set is roughly two thirds
-elevations, 16 of 28 colourised, with markup screenshots and tool UI chrome, at
-median aspect 2.59 with ten images past 3:1 — while the v1 spec list spent 40 of
-100 specs on wall details, site plans, RCPs and structural sheets, which do not
-appear in the eval set at all, and v3 explicitly forbade colour and tone. Numbers
-in `data/probes/pool_style_2026-08-19.json` via `scripts/pool_style_stats.py`.
+```bash
+# Roboflow versions are pinned: floz-gen-gemini-r2 v1, floz-gen-gemini-r3 v1
+rf.project("floz-gen-gemini-r2").version(1).download("coco-segmentation",
+    location="data/roboflow/floz-gen-gemini-r2-raw", overwrite=True)   # 36 imgs
+rf.project("floz-gen-gemini-r3").version(1).download("coco-segmentation",
+    location="data/roboflow/floz-gen-gemini-r3-raw", overwrite=True)   # 44 imgs
+python3 scripts/roboflow_to_local.py --coco .../train/_annotations.coco.json \
+  --img-dir .../train --out data/roboflow/floz-gen-gemini-rN-clean
+# r2: 36 images, 231 instances, 100 removes
+# r3: 44 images, 247 instances, 205 removes, 1 hole dropped (floz_gen_048)
+python3 scripts/merge_local_datasets.py --sources <the two clean dirs> \
+  --out data/roboflow/floz-gen-gemini-r23-clean                        # 80
+python3 scripts/augment_local_dataset.py --src .../r23-clean \
+  --out .../floz-gen-gemini-r23-strong18 --aug-per-scene 17 --strong --seed 5858
+# then merge as the fourth source: 1600 + 1548 + 504 + 1440 = 5,092
+```
 
-**The consistency defect is real and unfixed by prompting.** Repeating fills in
-the real plans score 11,826 on the dominant-FFT-peak measure; the delivered
-generated 28 score 2,751 and the v3 smoke 1,348 — and v3 was the version that
-demanded one constant angle and spacing in capitals. v4 reaches 2,796. Use
-`--min-regularity` to re-roll, or better, let it order the labelling queue.
+Then the `startup.md` two-phase train at **3 seeds** — the baseline is 0.6860 +/-
+0.0175, run-to-run sd on mix3652 is 0.0262, so a single seed decides nothing.
+Run one baseline seed first to confirm the new box reproduces mix3652.
 
-**Two Gemini rounds of 50 are unlabelled and ready: `floz-gen-gemini-r3` (label
-this one) and `floz-gen-gemini-r2` (kept, generated before the scan wording came
-out).** Round 3: fill regularity 8,302 against the real 11,826, where the
-gpt-image-2 round read 3,122; ink 0.104 vs 0.111. ~$0.067 an image through
-Gemini's Batch API.
+**Two questions the labelled pool now makes answerable**, both cheap once the GPU
+is up: (1) roof plans label one material across several fill orientations while
+elevations treat a changed orientation as a new material — train with and without
+the roof-plan images and see whether the mixed convention costs anything, noting
+they are only 3 of the 80; (2) `remove` holes are 37% of all polygons drawn —
+strip the small ones, retrain, and see whether HF14 moves at all.
+
+**Yield by category, r2 + r3.** Labelled: elev_colour 17, elev_faint 16,
+plan_mep 16, section_sparse 11, elev_mono 9, plan_finish 5, roof_plan 3,
+elev_colour_markup 3. Skipped: section_sparse 4, roof_plan 4, elev_colour 3,
+elev_faint 4, elev_mono 3, plan_finish 1, elev_colour_markup 1. Roof plans are
+the weakest category by yield and the only one where the labelling convention
+was in doubt.
+
+**The gpt-image-2 round (`floz-gen-v4-round1`, 50 images) is still unlabelled**,
+as are `floz-gen-gemini-r1` (14) and the two smokes. The 28 evaluation images
+with their polygons are in `perceive-ai/floz-eval28-reference` — tagged
+`eval-only`/`do-not-train`, never to be merged into a training pool.
 
 **Simpler drawings score far better on fill regularity.** Four single-view,
 one-or-two-family specs through `gemini-3-pro-image` read **7,727** against the
@@ -211,8 +231,8 @@ are implemented but screened negative — read the warnings before touching eith
 
 ## Data limitation and where to push next
 
-The mix now contains **114 unique real-ish source plans** (86 scraped real + 28
-generated); everything else is synthetic or deterministic offline variants. That
+The mix now contains **194 unique real-ish source plans** (86 scraped real + 28
+generated v1 + 80 generated Gemini r2/r3); everything else is synthetic or deterministic offline variants. That
 source count remains the binding constraint.
 
 Established by count-matched experiment: one generated plan is worth about as

@@ -171,6 +171,21 @@ python3 scripts/roboflow_to_local.py \
 # 28 images, 107 instances, 62 remove polygons attached 62 times
 ```
 
+A third source, labelled 2026-09-05 and **not yet in any recorded result**:
+
+```bash
+rf.project("floz-gen-gemini-r2").version(1).download(
+    "coco-segmentation", location="data/roboflow/floz-gen-gemini-r2-raw", overwrite=True)
+rf.project("floz-gen-gemini-r3").version(1).download(
+    "coco-segmentation", location="data/roboflow/floz-gen-gemini-r3-raw", overwrite=True)
+# r2: 36 images, 231 instances, 100 remove polygons attached 100 times
+# r3: 44 images, 247 instances, 205 remove polygons, 1 hole dropped (no parent)
+```
+
+These are the two Gemini rounds; 80 of the 100 generated were worth labelling.
+Merge the two clean dirs into `floz-gen-gemini-r23-clean` before augmenting, so
+the 18x replication and the `item_XXXXXX` renaming stay deterministic.
+
 `floz-generated-realistic-label-pool` v1 holds the 28 salvageable, hand-labelled
 images from the AI-generation batch. If it has no version yet, generate one with
 **no preprocessing and no augmentation** — resizing and offline augmentation are
@@ -181,12 +196,13 @@ summary rather than forcing the old ones.
 
 ### Pool characteristics
 
-| | real 86 | generated 28 |
-|---|---|---|
-| long side | 640 (every image, native) | 1536–2065 |
-| megapixels (median) | 0.41 | 1.57 |
-| instances / image | 2.0 | 3.0 |
-| labelled-area fraction | 0.153 | 0.284 |
+| | real 86 | generated 28 | gemini r2+r3 80 |
+|---|---|---|---|
+| long side | 640 (every image, native) | 1536–2065 | 3168 (median) |
+| megapixels (median) | 0.41 | 1.57 | 4.6 |
+| instances / image | 2.0 | 3.0 | 6.0 |
+| families / image | — | — | 1.6 |
+| labelled-area fraction | 0.153 | 0.284 | 0.294 |
 
 The 86 real plans are natively 640×640 web-scraped drawings — Roboflow stores
 them at that size, so no re-export recovers detail, and training at 1280 upscales
@@ -210,6 +226,22 @@ python3 scripts/merge_local_datasets.py \
             data/roboflow/floz-real-pool-v2-strong18 \
             data/roboflow/floz-genreal-v1-strong18 \
   --out data/mixed/toparea1600_rf1548_gen504       # 3,652
+```
+
+The 80 Gemini images are not in `mix3652`, which is the mix every recorded
+result used. Add them as a fourth source rather than editing the three above:
+
+```bash
+python3 scripts/merge_local_datasets.py \
+  --sources data/roboflow/floz-gen-gemini-r2-clean \
+            data/roboflow/floz-gen-gemini-r3-clean \
+  --out data/roboflow/floz-gen-gemini-r23-clean            # 80
+
+python3 scripts/augment_local_dataset.py \
+  --src data/roboflow/floz-gen-gemini-r23-clean \
+  --out data/roboflow/floz-gen-gemini-r23-strong18 \
+  --aug-per-scene 17 --strong --seed 5858                  # 80 -> 1,440
+# merge as a fourth source: 1,600 + 1,548 + 504 + 1,440 = 5,092
 ```
 
 Verify both `images/` and `annotations/` hold exactly 3,652 files. Merge order
