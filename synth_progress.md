@@ -1,5 +1,149 @@
 # Synthetic Dataset Progress
 
+## 2026-09-07 — v6: synthetic drawn like a drawing, not quilted from tiles
+
+**Why.** 80 hand-labelled Gemini plans beat 1,600 v5 synthetic plans, and the
+three pools side by side say why. v5 quilts 224px raster tiles into 2-3
+full-width colour bands per elevation, floats windows at random positions, and
+gives every family its own saturated colour. Measured with
+`scripts/pool_style_stats.py` against the real 28: twice the ink (0.224 vs
+0.111), 68% colourised vs 57%, square (aspect 1.66 vs 2.59), and *over*-ruled
+(48,749 vs 11,826 on fill regularity -- a quilted tile of parallel lines with
+nothing interrupting it). The eval set and the Gemini plans are ruled line
+fills at physical scale masked by real building geometry, so a boundary is an
+eave, a rake, a belt course, a corner board or a change of fill; in the
+monochrome half of the set it is never a colour change.
+
+**What v6 is** (`generate_synthetic_v6.py`, 0.01 s/image on 48 cores, output in
+the local-data layout so the merge/quota/train tooling is unchanged):
+
+- a house grammar (1-3 blocks; gable/hip/shed/flat roofs with pitch and
+  overhang; dormers, chimneys, porches, garages) projected into elevations
+  with occlusion, plus roof plans (facets, ridges, hips, skylights) and floor
+  plans (rooms, poche, doors, fixtures, finishes, MEP overlay) from the same house;
+- ~20 material procedures drawn as continuous ruled fields in feet through one
+  px/ft scale (lap, board-and-batten, shingle, brick, stone, stucco stipple,
+  standing seam, asphalt, tile, plank, tile grid, poche ...), so a fill
+  interrupted by a window resumes on the same grid -- the mechanism the Gemini
+  v4 prompt asks for;
+- one material schedule per house: the siding recurs on every wall of every
+  view, the roof on every plane, an accent on gable ends or a wainscot;
+- ~55% colourised BIM-export style, ~45% monochrome at three contrast levels;
+  windows with casings and mullions cut as label holes; callouts with leaders,
+  level marks, dimension strings, graph-paper grounds, highlighter/dot markup,
+  excerpt crops. Sheets carry 1/2/4 views (55/38/7%).
+
+Smoke pool vs real 28: ink 0.091 vs 0.111, contrast 0.411 vs 0.437, coloured
+65% vs 57%, 1.9 families and 0.29 labelled area per image (Gemini: 1.6, 0.30).
+
+**Standalone (synth-only, 1,600 records, 1280, two-phase 9 ep).** Val-selected
+HF14 with the per-epoch peak in brackets:
+
+| pool | seed 7 | seed 31 |
+|---|---:|---:|
+| v5 `toparea1600_balanced` | 0.5570 [0.6006] | 0.5890 [0.5890] |
+| v6 first cut | 0.5348 [0.5427] | 0.5125 [0.5126] |
+| v6b (label policy below) | 0.5044 [0.5325] | -- |
+
+v6 loses standalone -- but not uniformly. Per image at the seed-7 peaks, v6
+**wins every monochrome group** (HF14 mono 0.457 vs 0.422; validation mono
+0.586 vs 0.543) and the hardest images (0: +0.13, 12: +0.13, 23: +0.29, 13:
++0.12), and loses everything on the colourised multi-family sheets: 17 (-0.38
+over 27 selections), 19 (-0.49), 18, 25, 27 (about -0.2 each). Those are the
+blue board-and-batten townhouses and olive houses with 3-4 families where trim
+bands and window casings are labelled as their own family. The first cut
+labelled one or two families and never trim, so a model could select "the big
+siding region" without consulting the reference; v5's 2-3 distinct colour
+bands force reference matching. **v6b** fixes the label policy: roof and accent
+labelled ~always, a second accent on 35% of houses, a trim family (belt
+courses, fascia, corner boards, window casings, in a colour) on 35%, and a few
+saturated eval-17/19 colours in the palette. Families per sheet 1.9 -> 2.4.
+One seed of v6b moved exactly the images the diagnosis named (19: 0.35 -> 0.63,
+18: 0.54 -> 0.66, 25: 0.51 -> 0.62) and paid for it on mono roofs and plans
+(15, 16, 11, 9, 13), so standalone it still trails v5; image 17 stays at 0.16
+for both v6 pools against v5's 0.56. The two pools win on disjoint images, which
+is why phase B tests v6b **added to** the documented mix rather than replacing v5.
+
+**Union of the two synth pools (v5 1,600 + v6b 1,600, no real data), 1280, seed 7:
+val-selected HF14 0.6179 (val 0.7035)** -- the best synth-only number on this
+box, against 0.557/0.589 for v5 alone. The two pools win on disjoint images and
+the union keeps most of both: image 17 goes 0.16 (v6) / 0.56 (v5) -> 0.68, and
+the mono/hard images keep v6's gains. v6b volume alone (4,000 records) is null:
+0.52 val-selected, the flattened held-out loss said as much. Per image the
+union's remaining gap to the mix model (0.618 vs 0.713 on HF14) sits in image 0
+(+0.41, stone patio), 23 (+0.43), 18 (+0.13 x10), 25, 27 and 14; the visual
+audit (`data/evaluations/vis_union`) shows one failure mode behind them:
+**over-selection** -- asked for the roof it also takes the brick base (18) or the
+wall (23), on the faint sheet (14) it selects blank paper, on the plan (0) it
+takes the tinted rooms instead of the patio grid.
+
+Two further generator rounds, both aimed by that audit rather than at images:
+
+- **v6c**: townhouse rows (18% of houses) -- 2-5 identical units with party
+  walls, one door/garage/dormer per unit, belt courses, brick base, coloured
+  trims; eval images 17-19 are exactly this sheet type.
+- **v6d**: (1) a flat fill in mono mode is blank paper with an outline and is no
+  longer labelled (eval 21/22 leave those unlabelled; labelling them teaches
+  "select blank white"); (2) eave and window-head shadows in colour mode, on
+  the wall, label unchanged; (3) unlabelled distractors -- a dashed neighbour
+  "beyond", a hatched fence/retaining wall, a tree; (4) light unlabelled room
+  tints on 35% of floor plans, as in eval image 0.
+
+- **v6e**: the audit on the v5+v6d model shows the blank-paper over-selection
+  gone and one failure left: **look-alike families**. Asked for the dark brick
+  base of image 18 it selects the dark roof strips and vice versa; on 25/27 it
+  swaps two light sidings. So v6e makes families share a colour and differ only
+  in fill more often (accent = main colour on 40% of houses; the base band --
+  now brick/block/stone/concrete, 0.6-2.6 ft, labelled 70% -- takes the roof's
+  colour 30% of the time). Note the v5 finding that *tile-similarity*
+  confusables were harmful; this is colour-matched pairs with distinct ruled
+  fills, the case the eval set actually poses. **Result: negative**, 0.583
+  against 0.660 for v5+v6d at the same seed -- below the seed spread, and the
+  same sign as the v5 finding. The generator's defaults are back to v6d
+  (`SAME_COLOUR_PAIR_PROB`, `FOUND_ROOF_COLOUR_PROB`, `FOUND_LABEL_PROB` keep
+  the v6e values in a comment). The look-alike failure is real, but making the
+  training set harder in that direction does not fix it.
+
+Also measured this session: **dihedral TTA** (`--tta 8` on the evaluator and
+`select_epoch_on_val.py`) is +0.0036 on validation (0.8348 -> 0.8384) for 8x
+inference. Real, small, not a lever. A 16-epoch v6 synth-only run was started
+and stopped: val loss had sat at 0.645-0.70 for five epochs with HF14 flat.
+
+**Synth-only results so far** (1,280 unless noted; val-selected HF14, averaged
+window in brackets):
+
+| pool | seed 7 | seed 31 |
+|---|---:|---:|
+| v5 1,600 | 0.557 | 0.589 |
+| v6b 1,600 | 0.504 | -- |
+| v6b 4,000 (volume) | 0.520 [0.502] | -- |
+| v6c 1,600 (townhouses) | 0.545 [0.542] | -- |
+| v6b 1,600 **at 2048** | 0.551 [0.568] | -- |
+| v5 + v6b union 3,200 | 0.618 [0.616] | 0.608 [0.607] |
+| v5 + v6c union 3,200 | 0.611 [0.623] | -- |
+| v5 + v6d union 3,200 | 0.660 [0.663] | 0.559 [0.573] |
+| v5 + v6d union, 16 epochs | 0.658 [0.646] | -- |
+| **v5 + v6d union at 2048** | **0.680 [0.690]** | **0.692 [0.693]** |
+| v5 + v6e union 3,200 | 0.583 [0.583] | -- |
+
+Volume of the new pool alone is null; resolution is worth +0.05 to the new pool
+alone; the union with v5 is worth +0.04 over v5 at two seeds; the v6d round
+(unlabelled blank flats, eave shadows, distractors, room tints -- the
+over-selection fixes from the audit) looked like +0.04 at seed 7 and is **null
+at two seeds**: 0.610 mean against 0.613 for v5+v6b. Synth-only seed spread is
+~0.05 here, larger than any single generator round, so nothing below that
+should be read from one seed again. A 16-epoch schedule is null for the union
+too (0.658 vs 0.660), as it was for the mix. Resolution is the one lever that
+has moved synth-only every time it was pulled: v6b alone +0.05, the v5+v6d
+union +0.02 to +0.03 (0.690 averaged at 2048 is the best synth-only HF14 on
+this box). **Synth-only headline: 0.686 ± 0.009 val-selected, 0.692
+averaged, 2 seeds** -- v5+v6d union 3,200 at 2048 -- against 0.573 for the v5
+pools. Recipe in `startup.md`.
+
+**The mix, for reference** (`startup.md` has the details): v6b added to the
+documented mix at 2048, seed 7, is 0.7754 val-selected / 0.7770 averaged, the
+best single-seed mix number so far; one seed by decision.
+
 ## 2026-08-12 — four architecture levers from the matching literature: all null
 
 Screened on validation (HF14 never touched); `scripts/run_paper_levers.sh <arm> <seed>`.

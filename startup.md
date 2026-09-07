@@ -80,6 +80,60 @@ checkpoint. Choosing the epoch on validation instead:
 The +0.0077 gap is selection bias. Both are honest under their own protocol;
 quote the val-selected number when you need one that will hold up.
 
+### Average the last epochs instead of picking one (2026-09-07)
+
+Single-epoch selection is noisy the other way too: at 2048 the same run swings
+0.70-0.76 on HF14 from one epoch to the next, and on 77 validation selections
+val can pick the dip. `scripts/average_checkpoints.py` averages the weights of
+the last epochs of the cosine schedule (SWA-style, no acceptance data) and
+ranks the window on validation:
+
+| `mix5092` run | single epoch, val-picked | averaged, val-picked window |
+|---|---:|---:|
+| 2048 seed 7 | 0.7060 | 0.7393 (e5-8) |
+| 2048 seed 31 | 0.7729 | 0.7779 (e3-8) |
+| 2560 seed 7 | 0.7027 | 0.7523 (e3-8) |
+
+Every window on every run scored within 0.01 of the others; the single-epoch
+pick is the outlier. Val does not always prefer the average over its own best
+single epoch, so this is a variance-reduction protocol adopted a priori, not one
+chosen because HF14 liked it -- confirm on each new seed before quoting.
+**2048, 2 seeds, averaged: 0.7586** against 0.7394 single-epoch.
+
+### Synthetic-only result (2026-09-07)
+
+Train on synthetic alone, nothing real: **HF14 0.686 ± 0.009 val-selected,
+0.692 averaged, 2 seeds**, against 0.573 ± 0.023 for the v5 pool (2 seeds) and
+~0.61 for every v5 pool ever recorded. The pool is the union of the v5
+`toparea1600_balanced` and 1,600 drawn v6d plans (`generate_synthetic_v6.py`,
+defaults = v6d), trained at 2048. What moved it and what did not is in
+`synth_progress.md` (2026-09-07 entry).
+
+```bash
+./run_synth_v6.sh headline 7      # and seed 31; ~25 min each on a GH200
+```
+
+`run_synth_v6.sh` builds the pool, merges it, runs the documented two-phase
+schedule at 2048, then val-selection and checkpoint averaging, printing both
+numbers. Other arms: `union` (1280), `unionb`, `v5only`, `v6only`, `mixv6b`.
+
+**One reproduction caveat.** The pool that produced 0.686 was generated before
+a one-line fix to the excerpt-crop step (`p.buffer(0).intersection(cb)`), so 4
+of the first 1,604 draws failed and the 1,600-image subset is ids 0-1603 minus
+{234, 523, 988, 1019}. With the fix those four succeed, so a rebuild gives ids
+0-1599 -- the same recipe and distribution, four different images. Expect the
+result to reproduce within seed noise (~0.05 synth-only), not exactly.
+
+### v6b synthetic added to the mix (2026-09-07, one seed so far)
+
+`data/mixed/v5_1600_v6b_1600_rf1548_gen504_gem1440` (6,692 records: the
+documented mix plus 1,600 drawn v6b plans, see `synth_progress.md`) at 2048,
+seed 7, two-phase 9 epochs: **HF14 0.7754 val-selected** (val 0.8176, epoch 8,
+still rising) against 0.7060 for `mix5092` at the same seed and 0.7729 for its
+best seed. Per-epoch peak 0.7775, the highest any 2048 run has reached. One
+seed by decision (the session's aim is synth-only); do not quote this as a
+recipe change until a second seed is run.
+
 ## Environment and credentials
 
 Credentials live in `~/.env` as `HF_TOKEN` and `ROBOFLOW_API_KEY`; load with

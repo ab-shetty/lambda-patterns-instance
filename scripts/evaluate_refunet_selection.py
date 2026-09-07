@@ -20,6 +20,36 @@ from refmask2former.ref_unet import RefUNet
 HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
 
 
+def _dihedral(t, hflip, k):
+    """Apply hflip then k quarter-turns to the last two dims."""
+    if hflip:
+        t = t.flip(-1)
+    if k:
+        t = torch.rot90(t, k, dims=(-2, -1))
+    return t
+
+
+def _dihedral_inv(t, hflip, k):
+    if k:
+        t = torch.rot90(t, -k, dims=(-2, -1))
+    if hflip:
+        t = t.flip(-1)
+    return t
+
+
+def tta_transforms(n):
+    """1: identity; 2: +hflip; 4: hflip x {0, 180}; 8: the full dihedral group.
+    Training applies the same group online (dataset.py), so every member is a
+    view the model was trained on."""
+    if n <= 1:
+        return [(False, 0)]
+    if n == 2:
+        return [(False, 0), (True, 0)]
+    if n == 4:
+        return [(False, 0), (True, 0), (False, 2), (True, 2)]
+    return [(hf, k) for hf in (False, True) for k in range(4)]
+
+
 def load_refunet(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device)
     args = checkpoint.get("args", {})
@@ -39,8 +69,11 @@ def load_refunet(checkpoint_path, device):
 
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
-                   mask_thresh=0.5, device=None, scale_matched_ref=False):
+                   mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1):
+    """`tta` averages sigmoid maps over dihedral views of image AND reference
+    (the reference crop is a piece of the same image, so it turns with it)."""
     device = device or next(model.parameters()).device
+    transforms = tta_transforms(tta)
     rows = []
     with torch.inference_mode():
         for image_idx in indices:
@@ -83,8 +116,15 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                     ).float()[None, None].to(device)
                 with torch.autocast("cuda", dtype=torch.bfloat16,
                                     enabled=device.type == "cuda"):
-                    probability = model(image_tensor, reference,
-                                        ref_box=ref_box).sigmoid()[0, 0]
+                    acc = None
+                    for hf, k in transforms:
+                        img_t = _dihedral(image_tensor, hf, k)
+                        ref_t = _dihedral(reference, hf, k)
+                        box_t = _dihedral(ref_box, hf, k) if ref_box is not None else None
+                        prob_t = model(img_t, ref_t, ref_box=box_t).sigmoid()
+                        prob = _dihedral_inv(prob_t.float(), hf, k)[0, 0]
+                        acc = prob if acc is None else acc + prob
+                    probability = acc / len(transforms)
                 pred_small = probability > mask_thresh
                 prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
                                         (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
@@ -110,6 +150,8 @@ def main():
     parser.add_argument("--ref-size", type=int, default=224)
     parser.add_argument("--mask-thresh", type=float, default=0.5)
     parser.add_argument("--metrics-out", required=True)
+    parser.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8),
+                        help="dihedral test-time augmentation views to average")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
@@ -119,14 +161,15 @@ def main():
     ckpt_args = checkpoint.get("args", {}) or {}
     rows = evaluate_model(model, records, indices, args.image_max_size,
                           args.ref_size, args.mask_thresh, device,
-                          scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")))
+                          scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
+                          tta=args.tta)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
                "checkpoint_epoch": checkpoint.get("actual_epoch",
                                                     checkpoint.get("epoch")),
                "image_max_size": args.image_max_size,
-               "mask_thresh": args.mask_thresh,
+               "mask_thresh": args.mask_thresh, "tta": args.tta,
                "n_images": len(indices), "n_reference_selections": len(rows),
                "mean_iou": mean_iou, "selections": rows}
     path = Path(args.metrics_out)

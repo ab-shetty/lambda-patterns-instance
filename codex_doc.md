@@ -14,6 +14,12 @@ rebuilt from a clean clone on a fresh GH200 and every count matched `startup.md`
 exactly. Numbers all live in `startup.md`; this is only what changed and what is
 open.
 
+**Since then (2026-09-07, later):** checkpoint averaging is the selection
+protocol (`scripts/average_checkpoints.py`; +0.02 over single-epoch picks at 2
+seeds), the drawn synthetic regime v6 exists and lifts synth-only to 0.686, the
+mix with v6b added reads 0.7754 at one seed, 2560 is +0.05 at one seed with
+averaging, and dihedral TTA is +0.004. Details: `startup.md`, `synth_progress.md`.
+
 **Two wins, measured separately.** Training at **2048 instead of 1280 is worth
 +0.05 to +0.07** on both mixes -- the largest effect in the project, and general
 rather than pool-specific. The **80 Gemini plans are worth +0.035** on the mix at
@@ -31,14 +37,18 @@ the original target never contemplated.
 2. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
    but +0.010 at 2048 with overlapping 2-seed arms. Either the effects are
    sub-additive or it is noise; as recorded, it is unresolved.
-3. **A better synthetic regime.** Synthetic is *not* dead weight -- removing it
-   costs 0.041, and standalone it is ~0.61, second only to the Gemini pool. But
-   it was never aimed at the eval distribution the way `build_specs_v4.py` aimed
-   the Gemini round (2/3 elevations, median aspect 2.59, 16/28 colourised;
-   `freeform` is 8,085 of the 20k and nothing like it appears in the eval set).
-   Aim it with `pool_style_stats.py` before writing generator code. **Do not**
-   re-open connectivity: `disc` and `conn` pools both land ~0.61, and selecting
-   for disconnected families was already null at 3 seeds.
+3. **The synthetic regime is now v6** (`generate_synthetic_v6.py`, drawn
+   like a drawing: house grammar, ruled fills in feet, real sheet furniture).
+   Synth-only went from 0.573 to **0.686 ± 0.009** (2 seeds, v5+v6d union at
+   2048); added to the documented mix at 2048 it reads 0.7754 val-selected at
+   one seed (0.7060 for the same seed without it). The full audit trail --
+   what each round changed, what was null (v6 volume, 16 epochs, v6e
+   look-alike pairs) and the seed spread (~0.05 synth-only) -- is the
+   2026-09-07 entry in `synth_progress.md`. Open there: the remaining
+   synth-only failure is look-alike families (dark base vs dark roof, two
+   light sidings); making the training set harder in that direction was
+   negative, so the next idea has to be different. **Do not** re-open
+   connectivity or tile-similarity confusables.
 4. **Regularization.** Newly justified -- see the generalization finding in
    `startup.md`. The train/HF14 gap is ~0.09 and widens with epochs.
 
@@ -141,8 +151,19 @@ are implemented but screened negative — read the warnings before touching eith
 - `scripts/pool_style_stats.py` — aspect, colour, ink, contrast and fill
   regularity for a pool, so a generated round can be compared with the real 28
   instead of judged by eye.
+- `generate_synthetic_v6.py` — the v6 synthetic generator: a house grammar
+  (blocks, roofs, dormers, porches, townhouse rows) projected into elevations,
+  roof plans and floor plans, with ~20 materials drawn as continuous ruled
+  fields in feet. Defaults are the v6d round; the v6e knobs that measured
+  negative are kept as named constants with their results in comments.
+- `run_synth_v6.sh` — reproduces any synthetic-only arm end to end (pool,
+  merge, two-phase train, val-selection, averaging). `./run_synth_v6.sh
+  headline 7` is the 0.686 result.
+- `scripts/average_checkpoints.py` — averages the last epochs of a run and
+  ranks the window on validation; the selection protocol as of 2026-09-07.
 - `scripts/select_epoch_on_val.py` — val-selected protocol; one process per run,
-  run them in parallel.
+  run them in parallel. `--tta {1,2,4,8}` for dihedral test-time augmentation
+  (measured +0.004, not worth 8x inference).
 - `scripts/train_status.sh` — one-screen progress for every run under
   `data/runs`, including live epoch and running peak.
 - `scripts/run_*.sh`, `run_*.sh` — the experiment drivers, one per ablation.
@@ -177,5 +198,6 @@ live under git-ignored `data/` and `logs*`, so every `data/...` path quoted in
 these docs is a provenance record, not a file you have. Preserve them between VMs
 for byte-identical artifacts, or rebuild: `startup.md` covers the headline recipe
 and `synth_progress.md` ("Rebuilding what these findings used") covers the
-ablation pools, which `startup.md` does not. Source, scripts and documentation
+ablation pools, which `startup.md` does not. The v6 synthetic pools and every
+synth-only arm rebuild from `./run_synth_v6.sh <arm> <seed>`. Source, scripts and documentation
 are committed; credentials are never stored in the repo.

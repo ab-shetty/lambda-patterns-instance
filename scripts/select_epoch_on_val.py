@@ -24,9 +24,9 @@ from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, load_ref
 VALIDATION = "4,5,6,8,9,10,13,15,17,19,20,21,22,26"
 
 
-def _mean_iou(model, records, indices, size, ref, thresh, device):
+def _mean_iou(model, records, indices, size, ref, thresh, device, tta=1):
     rows = evaluate_model(model, records, indices, image_max_size=size,
-                          ref_size=ref, mask_thresh=thresh, device=device)
+                          ref_size=ref, mask_thresh=thresh, device=device, tta=tta)
     return float(np.mean([r["iou"] for r in rows])), len(rows)
 
 
@@ -38,6 +38,7 @@ def main():
     ap.add_argument("--ref-size", type=int, default=224)
     ap.add_argument("--mask-thresh", type=float, default=0.35)
     ap.add_argument("--out", default=None, help="write per-run JSON here")
+    ap.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8))
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,18 +58,18 @@ def main():
         for ck in ckpts:
             model, _ = load_refunet(str(ck), device)
             v, nv = _mean_iou(model, records, val_idx, args.image_max_size,
-                              args.ref_size, args.mask_thresh, device)
+                              args.ref_size, args.mask_thresh, device, args.tta)
             if best is None or v > best[1]:
                 best = (ck, v, model)
             else:
                 del model
         ck, v, model = best
         h, nh = _mean_iou(model, records, hf_idx, args.image_max_size,
-                          args.ref_size, args.mask_thresh, device)
+                          args.ref_size, args.mask_thresh, device, args.tta)
         del model
         torch.cuda.empty_cache()
         epoch = int(re.findall(r"\d+", ck.stem)[0])
-        results.append({"run": run.name, "epoch": epoch, "val": v, "hf14": h})
+        results.append({"run": run.name, "epoch": epoch, "val": v, "hf14": h, "tta": args.tta})
         print(f"{run.name:<34} epoch={epoch}  val={v:.4f}  HF14={h:.4f}")
 
     print(f"\n{'arm':<10}{'seeds':>6}{'val mean':>12}{'HF14 mean':>12}{'HF14 sd':>10}")
