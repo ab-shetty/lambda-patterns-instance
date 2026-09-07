@@ -20,7 +20,7 @@ generated-realistic + 1,440 Gemini r2/r3 = 5,092 records), **trained at 2048**:
 |---|---|
 | Recipe mean (2 seeds, 9 epochs) | **0.7594 ± 0.0191** |
 | Best single checkpoint | **0.7747** (`mix3652` @2048 seed 31) |
-| Longer schedule (16 epochs) | 0.7631 (seed 7) |
+| Longer schedule (16 epochs) | 0.7568 ± 0.0090 (2 seeds) -- no gain |
 | Evaluation | fixed HF14, 14 plans, all 52 reference selections |
 | Mask threshold | 0.35 |
 
@@ -287,9 +287,9 @@ PYTHONPATH=. python3 scripts/train_refunet.py --local-data $DATA \
 
 **`--image-max-size 2048`, not 1280.** Worth +0.05 to +0.07 (see the top of this
 file). At 2048 both mixes were still improving at the final epoch, where at 1280
-they peaked mid-run and declined -- higher resolution delays overfitting, so the
-9-epoch schedule is now on the short side. A 16-epoch schedule added +0.017 on
-one seed.
+they peaked mid-run and declined -- higher resolution delays overfitting. A
+16-epoch schedule was tried and is **null**: 0.7568 ± 0.0090 against 0.7594 ±
+0.0191 at 9 epochs. One seed showed +0.017 and the second erased it; keep 9.
 
 **`--compile --pad-grid 512` is optional speed** (1.5x/epoch: channels_last,
 `torch.compile`, bucketed padding, fused AdamW). Bucketed padding enters
@@ -394,12 +394,12 @@ resolution column says otherwise. The sampler column is load-bearing.
 | **gemini 80 only, 24 ep** | 1280 | 2 | 0.6688 ± 0.0350 |
 | synth 1600 only (disc / conn pools) | 1280 | 3 | ~0.61 |
 | no synthetic (194 sources, 3,492 records) | 1280 | 2 | 0.6683 ± 0.0266 |
-| no synthetic, 16 ep | 2048 | 1 | 0.7310 |
+| no synthetic (194 sources), 16 ep | 2048 | 1 | 0.7310 |
 | `mix3652` (114 sources) | 1280 | 3 | 0.6769 ± 0.0155 |
 | `mix3652` | 2048 | 2 | 0.7490 ± 0.0364 |
 | **`mix5092` (194 sources)** | 1280 | 3 | 0.7097 ± 0.0157 |
 | **`mix5092`** | **2048** | **2** | **0.7594 ± 0.0191** |
-| `mix5092`, 16 ep | 2048 | 1 | 0.7631 |
+| `mix5092`, 16 ep | 2048 | 2 | 0.7568 ± 0.0090 |
 | locally generated synth, `--confusable-prob 1.0` | 1280 | 3 | 0.5787 ± 0.0433 |
 
 Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
@@ -420,8 +420,9 @@ clean with live flips 0.3494, synth+Roboflow query model 0.5886, `RefUNet`
 - **The 80 Gemini plans are worth +0.035** on the mix at 1280 (val-selected, 3
   seeds, p=0.030). At 2048 the same contrast is +0.010 with overlapping arms --
   unresolved, needs re-measuring.
-- **Synthetic still earns its place**: removing it costs 0.041 at 1280 and ~0.03
-  at 2048. Standalone it is ~0.61, second only to the Gemini pool.
+- **Synthetic still earns its place**: removing it costs 0.041 at 1280 and
+  0.026 at 2048 (0.7310 vs 0.7568, both 16 ep). Standalone it is ~0.61, second
+  only to the Gemini pool -- so keep it, and regenerate it larger.
 - **Source resolution is worth ~0.032** (the 28 generated at 640 vs native).
   Distinct from training resolution above.
 - **Count dominates**: 28 -> 86 real sources buys +0.073.

@@ -25,9 +25,9 @@ the original target never contemplated.
 **Open, in priority order:**
 
 1. **Push resolution further.** The Gemini pool's median long side is 3168px, so
-   2048 may still be truncating it. 2560/3072 has never been run. At 2048 both
-   mixes were still improving at the final epoch, so pair it with a longer
-   schedule.
+   2048 may still be truncating it. 2560/3072 has never been run. Note a longer
+   schedule alone is null at 2048 (16 ep vs 9 ep, 2 seeds), so this is about
+   pixels, not training time.
 2. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
    but +0.010 at 2048 with overlapping 2-seed arms. Either the effects are
    sub-additive or it is noise; as recorded, it is unresolved.
