@@ -88,6 +88,28 @@ def parse_args():
     p.add_argument("--bce-weight", type=float, default=1.0)
     p.add_argument("--dice-weight", type=float, default=2.0)
     p.add_argument("--domain-random", action="store_true")
+    p.add_argument("--early-stop-patience", type=int, default=0,
+                   help="stop when the monitored metric has not improved for N "
+                        "epochs (0 = off). Saves the tail of a long schedule "
+                        "once a run has plateaued.")
+    p.add_argument("--early-stop-monitor", choices=("val_loss", "hf14"),
+                   default="val_loss",
+                   help="what patience watches. val_loss is held out from the "
+                        "TRAINING pool and touches nothing in the acceptance "
+                        "set. hf14 stops on the acceptance metric itself, which "
+                        "is selection against it -- screening only, never for a "
+                        "reported number.")
+    p.add_argument("--compile", action="store_true",
+                   help="channels_last + torch.compile. Needs --pad-grid >= 256: "
+                        "domain-random gives every sample a unique shape, and "
+                        "recompiling per shape is slower than eager (measured "
+                        "0.79x with dynamic=True). Bucketed padding is ignored by "
+                        "the losses via pixel_mask, so it is loss-neutral, but it "
+                        "does enter GroupNorm statistics -- verify parity before "
+                        "using a compiled run for a reported number.")
+    p.add_argument("--pad-grid", type=int, default=32,
+                   help="pad batches up to a multiple of this. 32 = tightest; "
+                        "256 gives 16 distinct shapes at 1.31x padding waste.")
     p.add_argument("--realism-aug", action="store_true")
     p.add_argument("--scale-matched-ref", action="store_true",
                    help="crop the reference at the IMAGE's pixel scale instead "
@@ -102,6 +124,9 @@ def parse_args():
 
 
 def union_targets(batch, device):
+    # Precomputed in the dataloader worker when collate ran with union_only.
+    if "union" in batch:
+        return batch["union"].to(device, non_blocking=True).float()
     outputs = []
     for target in batch["targets"]:
         positive = target["ref_match"] > 0.5
@@ -171,7 +196,8 @@ def main():
         train_split=args.train_split, seed=args.seed,
         domain_random=args.domain_random, realism_aug=args.realism_aug,
         scale_matched_ref=args.scale_matched_ref)
-    collate = partial(collate_fn, size_divisible=32)
+    collate = partial(collate_fn, size_divisible=args.pad_grid,
+                      union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,
                        "prefetch_factor": args.prefetch_factor}
                       if args.num_workers else {})
@@ -196,8 +222,25 @@ def main():
         checkpoint = torch.load(args.init_from, map_location=device)
         model.load_state_dict(checkpoint["model"])
         start_epoch = int(checkpoint.get("actual_epoch", checkpoint.get("epoch", -1))) + 1
+    # `base_model` stays uncompiled: it owns the parameters, so it is what the
+    # optimizer, the checkpoint and the per-epoch evaluator use. The evaluator
+    # resizes differently from training, so running it through the compiled
+    # wrapper would recompile every epoch for no gain.
+    base_model = model
+    if args.compile:
+        if args.pad_grid < 256:
+            raise SystemExit("--compile needs --pad-grid >= 256 (see --help)")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        base_model = base_model.to(memory_format=torch.channels_last)
+        model = torch.compile(base_model)
+    # Fused AdamW is one multi-tensor kernel instead of ~160 small launches:
+    # measured 23.0 ms -> 2.2 ms per step for clip+step, ~9.5 s/epoch. Same
+    # algorithm, but the reduction order differs, so it rides with --compile
+    # rather than silently changing the default recipe's last decimals.
     optimizer = torch.optim.AdamW(
-        model.parameter_groups(args.lr, args.backbone_lr_mult),
+        base_model.parameter_groups(args.lr, args.backbone_lr_mult),
+        fused=args.compile,
         weight_decay=args.weight_decay)
     schedule_epochs = args.schedule_epochs or args.epochs
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -212,15 +255,19 @@ def main():
     real_indices = [int(x) for x in args.real_indices.split(",") if x.strip()]
     checkpoint_dir = Path(args.checkpoint_dir); checkpoint_dir.mkdir(parents=True, exist_ok=True)
     best_real = -1.0
+    best_monitor, stale = float('-inf'), 0
     print(f"Device: {device}; records={len(records)} train={len(train_ds)} "
           f"val={len(val_ds)} params={sum(p.numel() for p in model.parameters()):,}")
     for local_epoch in range(args.epochs):
         actual_epoch = start_epoch + local_epoch
-        started = time.time(); model.train(); running = []
+        started = time.time(); base_model.train(); running = []
         progress = tqdm(train_loader, desc=f"Epoch {actual_epoch} [train]")
         for batch in progress:
             images = batch["images"].to(device, non_blocking=True)
             references = batch["references"].to(device, non_blocking=True)
+            if args.compile:
+                images = images.to(memory_format=torch.channels_last)
+                references = references.to(memory_format=torch.channels_last)
             valid = batch["pixel_mask"].to(device, non_blocking=True)[:, None].float()
             targets = union_targets(batch, device)
             optimizer.zero_grad(set_to_none=True)
@@ -248,11 +295,18 @@ def main():
                                         batch, device, args.rank_margin)
                     loss = loss + args.rank_weight * rank
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step(); scheduler.step(); running.append(float(loss))
-            progress.set_postfix(loss=f"{float(loss):.3f}", bce=f"{float(bce):.3f}",
-                                 dice=f"{float(dice):.3f}")
-        model.eval(); val_losses = []
+            torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
+            optimizer.step(); scheduler.step()
+            # Keep the running loss on the GPU. float(loss) forces a device sync,
+            # and three of them per iteration serialises CPU and GPU -- which is
+            # invisible in eager but becomes the bottleneck once the step itself
+            # is compiled. Sync only to refresh the progress bar.
+            running.append(loss.detach())
+            if len(running) % 20 == 0:
+                progress.set_postfix(loss=f"{float(loss):.3f}",
+                                     bce=f"{float(bce):.3f}",
+                                     dice=f"{float(dice):.3f}")
+        base_model.eval(); val_losses = []
         with torch.inference_mode():
             for batch in val_loader:
                 images = batch["images"].to(device)
@@ -266,12 +320,12 @@ def main():
                     loss, _, _ = mask_loss(logits, targets, valid,
                                            args.bce_weight, args.dice_weight)
                 val_losses.append(float(loss))
-        rows = evaluate_model(model, real_records, real_indices,
+        rows = evaluate_model(base_model, real_records, real_indices,
                               args.image_max_size, args.ref_size,
                               args.mask_thresh, device,
                               scale_matched_ref=args.scale_matched_ref)
         real_iou = float(np.mean([row["iou"] for row in rows]))
-        state = {"model": model.state_dict(), "epoch": local_epoch,
+        state = {"model": base_model.state_dict(), "epoch": local_epoch,
                  "actual_epoch": actual_epoch, "args": vars(args),
                  "real_mean_iou": real_iou,
                  "optimizer": optimizer.state_dict(),
@@ -281,15 +335,27 @@ def main():
         if real_iou > best_real:
             best_real = real_iou; torch.save(state, checkpoint_dir / "best_real.pth")
         metrics = {"actual_epoch": actual_epoch, "real_mean_iou": real_iou,
-                   "train_loss": float(np.mean(running)),
+                   "train_loss": float(torch.stack(running).mean()),
                    "val_loss": float(np.mean(val_losses)), "selections": rows}
         (checkpoint_dir / f"metrics_epoch_{actual_epoch}.json").write_text(
             json.dumps(metrics, indent=2,
                        default=lambda value: (int(value) if isinstance(value, np.integer)
                                               else float(value))) + "\n")
-        print(f"Epoch {actual_epoch}: train={np.mean(running):.4f} "
+        if args.early_stop_patience:
+            score = (-float(np.mean(val_losses))
+                     if args.early_stop_monitor == "val_loss" else real_iou)
+            if score > best_monitor + 1e-6:
+                best_monitor, stale = score, 0
+            else:
+                stale += 1
+        print(f"Epoch {actual_epoch}: train={float(torch.stack(running).mean()):.4f} "
               f"val={np.mean(val_losses):.4f} real_mIoU={real_iou:.6f} "
               f"time={time.time()-started:.0f}s", flush=True)
+        if args.early_stop_patience and stale >= args.early_stop_patience:
+            print(f"Early stop: {args.early_stop_monitor} has not improved for "
+                  f"{stale} epochs (patience {args.early_stop_patience}).",
+                  flush=True)
+            break
 
 
 if __name__ == "__main__":

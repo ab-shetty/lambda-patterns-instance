@@ -451,7 +451,17 @@ class InstanceSegDataset(Dataset):
 # --------------------------------------------------------------------------- #
 # Collation (dynamic padding + pixel mask)
 # --------------------------------------------------------------------------- #
-def collate_fn(batch, size_divisible=32):
+def collate_fn(batch, size_divisible=32, union_only=False):
+    """Pad a batch to a common size.
+
+    `union_only` folds the reference-conditioned union that `train_refunet.py`
+    needs into the worker instead of leaving it to the main process. Two wins:
+    the `.any(0)` reduction over [G, H, W] runs across all dataloader workers
+    rather than serially on the critical path, and only one [H, W] plane per
+    sample crosses the worker boundary instead of G of them. The result is
+    identical -- padding is zero, so unioning after padding and padding after
+    unioning agree. Per-instance masks are still emitted when something needs
+    them (`ranking_loss` does, whenever --rank-weight > 0)."""
     heights = [b["image"].shape[1] for b in batch]
     widths = [b["image"].shape[2] for b in batch]
 
@@ -463,6 +473,7 @@ def collate_fn(batch, size_divisible=32):
 
     images = torch.zeros(B, 3, maxH, maxW)
     ref_boxes = torch.zeros(B, 1, maxH, maxW)
+    unions = torch.zeros(B, 1, maxH, maxW, dtype=torch.bool) if union_only else None
     pixel_mask = torch.zeros(B, maxH, maxW, dtype=torch.bool)
     references = torch.stack([b["reference"] for b in batch], 0)
 
@@ -474,17 +485,26 @@ def collate_fn(batch, size_divisible=32):
         pixel_mask[b, :h, :w] = True
 
         g = sample["masks"].shape[0]
-        padded = torch.zeros(g, maxH, maxW, dtype=torch.uint8)
-        if g > 0:
-            padded[:, :h, :w] = sample["masks"]
-        targets.append({
-            "masks": padded,                                  # [G, maxH, maxW]
+        entry = {
             "labels": torch.ones(g, dtype=torch.long),        # all foreground
             "ref_match": sample["ref_match"],                 # [G]
-        })
+        }
+        if union_only:
+            positive = sample["ref_match"] > 0.5
+            if g > 0 and bool(positive.any()):
+                unions[b, 0, :h, :w] = sample["masks"][positive].any(0)
+        else:
+            padded = torch.zeros(g, maxH, maxW, dtype=torch.uint8)
+            if g > 0:
+                padded[:, :h, :w] = sample["masks"]
+            entry["masks"] = padded                           # [G, maxH, maxW]
+        targets.append(entry)
 
-    return {"images": images, "pixel_mask": pixel_mask, "ref_boxes": ref_boxes,
-            "references": references, "targets": targets}
+    out = {"images": images, "pixel_mask": pixel_mask, "ref_boxes": ref_boxes,
+           "references": references, "targets": targets}
+    if union_only:
+        out["union"] = unions
+    return out
 
 
 # --------------------------------------------------------------------------- #

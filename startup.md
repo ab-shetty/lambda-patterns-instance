@@ -13,25 +13,38 @@ matters; "The reference-box fix" below has the mechanism and its effect.
 
 ## Current reproducible result
 
-Fixed sampler, `RefUNet`, trained on 1,600 synthetic + 1,548 Roboflow real +
-504 generated-realistic records (3,652 total):
+`RefUNet`, fixed sampler, `mix5092` (1,600 synthetic + 1,548 Roboflow real + 504
+generated-realistic + 1,440 Gemini r2/r3 = 5,092 records), **trained at 2048**:
 
 | Item | Value |
 |---|---|
-| Recipe mean (3 seeds) | **0.6860 ± 0.0175** |
-| Best single checkpoint | **0.705407920670342** |
-| Checkpoint | `data/runs/ck_fix_mix3652_seed31/epoch_6.pth` |
-| Metrics | `data/evaluations/refunet_fix_mix3652_s31_e6.json` |
-| Visual audit | `data/visualizations/fix_mix3652_s31_e6/` |
+| Recipe mean (2 seeds, 9 epochs) | **0.7594 ± 0.0191** |
+| Best single checkpoint | **0.7747** (`mix3652` @2048 seed 31) |
+| Longer schedule (16 epochs) | 0.7631 (seed 7) |
 | Evaluation | fixed HF14, 14 plans, all 52 reference selections |
 | Mask threshold | 0.35 |
 
-Rebuilt from a clean clone on 2026-08-12 (GH200, stack below): every pipeline
-count matched exactly and the recipe landed at **0.6954 ± 0.0023** val-selected
-(per-seed 0.6953 / 0.6931 / 0.6977), ~0.009 above the recorded figures with a
-tighter spread. Both sit inside the documented run-to-run noise. A rebuild
-landing in 0.68–0.70 is a pass; anything outside it means check the data counts
-against this file before believing a model change.
+The prior recorded result was 0.6860 ± 0.0175 at 1280 on `mix3652`. Two changes
+account for the gain, measured separately (2026-09-06):
+
+1. **Training resolution 1280 -> 2048 is worth +0.05 to +0.07**, on both mixes,
+   so it is a general win and not specific to any pool. This is the largest
+   single effect found in the project.
+2. **The 80 Gemini r2/r3 plans are worth +0.035** (val-selected, 3 seeds,
+   t=3.69, p=0.030, complete separation) at 1280.
+
+Note the two are not additive: at 1280 `mix5092` beats `mix3652` by +0.033, at
+2048 by only +0.010 -- but with 2 seeds per arm at 2048 those overlap, so the
+per-pool value needs re-measuring at 2048 before it is quoted.
+
+**Do not confuse this with source resolution.** The "~0.032" below is the value
+of generating *sources* larger. This is the *training* `--image-max-size`, a
+different knob, and every number in this repo before 2026-09-06 was measured at
+1280 with ~0.06 left on the table.
+
+Rebuilt from a clean clone on 2026-09-06 (GH200): every pipeline count matched
+exactly and `mix3652` @1280 reproduced at 0.6947. A rebuild landing in 0.68-0.70
+at 1280 is a pass.
 
 Report the **3-seed mean** as the result. Run-to-run noise is ~0.013–0.018 sd on
 these mixes, so a single checkpoint is the top of a spread, not the expected
@@ -257,21 +270,33 @@ uninterrupted command.
 
 ```bash
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-CK=data/runs/ck_fix_mix3652_seed31
-COMMON="--batch-size 8 --num-workers 24 --prefetch-factor 4 \
-  --image-max-size 1280 --ref-size 224 --width 128 \
+CK=data/runs/ck_mix5092_res2048_seed31
+DATA=data/mixed/toparea1600_rf1548_gen504_gem1440
+COMMON="--batch-size 8 --num-workers 16 --prefetch-factor 4 \
+  --image-max-size 2048 --ref-size 224 --width 128 \
   --lr 2e-4 --backbone-lr-mult 0.1 --train-split 0.99 \
-  --domain-random --mask-thresh 0.35 --seed 31"
+  --domain-random --mask-thresh 0.35 --seed 31 --compile --pad-grid 512"
 
-PYTHONPATH=. python3 scripts/train_refunet.py \
-  --local-data data/mixed/toparea1600_rf1548_gen504 \
+PYTHONPATH=. python3 scripts/train_refunet.py --local-data $DATA \
   --checkpoint-dir $CK --epochs 1 --schedule-epochs 10 $COMMON
 
-PYTHONPATH=. python3 scripts/train_refunet.py \
-  --local-data data/mixed/toparea1600_rf1548_gen504 \
+PYTHONPATH=. python3 scripts/train_refunet.py --local-data $DATA \
   --checkpoint-dir $CK --epochs 8 --schedule-epochs 9 $COMMON \
   --reset-optimizer --init-from $CK/epoch_0.pth
 ```
+
+**`--image-max-size 2048`, not 1280.** Worth +0.05 to +0.07 (see the top of this
+file). At 2048 both mixes were still improving at the final epoch, where at 1280
+they peaked mid-run and declined -- higher resolution delays overfitting, so the
+9-epoch schedule is now on the short side. A 16-epoch schedule added +0.017 on
+one seed.
+
+**`--compile --pad-grid 512` is optional speed** (1.5x/epoch: channels_last,
+`torch.compile`, bucketed padding, fused AdamW). Bucketed padding enters
+GroupNorm statistics, so it is not bit-identical; parity checked at 2 seeds on
+`mix3652` (compiled 0.7132/0.6806 vs eager 0.6947/0.6698, inside noise). Needs
+`--pad-grid >= 256`; `dynamic=True` compilation is *slower* than eager because
+`--domain-random` gives every sample a unique shape.
 
 `--mask-thresh 0.35` makes the per-epoch diagnostic directly comparable to the
 reported result. `scripts/run_fixedsampler.sh` runs all three seeds.
@@ -285,11 +310,21 @@ value, so an anchored run is merely useless rather than harmful. Evidence in
 
 **Screening budget.** Run-to-run sd on `mix3652` is **0.0262** (seeds 7/31/99),
 so single-seed gaps under ~0.05 mean nothing. A +0.015 single-seed "win" was
-retracted at 3 seeds on 2026-08-10.
+retracted at 3 seeds on 2026-08-10. Scale seeds to effect size rather than
+always running three: 1 seed settles a gap over ~4x sd, 2 is the screening
+default, 3 when the seeds straddle the other arm, the gap is under ~2x sd, or
+the number is going to be recorded here.
 
-Throughput is ~25 ms per record per epoch: ~85–92 s/epoch on 3,652 records, so a
-full 9-epoch run is ~14 minutes and a 3-seed comparison ~45 minutes. Budget
-seeds by default.
+**Schedule length is a step budget, not an epoch count.** 9 epochs is 5,724
+optimizer steps on 5,092 records but only 1,620 on 1,440 -- the 80-Gemini pool
+scored 0.593 at 9 epochs and 0.669 at 24 purely for that reason. Set the
+schedule per pool, or use `--early-stop-patience` (monitors `val_loss` by
+default; `--early-stop-monitor hf14` is selection against the acceptance set and
+is screening-only).
+
+Throughput at 1280 is ~82 s/epoch on 3,652 records (~54 s compiled); at 2048
+about 3x that. `select_epoch_on_val.py` is one process per run and they are
+independent -- run them in parallel, not in one sequential pass.
 
 ## Evaluate
 
@@ -349,42 +384,63 @@ an effect is under ~2× the sd.
 
 ## Durable comparison points
 
-All rows are `RefUNet`, HF14, threshold 0.35. The sampler column is load-bearing.
+All rows are `RefUNet`, HF14, threshold 0.35, fixed sampler, 1280 unless the
+resolution column says otherwise. The sampler column is load-bearing.
 
-| Training data | sampler | seeds | HF14 mIoU |
+| Training data | res | seeds | HF14 mIoU |
 |---|---|---|---:|
-| generated 28 only (504 records) | old | 3 | 0.2608 ± 0.020 |
-| real 28 only, matched count | old | 3 draws | 0.2777 ± 0.030 |
-| real 86 only (1,548 records) | old | 1 | 0.3507 |
-| synth 1600 + real 1548 (`mix3148`) | old | 3 | 0.6001 ± 0.0143 |
-| synth 1600 + real 1548 + gen 504 (`mix3652`) | old | 3 | 0.6331 ± 0.0132 |
-| **`mix3652`** | **fixed** | **3** | **0.6860 ± 0.0175** |
-| `mix3652`, rebuilt 2026-08-12 | fixed | 3 | 0.6954 ± 0.0023 |
-| locally generated synth, no confusable pairs | fixed | 3 | 0.6823 ± 0.0190 |
-| locally generated synth, `--confusable-prob 1.0` | fixed | 3 | 0.5787 ± 0.0433 |
+| real 86 only (1,548 records) | 1280 | 3 | 0.3597 ± 0.0448 |
+| **gemini 80 only (1,440 records), 9 ep** | 1280 | 3 | 0.5933 ± 0.0170 |
+| **gemini 80 only, 24 ep** | 1280 | 2 | 0.6688 ± 0.0350 |
+| synth 1600 only (disc / conn pools) | 1280 | 3 | ~0.61 |
+| no synthetic (194 sources, 3,492 records) | 1280 | 2 | 0.6683 ± 0.0266 |
+| no synthetic, 16 ep | 2048 | 1 | 0.7310 |
+| `mix3652` (114 sources) | 1280 | 3 | 0.6769 ± 0.0155 |
+| `mix3652` | 2048 | 2 | 0.7490 ± 0.0364 |
+| **`mix5092` (194 sources)** | 1280 | 3 | 0.7097 ± 0.0157 |
+| **`mix5092`** | **2048** | **2** | **0.7594 ± 0.0191** |
+| `mix5092`, 16 ep | 2048 | 1 | 0.7631 |
+| locally generated synth, `--confusable-prob 1.0` | 1280 | 3 | 0.5787 ± 0.0433 |
 
-Historical, broken sampler, earlier query-model lineage: synthetic-only 0.5506,
-Roboflow-only strong18 0.4646, 86 clean with live flips 0.3494, synth+Roboflow
-query model 0.5886, synth+Roboflow `RefUNet` 0.6127.
+Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
+0.0175 and its 2026-08-12 rebuild 0.6954 ± 0.0023; locally generated synth
+without confusable pairs 0.6823 ± 0.0190. Broken-sampler / query-model lineage,
+**not comparable**: synthetic-only 0.5506, Roboflow-only strong18 0.4646, 86
+clean with live flips 0.3494, synth+Roboflow query model 0.5886, `RefUNet`
+0.6127, `mix3148` 0.6001, `mix3652` 0.6331.
 
 ### What the comparisons establish
 
-- **The 28 generated plans are worth +0.033** on the full mix (t=2.94, p=0.043)
-  for a 1.6% increase in records.
-- **Per source, a generated plan ≈ a real plan** (0.2608 vs 0.2777 count-matched
-  at 28 sources — inside the ~0.05 spread of small pools).
-- **Resolution is worth ~0.032** (the same 28 at 640 long side: 0.2330 vs 0.2650).
-- **Count dominates**: 28 → 86 real sources buys +0.073.
-- The HF 20k synthetic substitution cost ~0.006, so the irrecoverable pools are
-  not a loss. Generating the synthetic half locally instead costs ~0.013.
-- **Deliberately confusable synthetic material pairs cost −0.104** (t=3.80,
-  p=0.019, complete separation). `--confusable-prob` exists but stays off; see
-  `synth_progress.md` (2026-08-12) before revisiting confusability at all.
+- **Training resolution is the largest single effect: +0.05 to +0.07** (1280 ->
+  2048), on both mixes, so it is general rather than pool-specific.
+- **A generated plan is worth ~1.65x a scraped plan, per source** (gemini 80
+  alone 0.5933 vs real 86 alone 0.3597, matched on sources and records). This
+  **retires** the earlier "a generated plan ≈ a real plan" parity, which was
+  measured on the mis-specced v1 round.
+- **The 80 Gemini plans are worth +0.035** on the mix at 1280 (val-selected, 3
+  seeds, p=0.030). At 2048 the same contrast is +0.010 with overlapping arms --
+  unresolved, needs re-measuring.
+- **Synthetic still earns its place**: removing it costs 0.041 at 1280 and ~0.03
+  at 2048. Standalone it is ~0.61, second only to the Gemini pool.
+- **Source resolution is worth ~0.032** (the 28 generated at 640 vs native).
+  Distinct from training resolution above.
+- **Count dominates**: 28 -> 86 real sources buys +0.073.
+- The HF 20k synthetic substitution cost ~0.006; generating the synthetic half
+  locally instead costs ~0.013.
+- **Deliberately confusable synthetic material pairs cost -0.104** (t=3.80,
+  p=0.019). `--confusable-prob` stays off; see `synth_progress.md` (2026-08-12).
 
-So: generate more, and generate large. Per-image value matches real plans, and
-resolution is a free choice at generation time that can never be retrofitted onto
-the 640px scraped pool. Adding *records* without adding sources does nothing —
-see the 2026-08-10 volume/ratio nulls in `synth_progress.md`.
+So: **train at 2048**, and generate more. Adding *records* without adding
+sources does nothing (2026-08-10 volume/ratio nulls in `synth_progress.md`), but
+adding generated sources is now the best-value supply there is.
+
+### The limit is generalization, not fit
+
+Train IoU (derived from the Dice term) was still climbing at the final epoch in
+every arm -- `mix5092` reached 0.758 while HF14 turned over at epoch 4. Fitting
+is not the constraint, so bigger models and longer training push the wrong
+lever; `real86only` fits as well as the winning mix (0.749) and scores less than
+half as well. Regularization and data quality are the levers that remain.
 
 ## Evaluation rules
 

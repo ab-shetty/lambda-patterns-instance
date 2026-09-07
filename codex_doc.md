@@ -1,153 +1,67 @@
 # Handoff
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-09-05)
+## Pick up here (2026-09-06)
 
-**Next step: a GPU box.** Rounds 2 and 3 are labelled and converted, and nothing
-further can be learned from them on CPU. 80 of the 100 Gemini images were worth
-labelling — 36 of 50 in r2, 44 of 50 in r3, against 28 of 98 in the v1 round —
-and they carry 478 pattern instances at a 3168px median long side. Unique
-real-ish sources go **114 -> 194**, the first increase since 28 -> 86 bought
-+0.073.
+The Gemini r2/r3 round is trained, evaluated and recorded. The data pipeline was
+rebuilt from a clean clone on a fresh GH200 and every count matched `startup.md`
+exactly. Numbers all live in `startup.md`; this is only what changed and what is
+open.
 
-```bash
-# Roboflow versions are pinned: floz-gen-gemini-r2 v1, floz-gen-gemini-r3 v1
-rf.project("floz-gen-gemini-r2").version(1).download("coco-segmentation",
-    location="data/roboflow/floz-gen-gemini-r2-raw", overwrite=True)   # 36 imgs
-rf.project("floz-gen-gemini-r3").version(1).download("coco-segmentation",
-    location="data/roboflow/floz-gen-gemini-r3-raw", overwrite=True)   # 44 imgs
-python3 scripts/roboflow_to_local.py --coco .../train/_annotations.coco.json \
-  --img-dir .../train --out data/roboflow/floz-gen-gemini-rN-clean
-# r2: 36 images, 231 instances, 100 removes
-# r3: 44 images, 247 instances, 205 removes, 1 hole dropped (floz_gen_048)
-python3 scripts/merge_local_datasets.py --sources <the two clean dirs> \
-  --out data/roboflow/floz-gen-gemini-r23-clean                        # 80
-python3 scripts/augment_local_dataset.py --src .../r23-clean \
-  --out .../floz-gen-gemini-r23-strong18 --aug-per-scene 17 --strong --seed 5858
-# then merge as the fourth source: 1600 + 1548 + 504 + 1440 = 5,092
-```
+**Two wins, measured separately.** Training at **2048 instead of 1280 is worth
++0.05 to +0.07** on both mixes -- the largest effect in the project, and general
+rather than pool-specific. The **80 Gemini plans are worth +0.035** on the mix at
+1280. Best checkpoint is now 0.7747, against 0.6860 before.
 
-Then the `startup.md` two-phase train at **3 seeds** — the baseline is 0.6860 +/-
-0.0175, run-to-run sd on mix3652 is 0.0262, so a single seed decides nothing.
-Run one baseline seed first to confirm the new box reproduces mix3652.
+**The `>= 0.65` target is met** under both selection protocols, at a resolution
+the original target never contemplated.
 
-**Two questions the labelled pool now makes answerable**, both cheap once the GPU
-is up: (1) roof plans label one material across several fill orientations while
-elevations treat a changed orientation as a new material — train with and without
-the roof-plan images and see whether the mixed convention costs anything, noting
-they are only 3 of the 80; (2) `remove` holes are 37% of all polygons drawn —
-strip the small ones, retrain, and see whether HF14 moves at all.
+**Open, in priority order:**
 
-**Yield by category, r2 + r3.** Labelled: elev_colour 17, elev_faint 16,
-plan_mep 16, section_sparse 11, elev_mono 9, plan_finish 5, roof_plan 3,
-elev_colour_markup 3. Skipped: section_sparse 4, roof_plan 4, elev_colour 3,
-elev_faint 4, elev_mono 3, plan_finish 1, elev_colour_markup 1. Roof plans are
-the weakest category by yield and the only one where the labelling convention
-was in doubt.
+1. **Push resolution further.** The Gemini pool's median long side is 3168px, so
+   2048 may still be truncating it. 2560/3072 has never been run. At 2048 both
+   mixes were still improving at the final epoch, so pair it with a longer
+   schedule.
+2. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
+   but +0.010 at 2048 with overlapping 2-seed arms. Either the effects are
+   sub-additive or it is noise; as recorded, it is unresolved.
+3. **A better synthetic regime.** Synthetic is *not* dead weight -- removing it
+   costs 0.041, and standalone it is ~0.61, second only to the Gemini pool. But
+   it was never aimed at the eval distribution the way `build_specs_v4.py` aimed
+   the Gemini round (2/3 elevations, median aspect 2.59, 16/28 colourised;
+   `freeform` is 8,085 of the 20k and nothing like it appears in the eval set).
+   Aim it with `pool_style_stats.py` before writing generator code. **Do not**
+   re-open connectivity: `disc` and `conn` pools both land ~0.61, and selecting
+   for disconnected families was already null at 3 seeds.
+4. **Regularization.** Newly justified -- see the generalization finding in
+   `startup.md`. The train/HF14 gap is ~0.09 and widens with epochs.
 
-**The gpt-image-2 round (`floz-gen-v4-round1`, 50 images) is still unlabelled**,
-as are `floz-gen-gemini-r1` (14) and the two smokes. The 28 evaluation images
-with their polygons are in `perceive-ai/floz-eval28-reference` — tagged
-`eval-only`/`do-not-train`, never to be merged into a training pool.
+**Three claims corrected this session** (all were wrong in this file):
 
-**Simpler drawings score far better on fill regularity.** Four single-view,
-one-or-two-family specs through `gemini-3-pro-image` read **7,727** against the
-real pool's 11,826, the 50-image gpt round's 3,122 and Gemini's own first ten at
-2,605. The spec list now matches the eval set on all three simplicity axes
-(families 1.9, 45% single-view elevations, sparse clutter on 60%), and the prompt
-carries a restraint clause because the model embellishes what it is asked for.
-Four images of one category -- promising, not settled. Details in the README.
-
-**Round 1 (50 images) is in `perceive-ai/floz-gen-v4-round1`, unlabelled**, and
-the 28 evaluation images with their polygons are in
-`perceive-ai/floz-eval28-reference` — tagged `eval-only`/`do-not-train`, never to
-be merged into a training pool. Two changes since: family counts now come from
-the eval distribution (mean 1.9, 36 single-family, against the 2.7 round 1 used),
-and `gemini-3-pro-image` beat `gpt-image-2` on fill regularity in 3 of 4 paired
-prompts — including a roof plan at 10,246 against the real pool's 11,826, the
-first generated image here to come close. Four pairs is not a decision; the
-README has the numbers and the caveats.
-
-**Generate the round through the Batch API** (`--batch submit|status|fetch`):
-half price, 24-hour window, and the batch outlives the session, so ~$30 for 300
-images rather than ~$60. Fetch maps results by `custom_id` because batch output
-order is not input order.
-
-**Tuned after review**: contrast is three levels (47 normal / 24 light / 29
-faint) rather than a flag, with a floor in the faint wording, and `plan_mep`
-demands a solid filled wall poche plus a second family — as one family of empty
-double-outline walls it produced plans with nothing in them to label. Re-smoked:
-ink 0.089 against the real pool's 0.111, contrast 0.435 against 0.437. The one
-skew left deliberately is 28 of 100 colourised against 16 of 28.
-
-**Labelling cost: label one family per image, not all of them.**
-`refmask2former/dataset.py:302-324` picks one target family per image and treats
-everything unlabelled as background, so a single fully-labelled family is
-a correct record. That leaves 64-71% of the instance polygons. Every occurrence
-of the family that IS labelled must be caught, or it teaches false negatives.
-Untested and worth an afternoon on a GPU before labelling 300: `remove` holes are
-2.2 per image in the generated pool, 37% of all polygons drawn — drop the small
-ones from the existing 114, retrain, and see whether HF14 moves at all.
-
-Confusability still has to be measured on the labelled pool, because
-`family_similarity_probe.py --local-data` needs annotations. Run it on the first
-labelled slice against the real pool's 24.4% before labelling everything.
-
-Two disposable Roboflow review projects hold the smokes:
-`perceive-ai/floz-gen-v3-smoke` (4 images) and `perceive-ai/floz-gen-v4-smoke`
-(6). Delete with `scripts/upload_unlabelled_roboflow.py --project NAME
---delete-project --execute`.
-
-The 2026-08-10 lever — generate synthetic sheets with deliberately confusable
-material pairs — was implemented and tested. **It costs −0.104** (0.6823 →
-0.5787, 3 seeds, t=3.80, p=0.019, complete separation). The lever is closed;
-`--confusable-prob` is committed, default off, kept only so the negative
-reproduces. Detail in `synth_progress.md` (2026-08-12).
-
-Three things that reasoning got wrong are worth carrying forward:
-
-| claim | status |
+| claim | correction |
 |---|---|
-| "synthetic sheets contain no confusable pairs at all" | **false** — the generator picks distinct *paths*, not distinct *appearances*; synthetic already sat at 19.2% vs real 24.4% |
-| "every image under 0.65 is multi-family" / "single-family all score 0.92+" | **false** on a rebuilt checkpoint — HF14 imgs 12/7/0 are single-family at 0.393/0.546/0.611 |
-| the confusability correlation | **replicates, and more strongly than recorded** (pooled r=−0.754, p=0.0018) — and the intervention still hurt |
+| "label one family per image, not all of them" reads as description | it is a *cost proposal*; r2/r3 are multi-family labelled, 1.75 and 1.52 families per image, 30 of 80 with 2-4 |
+| implied augmentation is flip-only | full ×8 dihedral has always been applied online per sample (`dataset.py:387`) to image, masks and reference together; the offline 18x builder does hflip only because the online path covers the rest |
+| "a generated plan ≈ a real plan" | retired: 1.65x per source, measured source- and record-matched |
 
-**Where the error is now.** ~30% of multi-family images are not decidable from
-appearance at all: a family's own instances agree less than that family agrees
-with its most confusable neighbour, and those are the worst image in each split
-(HF14 14/18, validation 13/17). That matches the 2026-08-07 finding that
-`hatch_matcher` and `RefUNet` fail on the same inputs. Left open, and worth an
-hour whenever someone is in the labelling tool anyway: **are those cases
-labelling inconsistencies or genuine semantic distinctions** — same hatch,
-different material by drawing context? If they are label errors that is a
-data-quality fix worth ~+0.105 on HF14 from image 14 alone; if they are not,
-~0.70 is close to the ceiling for a rectangle-only input.
+**Tooling added.** `--compile --pad-grid` (1.5x/epoch), `--early-stop-patience`,
+`scripts/train_status.sh` for progress at a glance, and val-selection run as one
+process per run instead of sequentially (40 min -> 5). Details and the parity
+check are in `startup.md`.
 
-**Why generation is the next step.** 28 → 86 real sources bought +0.073, one
-generated plan ≈ one real plan, and re-augmenting the same 114 sources 18× → 72×
-buys nothing — so distinct sources, not records, are the constraint, and
-generation is the only supply that also picks its own resolution (worth ~0.032,
-and unretrofittable onto the natively-640px scraped pool). Read the status
-sections of `image_generation/README.md` in order: v1 asked for whole sheets, v2
-fixed the framing, v3 fixed the drafting-hatch and confuser defects the v2 smoke
-test exposed. Generate with v3.
+**Still unlabelled**: `floz-gen-v4-round1` (50 gpt-image-2), `floz-gen-gemini-r1`
+(14), and the two smoke projects. The 28 evaluation images with polygons are in
+`perceive-ai/floz-eval28-reference`, tagged `eval-only`/`do-not-train`.
 
-Unresolved from 2026-08-10: `--anchor-dropout` has still never been tested
-cleanly, having only ever run on top of the reference-plane bug.
-
-**Architecture is not the lever either (2026-08-12).** Four mechanisms from the
-matching / few-shot-segmentation literature — self-support prototypes, a
-hypernetwork-generated classifier, a central-surround two-stream reference, and
-SimAM shrinkage attention — were implemented and screened on validation. All
-null or negative; details and the two false positives they produced are in
-`synth_progress.md`. That makes six independent attempts at the conditioning
-mechanism, so prefer data supply over model surgery until something changes.
+**Generation guidance**, unchanged and now better supported: generate more, and
+generate large. `image_generation/README.md` has the v3/v4 prompt history; the
+Batch API (`--batch submit|status|fetch`) halves the cost.
 
 ## Superseded — 2026-08-08 (measurements sound, conclusions retracted)
 
@@ -163,7 +77,7 @@ needs full resolution (at 1024 nearby components merge and it reads 0.558 / 33%)
 | HF14 (eval) | 0.537 | 27% |
 
 The gap is real. Both conclusions drawn from it are not: the anchor evidence was
-a bug (above), and selecting for disconnected families is null at 3 seeds — its
+a bug (`synth_progress.md`), and selecting for disconnected families is null at 3 seeds — its
 mode quotas are also unfillable, only 3 of 2,833 all-disconnected images being
 elevations against a quota of 889. Do not re-derive that experiment from here.
 
@@ -227,36 +141,30 @@ are implemented but screened negative — read the warnings before touching eith
 - `scripts/pool_style_stats.py` — aspect, colour, ink, contrast and fill
   regularity for a pool, so a generated round can be compared with the real 28
   instead of judged by eye.
+- `scripts/select_epoch_on_val.py` — val-selected protocol; one process per run,
+  run them in parallel.
+- `scripts/train_status.sh` — one-screen progress for every run under
+  `data/runs`, including live epoch and running peak.
 - `scripts/run_*.sh`, `run_*.sh` — the experiment drivers, one per ablation.
 
 ## Data limitation and where to push next
 
-The mix now contains **194 unique real-ish source plans** (86 scraped real + 28
-generated v1 + 80 generated Gemini r2/r3); everything else is synthetic or deterministic offline variants. That
-source count remains the binding constraint.
-
-Established by count-matched experiment: one generated plan is worth about as
-much as one real plan (0.2608 vs 0.2777 at 28 sources each, a gap inside the
-~0.05 run noise), resolution is worth ~0.032, and going 28 → 86 sources buys
-+0.073. So **generate more, and generate large** — the 86 scraped plans are
-natively 640×640 and can never be improved, while generation resolution is a
-free choice.
+The mix holds **194 unique real-ish source plans** (86 scraped + 28 generated v1
++ 80 Gemini r2/r3); everything else is synthetic or deterministic offline
+variants. Source count is still the binding constraint, and generated sources
+are now the best-value supply: 1.65x a scraped plan each, and they pick their own
+resolution, which the natively-640px scraped pool never can.
 
 **Before generating more, read the status section at the top of
-`image_generation/README.md`.** The 100-prompt scheme was run once and its
-framing was wrong: it produced full sheets with legends and title blocks, then
-over-corrected into fragments of buildings. The product gesture is a small
-rectangle inside a drawing region — the housed part of a plan, not the legend.
-Only 28 of 98 generated images were good enough to label (~29% yield); the
-remaining 70 were reviewed and rejected, so there is no labelling backlog to
-mine. More data means generating a better round, not labelling what exists.
+`image_generation/README.md`.** The v1 100-prompt scheme was framed wrongly --
+whole sheets with legends, then fragments -- and yielded 28 of 98. v3/v4 fixed it
+(72-88% yield) by aiming at the eval set's measured distribution. There is no
+labelling backlog worth mining; more data means a better round.
 
-Untested hypothesis worth pursuing on a validation split: the largest remaining
-clean failure is thin wall poche in dense floor plans (image 12), plausibly a
-1280px downscaling artifact. It must not be tuned against HF14. This gained
-weight on 2026-08-12 — image 12 is **single-family** and still scores 0.393, so
-its failure cannot be a confusability effect and no appearance-matching lever
-will touch it.
+**Resolved 2026-09-06**: the standing hypothesis that image 12's thin wall poche
+was a 1280px downscaling artifact is supported -- training at 2048 is worth +0.05
+to +0.07 overall. Whether image 12 specifically recovers has not been checked
+per-image.
 
 ## Evaluation rules
 

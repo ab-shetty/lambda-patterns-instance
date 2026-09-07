@@ -71,9 +71,10 @@ reproduces the old behaviour for historical checks.
 ## Current target and result
 
 The original target was **reference-conditioned union IoU >= 0.65** on the real
-HF14 holdout, at any checkpoint within ten training epochs. That target was set
-against the broken sampler and has not been restated, so whether the current
-result meets it is a product decision, not a measurement one.
+HF14 holdout, at any checkpoint within ten training epochs. It was set against
+the broken sampler, so it is not strictly comparable -- but as of 2026-09-06 the
+result clears it under both selection protocols and by a margin larger than the
+sampler fix was worth, which makes the incomparability moot.
 
 Report a multi-seed mean, never a single best checkpoint: run-to-run noise is
 ~0.013-0.018 sd. **The result itself lives in `startup.md`** — single copy, so
