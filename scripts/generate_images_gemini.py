@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Generate the same prompt manifest through Gemini, to compare against gpt-image-2.
+"""Generate the image-generation prompt manifest through Gemini.
 
-The open defect in this pipeline is pattern consistency: repeating fills in the
-real plans score ~11,800 on `scripts/pool_style_stats.py`, the delivered
-generated pool 2,751, and round 1 through gpt-image-2 3,122. No prompt wording
-has moved it, so the question is whether a different image model holds a ruled
-fill better. This runs the identical prompts so the answer is a number.
+**This is the production generator.** It began as a probe against gpt-image-2 on
+one question -- whether a different image model holds a ruled fill better -- and
+that question is settled: fill regularity against the real 28's 11,826 went
+gpt-image-2 3,122, gemini round 2 7,270, gemini round 3 8,302, and the labelling
+yield followed (28/98 for the gpt round, 36/50 and 44/50 for the two Gemini
+rounds). Rounds 2 and 3 supplied all 80 hand-labelled generated plans currently
+in the mix. Use this path, not the OpenAI one, unless you are re-running history.
 
     set -a; . ~/.env; set +a          # GEMINI_API_KEY
     python3 scripts/generate_images_gemini.py --ids 6,11,19,42 \
@@ -14,10 +16,12 @@ fill better. This runs the identical prompts so the answer is a number.
 Two differences from the OpenAI path, both handled here:
 
 * Gemini takes a fixed aspect ratio (1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9)
-  rather than an arbitrary WIDTHxHEIGHT, and 21:9 is only 2.33:1 -- narrower
-  than the eval set's median of 2.59. So a manifest row is generated at the
-  widest allowed ratio not exceeding its target and then trimmed to width, the
-  same way the 3:1 cap is handled for gpt-image-2.
+  rather than an arbitrary WIDTHxHEIGHT, and 21:9 is only 2.33:1 -- narrower than
+  the eval set's median of 2.59. A manifest row is generated at the allowed ratio
+  **nearest its target in log space** and trimmed to width only when that pick
+  came out narrower than asked; see `choose_ratio`. It is deliberately not "the
+  widest ratio not exceeding the target", which sounds right but sends a 1.3
+  target to 1:1 and produced four square plans in round 3.
 * Size is `1K`/`2K`/`4K` rather than pixels. 2K is the closest match to the
   ~4 megapixels round 1 used; 4K is nearer the real pool's 5.9 median.
 
@@ -25,6 +29,11 @@ Two differences from the OpenAI path, both handled here:
 24-hour target window, and the job outlives the shell that submitted it. The
 requests go up as a JSONL file rather than inline, because inline batches cap at
 20MB and fifty 2K images come back far larger than that.
+
+Known limit, unfixed: the wide-aspect tail. The real 28 run 10/28 past 3:1 and
+round 2 reached only 5/50, because 21:9 is the cap and the ink-aware crop will
+not slice a building to get past it. Reaching that tail needs the prompt to ask
+for a wide band drawn inside a 21:9 frame, not a harder crop.
 """
 
 import argparse
