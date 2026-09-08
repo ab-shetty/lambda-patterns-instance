@@ -1,77 +1,68 @@
 # Handoff
 
-Last updated: 2026-09-06
+Last updated: 2026-09-08
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-09-06)
+## Pick up here (2026-09-08)
 
-The Gemini r2/r3 round is trained, evaluated and recorded. The data pipeline was
-rebuilt from a clean clone on a fresh GH200 and every count matched `startup.md`
-exactly. Numbers all live in `startup.md`; this is only what changed and what is
-open.
+Two things happened this session: the v6d synthetic round was tested on the mix
+and **not adopted**, and a **labelling-assist model** was built, which is a new
+track. Numbers live in `startup.md` (product), `labeling_assist.md` (labelling)
+and `synth_progress.md` (per-experiment history).
 
-**Since then (2026-09-07, later):** checkpoint averaging is the selection
-protocol (`scripts/average_checkpoints.py`; +0.02 over single-epoch picks at 2
-seeds), the drawn synthetic regime v6 exists and lifts synth-only to 0.686, the
-mix with v6b added reads 0.7754 at one seed, 2560 is +0.05 at one seed with
-averaging, and dihedral TTA is +0.004. Details: `startup.md`, `synth_progress.md`.
+**1. v6d added to the documented mix: unsettled, not pursued.** Paired 2x2 on one
+GH200, rebuilt from a clean clone (every count matched `startup.md`; `mixbase`
+reproduced at 0.7410 val-selected against the recorded 0.7394). `mixv6d` = mix5092
++ 1,600 v6d plans, 2048, seeds 7 and 31: **+0.028 val-selected (positive at both
+seeds), null (+0.001) averaged**. At 1.3x the baseline sd that is under the ~2x
+threshold requiring a third seed, so it is not a result. Dropped by decision: the
+gap to the 0.90 target is ~0.14 and source count, not the generator, is what moves
+that. Full entry and the per-epoch traces: `synth_progress.md` (2026-09-08).
 
-**Two wins, measured separately.** Training at **2048 instead of 1280 is worth
-+0.05 to +0.07** on both mixes -- the largest effect in the project, and general
-rather than pool-specific. The **80 Gemini plans are worth +0.035** on the mix at
-1280. Best checkpoint is now 0.7747, against 0.6860 before.
+**A protocol finding worth keeping from it.** Checkpoint averaging assumes the
+run has plateaued. Both `mixv6d` runs peaked at the *final* epoch where both
+baselines peaked mid-run, and averaging then reads ~0.04 low -- which is the
+entire disagreement between the two selection protocols. **Check whether a run
+has turned over before trusting the averaged number.** Not the step-budget
+effect: v6d had more optimizer steps and still had not converged.
 
-**The `>= 0.65` target is met** under both selection protocols, at a resolution
-the original target never contemplated.
+**2. Labelling assist (`labeling_assist.md`) -- new track.** Roboflow's SAM 3
+Label Assist was rejected in practice because its polygons carry ~284 vertices
+against a human's 5. That is a post-processing problem: Douglas-Peucker takes
+284 -> 7 for 1.7 points of IoU. Fine-tuning SAM 3's mask decoder (encoder frozen,
+41 s/epoch) then took held-out polygon IoU **0.798 -> 0.853 mean, and >=0.8 from
+71.4% to 84.7%**. Checkpoint `data/runs/sam3_ft/best.pth`, entry point
+`scripts/sam3_region_model.py`. One split, one seed -- needs a second before it
+is quoted.
+
+**Also settled about SAM 3, so nobody re-derives it:** its vision encoder is
+fixed at **1008x1008**, so it is a poor backbone candidate for the product model
+(whose largest win is training at 2048). And it **cannot do the product task**:
+zero-shot PCS with the reference box as exemplar scores 0.308 on the 52 HF14
+selections against RefUNet's 0.769. Details and the measured negatives are in
+`labeling_assist.md`.
 
 **Open, in priority order:**
 
-1. **Push resolution further.** The Gemini pool's median long side is 3168px, so
-   2048 may still be truncating it. 2560/3072 has never been run. Note a longer
-   schedule alone is null at 2048 (16 ep vs 9 ep, 2 seeds), so this is about
-   pixels, not training time.
-2. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
-   but +0.010 at 2048 with overlapping 2-seed arms. Either the effects are
-   sub-additive or it is noise; as recorded, it is unresolved.
-3. **The synthetic regime is now v6** (`generate_synthetic_v6.py`, drawn
-   like a drawing: house grammar, ruled fills in feet, real sheet furniture).
-   Synth-only went from 0.573 to **0.686 ± 0.009** (2 seeds, v5+v6d union at
-   2048); added to the documented mix at 2048 it reads 0.7754 val-selected at
-   one seed (0.7060 for the same seed without it). The full audit trail --
-   what each round changed, what was null (v6 volume, 16 epochs, v6e
-   look-alike pairs) and the seed spread (~0.05 synth-only) -- is the
-   2026-09-07 entry in `synth_progress.md`. Open there: the remaining
-   synth-only failure is look-alike families (dark base vs dark roof, two
-   light sidings); making the training set harder in that direction was
-   negative, so the next idea has to be different. **Do not** re-open
-   connectivity or tile-similarity confusables.
-4. **Regularization.** Newly justified -- see the generalization finding in
-   `startup.md`. The train/HF14 gap is ~0.09 and widens with epochs.
+1. **More labelled sources.** The binding constraint, and the only lever sized to
+   the remaining ~0.14 (28 -> 86 sources bought +0.073; a generated plan is worth
+   1.65x a scraped one). The labelling-assist model exists to make this cheaper;
+   a browser UI on a non-GPU box is the next build.
+2. **Push resolution past 2048.** 2560 is +0.05 at one seed with averaging and
+   the Gemini pool's median long side is 3168px, so 2048 may still be truncating
+   the best data. Cheap, and still the largest per-hour model-side lever.
+3. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
+   but +0.010 at 2048 with overlapping 2-seed arms. Unresolved as recorded.
+4. **Regularization.** The train/HF14 gap is ~0.09 and widens with epochs;
+   fitting is not the constraint.
 
-**Three claims corrected this session** (all were wrong in this file):
-
-| claim | correction |
-|---|---|
-| "label one family per image, not all of them" reads as description | it is a *cost proposal*; r2/r3 are multi-family labelled, 1.75 and 1.52 families per image, 30 of 80 with 2-4 |
-| implied augmentation is flip-only | full ×8 dihedral has always been applied online per sample (`dataset.py:387`) to image, masks and reference together; the offline 18x builder does hflip only because the online path covers the rest |
-| "a generated plan ≈ a real plan" | retired: 1.65x per source, measured source- and record-matched |
-
-**Tooling added.** `--compile --pad-grid` (1.5x/epoch), `--early-stop-patience`,
-`scripts/train_status.sh` for progress at a glance, and val-selection run as one
-process per run instead of sequentially (40 min -> 5). Details and the parity
-check are in `startup.md`.
-
-**Still unlabelled**: `floz-gen-v4-round1` (50 gpt-image-2), `floz-gen-gemini-r1`
-(14), and the two smoke projects. The 28 evaluation images with polygons are in
-`perceive-ai/floz-eval28-reference`, tagged `eval-only`/`do-not-train`.
-
-**Generation guidance**, unchanged and now better supported: generate more, and
-generate large. `image_generation/README.md` has the v3/v4 prompt history; the
-Batch API (`--batch submit|status|fetch`) halves the cost.
+**Do not re-open:** connectivity, tile-similarity confusables, v6e look-alike
+pairs, orientation snapping in the polygon regularizer, `--anchor`, and SAM 3 as
+a product-task model without fine-tuning it on that task.
 
 ## Superseded — 2026-08-08 (measurements sound, conclusions retracted)
 
@@ -115,6 +106,7 @@ Single copies, so they cannot drift. Do not restate them here.
 | every reproduction command, the data rebuild, the validation split | `startup.md` |
 | evaluation rules and the fixed HF14 indices | `startup.md` |
 | per-experiment history and the screened levers | `synth_progress.md` |
+| the labelling-assist model, its numbers and its negatives | `labeling_assist.md` |
 
 Two standing traps: the reference resize in `refmask2former/dataset.py` looks
 like a bug and "fixing" it costs 0.153, and `--corr-grid` / `--scale-matched-ref`

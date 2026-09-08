@@ -1,5 +1,44 @@
 # Synthetic Dataset Progress
 
+## 2026-09-08 — v6d added to the documented mix: unsettled, not pursued
+
+Paired 2x2 on one GH200, rebuilt from a clean clone (every pipeline count matched
+`startup.md` exactly; `mixbase` reproduced at 0.7410 val-selected against the
+recorded 0.7394). `mixv6d` = the documented mix5092 plus 1,600 v6d plans (6,692
+records), both arms at 2048, documented two-phase 9 epochs, seeds 7 and 31.
+
+| arm | s7 val-sel | s31 val-sel | mean | averaged mean |
+|---|---:|---:|---:|---:|
+| `mixbase` (5,092) | 0.7257 | 0.7563 | 0.7410 +- 0.0216 | 0.7442 |
+| `mixv6d` (6,692) | 0.7667 | 0.7712 | 0.7690 +- 0.0032 | 0.7454 |
+
+**+0.028 val-selected (positive at both seeds), null (+0.001) averaged.** At
+1.3x the baseline sd this is under the ~2x threshold that requires a third seed,
+so it is **not a result**. Not pursued: the remaining gap to the 0.90 target is
+~0.14, and source count -- not the generator -- is the lever that moves that
+(28 -> 86 sources bought +0.073; removing synthetic entirely costs only 0.026 at
+2048). Do not re-open this without a reason beyond "+0.028 looked real".
+
+**The durable finding here is about the protocol, not the pool.** Both `mixv6d`
+runs peaked at the *final* epoch; both `mixbase` runs peaked mid-run:
+
+```
+mixbase  s7   .622 .673 .684 .705 .757 .738 .709 .693 .726   peaks e4
+mixbase  s31  .628 .694 .701 .745 .746 .754 .748 .756 .733   peaks e7
+mixv6d   s7   .639 .695 .731 .701 .694 .743 .716 .743 .767   peaks e8 (last)
+mixv6d   s31  .668 .718 .712 .732 .729 .764 .696 .764 .771   peaks e8 (last)
+```
+
+Checkpoint averaging assumes the tail is a plateau. When a run is still climbing
+at the last epoch, averaging blends the best weights with worse mid-run ones and
+reads ~0.04 low -- which is the entire disagreement between the two protocols
+above. **Check whether a run has turned over before trusting the averaged
+number**, on any future pool that trains longer without plateauing. Note this is
+not the step-budget effect: 9 epochs on 6,692 records is 7,524 steps against
+5,724, so v6d had *more* steps and still had not converged. A longer schedule for
+this pool was not run; the recorded 16-epoch null was measured on `mix5092`,
+which does turn over by e8, so it does not transfer.
+
 ## 2026-09-07 — v6: synthetic drawn like a drawing, not quilted from tiles
 
 **Why.** 80 hand-labelled Gemini plans beat 1,600 v5 synthetic plans, and the

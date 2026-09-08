@@ -10,6 +10,8 @@
 #   v5only      v5 toparea1600 alone                    -- 0.573, 2 seeds
 #   v6only      v6d 1,600 alone                         -- the pool in isolation
 #   mixv6b      documented mix + v6b 1,600 at 2048      -- 0.7754, 1 seed
+#   mixbase     documented mix5092 at 2048              -- the paired baseline
+#   mixv6d      documented mix + v6d 1,600 at 2048      -- v6d, the current generator default
 #
 # Every arm runs the documented two-phase schedule, then val-selection and
 # checkpoint averaging. Pools are built on demand and are deterministic given
@@ -105,5 +107,24 @@ case "$ARM" in
     SIZE=${SIZE:-2048}
     two_phase data/mixed/v5_1600_v6b_1600_rf1548_gen504_gem1440 \
       "data/runs/ck_mixv5v6b_${SIZE}_seed${SEED}" "$SEED" "$SIZE" 16 ;;
+  mixbase)
+    merge data/mixed/toparea1600_rf1548_gen504_gem1440 \
+      "$V5" \
+      data/roboflow/floz-real-pool-v2-strong18 \
+      data/roboflow/floz-genreal-v1-strong18 \
+      data/roboflow/floz-gen-gemini-r23-strong18
+    SIZE=${SIZE:-2048}
+    two_phase data/mixed/toparea1600_rf1548_gen504_gem1440 \
+      "data/runs/ck_mixbase_${SIZE}_seed${SEED}" "$SEED" "$SIZE" 16 ;;
+  mixv6d)
+    build_pool v6d data/synthetic/v6d_1600 1600
+    merge data/mixed/v5_1600_v6d_1600_rf1548_gen504_gem1440 \
+      "$V5" data/synthetic/v6d_1600 \
+      data/roboflow/floz-real-pool-v2-strong18 \
+      data/roboflow/floz-genreal-v1-strong18 \
+      data/roboflow/floz-gen-gemini-r23-strong18
+    SIZE=${SIZE:-2048}
+    two_phase data/mixed/v5_1600_v6d_1600_rf1548_gen504_gem1440 \
+      "data/runs/ck_mixv5v6d_${SIZE}_seed${SEED}" "$SEED" "$SIZE" 16 ;;
   *) echo "unknown arm: $ARM"; sed -n '3,20p' "$0"; exit 1 ;;
 esac

@@ -19,3 +19,7 @@ pyarrow>=14.0.0
 # Synthetic generation (generate_synthetic_v5.py imports shapely at module load,
 # so the generator is unrunnable from a clean install without it)
 shapely>=2.0.0
+
+# Labelling assist (labeling_assist.md): SAM 3 box-prompt -> polygon.
+# Not needed for the product model; `facebook/sam3` is a gated HF repo.
+transformers>=4.50.0
