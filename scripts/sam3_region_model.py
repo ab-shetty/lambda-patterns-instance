@@ -89,7 +89,7 @@ def _load_decoder_state(checkpoint):
 class RegionModel:
     def __init__(self, checkpoint=_UNSET, device=None, model_id="facebook/sam3",
                  eps_frac=0.010, crop_zoom=None, hole_checkpoint=None,
-                 min_hole_frac=0.005):
+                 min_hole_frac=0.005, hole_shape="rect"):
         # _UNSET (the default) -> the published decoder. An explicit None is a
         # deliberate request for stock zero-shot SAM 3.
         if checkpoint is _UNSET:
@@ -104,6 +104,15 @@ class RegionModel:
         self.finetuned = False
         self.info = {}
         self.min_hole_frac = min_hole_frac
+        # "rect": fit a rotated rectangle to each opening. Best on BOTH axes --
+        # 0.8827 mean / 88.8% >=0.8 at 4 vertices, against 0.8823 / 87.8% at 9
+        # vertices for Douglas-Peucker, and 4.0 is exactly the human median.
+        # Note this is the OPPOSITE of the outer ring, where snapping to a
+        # rectilinear lattice is measured negative and monotone in the tolerance
+        # (regularize_polygon.py): rakes, gables and eaves sit at many angles,
+        # but a window is a rectangle. The prior is right for openings and wrong
+        # for region boundaries. "dp" restores Douglas-Peucker.
+        self.hole_shape = hole_shape
         self._hole_sd = None
         self._outer_sd = None
         if checkpoint:
@@ -179,7 +188,15 @@ class RegionModel:
                 for i in range(1, n):
                     if stats[i][4] < floor:
                         continue
-                    hp = regularize(lab == i, eps_frac=self.eps_frac)
+                    comp = (lab == i)
+                    if self.hole_shape == "rect":
+                        cs, _ = cv2.findContours(comp.astype(np.uint8),
+                                                 cv2.RETR_EXTERNAL,
+                                                 cv2.CHAIN_APPROX_SIMPLE)
+                        hp = (cv2.boxPoints(cv2.minAreaRect(
+                            max(cs, key=cv2.contourArea))) if cs else None)
+                    else:
+                        hp = regularize(comp, eps_frac=self.eps_frac)
                     if hp is not None and len(hp) >= 3:
                         seg.append([round(float(v), 2) for v in hp.reshape(-1)])
             segs.append(seg)

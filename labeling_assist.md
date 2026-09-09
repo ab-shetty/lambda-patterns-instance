@@ -111,6 +111,30 @@ Published: `abshetty/floz-sam3-labelassist-holes`. The two decoders share one
 loaded encoder and swap the 4.2M decoder between passes, so holes cost a second
 forward, not a second model in memory.
 
+### Openings are rectangles; region boundaries are not
+
+The usability criterion for this whole track is vertex count, and the first
+version failed it on holes: predicted hole rings carried a median of **9**
+vertices against a human's **4**, because `eps_frac` is relative to contour
+perimeter -- a small window gets a tiny absolute tolerance and keeps its wobble.
+
+| hole treatment | mean IoU | >= 0.8 | median hole vertices |
+|---|---|---:|---:|
+| Douglas-Peucker eps 0.010 | 0.8823 | 87.8% | 9.0 |
+| Douglas-Peucker eps 0.035 | 0.8819 | 87.8% | 4.0 |
+| **minAreaRect (adopted)** | **0.8827** | **88.8%** | **4.0** |
+
+A rotated-rectangle fit is best on *both* axes and lands on the human median.
+**This is the opposite of the outer ring**, where snapping to a rectilinear
+lattice is negative and monotone in the tolerance (`regularize_polygon.py`):
+rakes, gables and eaves sit at many angles, but a window is a rectangle. The
+rectilinear prior is right for openings and wrong for region boundaries -- do
+not generalise either result to the other. `hole_shape="dp"` restores
+Douglas-Peucker.
+
+Final output: outer ring median 5.5 vertices (human 6.0), hole ring 4.0 (human
+4.0), 8.0 total per instance (human 7.5), from a raw contour of 284.
+
 **Two things to know before changing this.**
 
 - **Filter hole components by RELATIVE area, not a pixel count.** The decoder's
