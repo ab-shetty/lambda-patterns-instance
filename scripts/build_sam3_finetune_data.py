@@ -48,6 +48,10 @@ def load_pool(pool, min_area):
             insts.append({
                 "bbox_xyxy": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
                 "outer_polygon": [round(float(v), 2) for v in seg[0]],
+                # kept so a hole model can be trained: the outer ring alone caps
+                # >=0.8 at 86.7% against the true annotation, and holed regions
+                # score 14.3% there
+                "hole_polygons": [[round(float(v), 2) for v in hp] for hp in seg[1:]],
                 "n_holes": len(seg) - 1,
                 "category_name": a.get("category_name", "pattern"),
                 "area_px": int(outer.sum())})

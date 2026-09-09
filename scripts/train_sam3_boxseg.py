@@ -38,11 +38,26 @@ def jitter(box, W, H, frac, rng):
     return [max(0.0, j[0]), max(0.0, j[1]), min(W - 1.0, j[2]), min(H - 1.0, j[3])]
 
 
-def targets_for(scene, res=MASK_RES):
+def _hole_union(inst, H, W):
+    """Union of an instance's holes. NOT render_instance_mask: that treats the
+    first polygon as an outer ring and subtracts the rest, where here every
+    polygon is a hole and they are OR-ed together."""
+    m = np.zeros((H, W), np.uint8)
+    for hp in inst.get("hole_polygons", []):
+        pts = np.asarray(hp, np.float32).reshape(-1, 2).astype(np.int32)
+        if len(pts) >= 3:
+            cv2.fillPoly(m, [pts], 1)
+    return m
+
+
+def targets_for(scene, res=MASK_RES, target="outer"):
     H, W = scene["height"], scene["width"]
     out = []
     for inst in scene["instances"]:
-        m = render_instance_mask([inst["outer_polygon"]], H, W).astype(np.uint8)
+        if target == "holes":
+            m = _hole_union(inst, H, W)
+        else:
+            m = render_instance_mask([inst["outer_polygon"]], H, W).astype(np.uint8)
         out.append(cv2.resize(m, (res, res), interpolation=cv2.INTER_AREA))
     return np.stack(out).astype(np.float32)
 
@@ -85,6 +100,38 @@ def evaluate(model, proc, scenes, dev, jitter_frac, seed=7, multimask=False):
     return (np.array(mask_ious), np.array(poly_ious), np.array(verts))
 
 
+@torch.no_grad()
+def evaluate_holes(model, proc, scenes, dev, jitter_frac, seed=7):
+    """Mask IoU of the predicted hole union. An instance with no holes has an
+    empty target: predicting empty scores 1.0, predicting anything scores 0.0,
+    so false holes on solid walls are punished as hard as missed ones."""
+    rng = np.random.default_rng(seed)
+    all_iou, holed_iou, solid_ok = [], [], []
+    for s in scenes:
+        im = Image.open(s["image"]).convert("RGB")
+        W, H = im.size
+        boxes = [jitter(i["bbox_xyxy"], W, H, jitter_frac, rng) for i in s["instances"]]
+        inp = proc(images=im, input_boxes=[boxes], return_tensors="pt").to(dev)
+        out = model(pixel_values=inp["pixel_values"], input_boxes=inp["input_boxes"],
+                    multimask_output=False)
+        masks = proc.post_process_masks(out.pred_masks.cpu(), inp["original_sizes"].cpu())[0]
+        for k, inst in enumerate(s["instances"]):
+            gt = _hole_union(inst, H, W).astype(bool)
+            mk = masks[k].numpy()
+            mk = (mk if mk.ndim == 2 else mk[0]).astype(bool)
+            # a hole only counts inside its own region
+            mk &= render_instance_mask([inst["outer_polygon"]], H, W).astype(bool)
+            if gt.sum() == 0:
+                v = 1.0 if mk.sum() == 0 else 0.0
+                solid_ok.append(v)
+            else:
+                v = float((mk & gt).sum()) / max(1, int((mk | gt).sum()))
+                holed_iou.append(v)
+            all_iou.append(v)
+    return (np.array(all_iou), np.array(holed_iou),
+            np.array(solid_ok) if solid_ok else np.array([1.0]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/sam3_ft")
@@ -94,6 +141,9 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.08)
     ap.add_argument("--max-boxes", type=int, default=12, help="cap boxes per forward (memory)")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--target", default="outer", choices=["outer", "holes"],
+                    help="'holes' trains the subtractive second model: same box "
+                         "prompt, target is the union of that region's holes")
     ap.add_argument("--aug", default="none", choices=sorted(PRESETS),
                     help="sheet augmentation arm (scripts/sam3_augment.py); "
                          "'none' reproduces the 2026-09-08 result")
@@ -117,13 +167,34 @@ def main():
     print(f"train {len(train)} images / {sum(len(s['instances']) for s in train)} instances | "
           f"val {len(val)} images / {sum(len(s['instances']) for s in val)} instances")
 
+    def val_report(ep_label):
+        """-> (score used for checkpointing, printable line, history entry)"""
+        if args.target == "holes":
+            a, h, so = evaluate_holes(model, proc, val, dev, args.jitter, seed=args.seed)
+            # weight the two failure modes equally: missing a real hole, and
+            # inventing one on a solid wall. A plain mean would be dominated by
+            # the 79% of instances that have no holes at all.
+            sc = 0.5 * float(h.mean()) + 0.5 * float(so.mean())
+            line = (f"{ep_label}: hole IoU {h.mean():.4f} (n={len(h)})  "
+                    f"solid-clean {so.mean():.1%}  score {sc:.4f}")
+            e = {"hole_iou": float(h.mean()), "solid_clean": float(so.mean()),
+                 "score": sc, "poly_median": sc, "mask_mean": float(a.mean()),
+                 "ge80": float((h >= .8).mean())}
+        else:
+            mi, pi, vv = evaluate(model, proc, val, dev, args.jitter, seed=args.seed)
+            sc = float(np.median(pi))
+            line = (f"{ep_label}: mask {mi.mean():.4f}/{np.median(mi):.4f}  "
+                    f"poly {pi.mean():.4f}/{np.median(pi):.4f}  "
+                    f">=0.8 {(pi>=.8).mean():.1%}  verts {np.median(vv):.0f}")
+            e = {"poly_mean": float(pi.mean()), "poly_median": sc,
+                 "mask_mean": float(mi.mean()), "ge80": float((pi >= .8).mean())}
+        return sc, line, e
+
     model.eval()
-    mi, pi, vv = evaluate(model, proc, val, dev, args.jitter, seed=args.seed)
-    print(f"\nepoch  -1 (zero-shot): mask {mi.mean():.4f}/{np.median(mi):.4f}  "
-          f"poly {pi.mean():.4f}/{np.median(pi):.4f}  >=0.8 {(pi>=.8).mean():.1%}  verts {np.median(vv):.0f}")
-    best = float(np.median(pi)); os.makedirs(args.out, exist_ok=True)
-    hist = [{"epoch": -1, "poly_mean": float(pi.mean()), "poly_median": float(np.median(pi)),
-             "mask_mean": float(mi.mean()), "ge80": float((pi >= .8).mean())}]
+    os.makedirs(args.out, exist_ok=True)
+    best, line, e0 = val_report("\nepoch  -1 (zero-shot)")
+    print(line)
+    hist = [dict(e0, epoch=-1)]
 
     opt = torch.optim.AdamW(train_params, lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
@@ -150,7 +221,7 @@ def main():
             boxes = [jitter(insts[k]["bbox_xyxy"], W, H, args.jitter, rng) for k in idx]
             tgt = torch.from_numpy(targets_for(
                 {"height": H, "width": W,
-                 "instances": [insts[k] for k in idx]})).to(dev)
+                 "instances": [insts[k] for k in idx]}, target=args.target)).to(dev)
             inp = proc(images=im, input_boxes=[boxes], return_tensors="pt").to(dev)
             with torch.no_grad():
                 emb = model.get_image_embeddings(inp["pixel_values"])
@@ -165,25 +236,21 @@ def main():
             tot += float(loss); nb += 1
         sched.step()
         model.eval()
-        mi, pi, vv = evaluate(model, proc, val, dev, args.jitter, seed=args.seed)
-        print(f"epoch {ep:3d}: loss {tot/max(nb,1):.4f}  mask {mi.mean():.4f}/{np.median(mi):.4f}  "
-              f"poly {pi.mean():.4f}/{np.median(pi):.4f}  >=0.8 {(pi>=.8).mean():.1%}  "
-              f"verts {np.median(vv):.0f}  {time.time()-t0:.0f}s", flush=True)
-        hist.append({"epoch": ep, "loss": tot/max(nb,1), "poly_mean": float(pi.mean()),
-                     "poly_median": float(np.median(pi)), "mask_mean": float(mi.mean()),
-                     "ge80": float((pi >= .8).mean())})
-        if np.median(pi) > best:
-            best = float(np.median(pi))
+        sc, line, e = val_report(f"epoch {ep:3d}")
+        print(f"{line}  loss {tot/max(nb,1):.4f}  {time.time()-t0:.0f}s", flush=True)
+        hist.append(dict(e, epoch=ep, loss=tot/max(nb,1)))
+        if sc > best:
+            best = sc
             torch.save({"mask_decoder": model.mask_decoder.state_dict(),
-                        "epoch": ep, "poly_median": best,
-                        "poly_mean": float(pi.mean()), "ge80": float((pi >= .8).mean()),
+                        "epoch": ep, "poly_median": best, "target": args.target,
+                        "poly_mean": e.get("poly_mean", best), "ge80": e["ge80"],
                         "aug": args.aug, "seed": args.seed, "epochs": args.epochs,
                         "jitter": args.jitter, "lr": args.lr,
                         "base_model": "facebook/sam3",
                         "n_train_images": len(train),
                         "n_train_instances": sum(len(s["instances"]) for s in train)},
                        f"{args.out}/best.pth")
-            print(f"   -> saved best (poly median {best:.4f})")
+            print(f"   -> saved best ({args.target} score {best:.4f})")
         json.dump(hist, open(f"{args.out}/history.json", "w"), indent=1)
     print(f"\nbest val polygon IoU (median): {best:.4f}")
 

@@ -64,6 +64,67 @@ data rebuild matched every recorded count (86/282, 28/107, 36/231, 44/247;
 (0.8203/0.8794 mask, 0.7978/0.8564 poly, 71.4%), and the run peaked at **0.8971**
 val polygon median against the recorded 0.897.
 
+## Holes: a second decoder, subtracted (2026-09-09) — +11.2 points end to end
+
+**The reported numbers were scored against the wrong target.** The model
+predicts the outer ring with holes filled and was evaluated against that same
+filled ring, but the labeller needs the holed polygon. Against the TRUE
+annotation the single model is much weaker, and on a holed region it is
+unusable:
+
+| scored against | mean IoU | >= 0.8 |
+|---|---|---:|
+| outer ring (what this file reported) | 0.8818 | 90.8% |
+| **true holed annotation** | 0.8449 | **77.6%** |
+| ... the 21 holed instances only | 0.6782 | **14.3%** |
+
+21% of held-out instances have holes, averaging 21% of the region's area (max
+37%) and 3.3 holes each (max 8). A perfect outer-ring model caps at 86.7%
+against the true annotation, purely from unfilled holes.
+
+**The fix is a second decoder on the same prompt.** Same frozen encoder, same
+4.2M mask-decoder architecture, same box the labeller already drew -- only the
+target changes, to the union of that region's openings. Then
+`region = outer - holes`. **No extra gesture.** Polygon level, vs the true
+annotation:
+
+| | mean | >= 0.8 |
+|---|---|---:|
+| outer only | 0.8449 | 77.6% |
+| **outer - holes** | **0.8698** | **88.8%** |
+| the 21 holed regions, outer only | 0.6781 | 14.3% |
+| **the 21 holed regions, subtracted** | **0.8059** | **71.4%** |
+| the 77 solid regions, outer only | 0.8904 | 94.8% |
+| the 77 solid regions, subtracted | 0.8873 | 93.5% |
+
++11.2 points end to end, recovering 85% of the 13.2-point hole gap, for 1.3
+points given back on solid walls. The hole decoder alone scores 0.774 mask IoU
+on holed regions and leaves 96.1% of solid regions untouched; it emits 87 rings
+against a true 69, and that over-prediction is exactly the solid-wall cost.
+
+```python
+rm = RegionModel(crop_zoom=2, hole_checkpoint=DEFAULT_HOLE_CHECKPOINT)
+segs = rm.segmentation(image, boxes)   # [[outer, hole1, ...], ...] COCO-ready
+```
+
+Published: `abshetty/floz-sam3-labelassist-holes`. The two decoders share one
+loaded encoder and swap the 4.2M decoder between passes, so holes cost a second
+forward, not a second model in memory.
+
+**Two things to know before changing this.**
+
+- **Filter hole components by RELATIVE area, not a pixel count.** The decoder's
+  soft edges fragment into specks. A fixed 16px floor returned 11 rings on a
+  region with 2 real holes; `min_hole_frac` (0.005 of the region) returns 82
+  across the val set against a true 69. The measured numbers above use the
+  relative floor.
+- **Score the checkpoint on both failure modes.** 79% of instances have no holes,
+  so a plain mean is dominated by "predict nothing" and would hide hallucinated
+  openings. The selection score is `0.5 * hole IoU + 0.5 * solid-clean rate`.
+
+Still open: a box-per-hole fallback for the ones it misses. That needs no new
+model -- `RegionModel` is already box -> mask -- so it is a UI affordance.
+
 ## Chaining to RefUNet: one box -> a pattern family (2026-09-09)
 
 76% of held-out instances sit in a family of >1 and one sheet carries a family

@@ -6,10 +6,13 @@ them long before it learns the boundary cue. This module perturbs the *sheet*,
 not just the prompt box -- `train_sam3_boxseg.py` already jittered boxes, which
 varies the prompt but shows the encoder the same 165 pictures every epoch.
 
-Everything here transforms the OUTER POLYGON alongside the pixels and rebuilds
-the box from the warped polygon, so the prompt stays consistent with the target.
-Holes are not carried: the training target is the filled outer ring by design
-(see `build_sam3_finetune_data.py`).
+Everything here transforms an instance's rings -- outer AND holes -- alongside
+the pixels, and rebuilds the box from the warped outer ring, so the prompt stays
+consistent with the target. Holes ride along because the hole model
+(`--target holes`) trains on the same augmented sheets; if they did not receive
+the identical transform, the hole target would drift off the region it belongs
+to. An instance is kept or dropped on its OUTER ring; a hole that leaves the
+frame with it is simply dropped.
 
 **The full dihedral group (hflip, vflip, rot90 x4) is enabled** in `default`.
 The standing argument against vflip and rot90 is that gravity is a real cue on
@@ -54,6 +57,11 @@ def _bbox(a, W, H):
     x1, y1 = a.max(0)
     return [int(max(0, np.floor(x0))), int(max(0, np.floor(y0))),
             int(min(W - 1, np.ceil(x1))), int(min(H - 1, np.ceil(y1)))]
+
+
+def _all(rings):
+    """Every ring of every instance, so one transform touches outers and holes."""
+    return [p for r in rings for p in r]
 
 
 def _keep(a, W, H, min_area, min_inside=0.6):
@@ -116,13 +124,17 @@ def augment(img, instances, rng, cfg=None, min_area=100):
     """
     c = dict(DEFAULT if cfg is None else cfg)
     H, W = img.shape[:2]
-    polys = [_xy(i["outer_polygon"]) for i in instances]
+    # rings[i] = [outer, hole1, ...] for instance i. Holes must ride through
+    # every transform with their outer ring or the hole target desyncs from the
+    # region it belongs to.
+    rings = [[_xy(i["outer_polygon"])] + [_xy(h) for h in i.get("hole_polygons", [])]
+             for i in instances]
     meta = [dict(i) for i in instances]
 
     # ---- horizontal flip -------------------------------------------------
     if rng.random() < c["hflip"]:
         img = np.ascontiguousarray(img[:, ::-1])
-        for p in polys:
+        for p in _all(rings):
             # W - x, not W - 1 - x: `render_instance_mask` truncates vertices to
             # int32, so a vertex at u lands in pixel floor(u) and pixel c covers
             # [c, c+1). Under that corner-origin convention the mirror of u is
@@ -133,14 +145,14 @@ def augment(img, instances, rng, cfg=None, min_area=100):
     # ---- vertical flip ---------------------------------------------------
     if rng.random() < c.get("vflip", 0.0):
         img = np.ascontiguousarray(img[::-1])
-        for p in polys:
+        for p in _all(rings):
             p[:, 1] = H - p[:, 1]
 
     # ---- quarter turns (exact and lossless; they swap the frame) ---------
     if c.get("rot90", 0.0) > 0 and rng.random() < c["rot90"]:
         for _ in range(int(rng.integers(1, 4))):
             img = np.ascontiguousarray(np.rot90(img))     # counter-clockwise
-            for p in polys:
+            for p in _all(rings):
                 x = p[:, 0].copy()
                 p[:, 0] = p[:, 1]        # new_x = y
                 p[:, 1] = W - x          # new_y = W - x  (corner-origin)
@@ -156,14 +168,15 @@ def augment(img, instances, rng, cfg=None, min_area=100):
             img = cv2.warpAffine(img, M, (W, H), flags=cv2.INTER_LINEAR,
                                  borderMode=cv2.BORDER_CONSTANT,
                                  borderValue=(255, 255, 255))
-            for k, p in enumerate(polys):
-                polys[k] = (p @ M[:, :2].T) + M[:, 2]
+            for r in rings:
+                for k, p in enumerate(r):
+                    r[k] = (p @ M[:, :2].T) + M[:, 2]
 
     # ---- zoom-crop around one instance -----------------------------------
     # The encoder is fixed at 1008 square, so this is what buys real resolution
     # on a 3168px sheet rather than just re-showing the same squashed picture.
-    if c["crop"] > 0 and rng.random() < c["crop"] and polys:
-        a = polys[int(rng.integers(len(polys)))]
+    if c["crop"] > 0 and rng.random() < c["crop"] and rings:
+        a = rings[int(rng.integers(len(rings)))][0]
         x0, y0, x1, y1 = a.min(0)[0], a.min(0)[1], a.max(0)[0], a.max(0)[1]
         bw, bh = max(8.0, x1 - x0), max(8.0, y1 - y0)
         z = rng.uniform(*c["crop_zoom"])
@@ -175,12 +188,12 @@ def augment(img, instances, rng, cfg=None, min_area=100):
         cx1, cy1 = int(cx0 + cw), int(cy0 + ch)
         if cx1 - cx0 >= 32 and cy1 - cy0 >= 32:
             sub = img[cy0:cy1, cx0:cx1]
-            shifted = [p - [cx0, cy0] for p in polys]
+            shifted = [[p - [cx0, cy0] for p in r] for r in rings]
             sh, sw = sub.shape[:2]
-            keep = [k for k, p in enumerate(shifted) if _keep(p, sw, sh, min_area)]
+            keep = [k for k, r in enumerate(shifted) if _keep(r[0], sw, sh, min_area)]
             if keep:                      # a crop that loses everything is no crop
                 img = np.ascontiguousarray(sub)
-                polys = [shifted[k] for k in keep]
+                rings = [shifted[k] for k in keep]
                 meta = [meta[k] for k in keep]
                 H, W = sh, sw
 
@@ -206,11 +219,15 @@ def augment(img, instances, rng, cfg=None, min_area=100):
 
     # ---- rebuild polygons and boxes --------------------------------------
     out = []
-    for p, m in zip(polys, meta):
-        if not _keep(p, W, H, min_area):
+    for r, m in zip(rings, meta):
+        if not _keep(r[0], W, H, min_area):
             continue
-        q = np.clip(p, [0, 0], [W, H])       # corner-origin: the frame is [0, W]
+        q = np.clip(r[0], [0, 0], [W, H])    # corner-origin: the frame is [0, W]
+        # a hole that left the frame with its region is simply dropped
+        holes = [np.clip(h, [0, 0], [W, H]) for h in r[1:] if len(h) >= 3]
         m["outer_polygon"] = _flat(q)
+        m["hole_polygons"] = [_flat(h) for h in holes]
+        m["n_holes"] = len(holes)
         m["bbox_xyxy"] = _bbox(q, W, H)
         x0, y0, x1, y1 = m["bbox_xyxy"]
         if x1 - x0 < 4 or y1 - y0 < 4:
