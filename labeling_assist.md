@@ -446,12 +446,35 @@ python3 scripts/sam3_box_to_polygon.py \
   22% more steps than the real-only run ever got. Best 0.8924/82.7% against
   0.9037/86.7%. Killed at epoch 4.
 
-  This does **not** contradict synthetic's value for the product model. That
-  task is reference matching, where synthetic teaches pattern similarity. This
-  task is boundary precision, and the generator draws region edges as clean
-  geometric fills — the wrong boundary prior — while 800 synthetic against 165
-  real puts 83% of the training signal on that prior. Do not re-open without a
-  generator whose edges look like drawn ones.
+  This does **not** contradict synthetic's value for the product model: that
+  task is reference matching, where synthetic teaches pattern similarity, and
+  this one is boundary precision.
+
+  **The measured gap is colour** (2026-09-09). Mean HSV saturation over
+  non-white pixels, and the share of ink that is saturated enough not to be
+  grey:
+
+  | pool | mean saturation | coloured ink | sheets >20% coloured |
+  |---|---:|---:|---:|
+  | **synth 1600** | **0.107** | **29.8%** | **53%** |
+  | real 86 | 0.023 | 3.6% | 9% |
+  | generated 28 | 0.001 | 0.0% | 0% |
+  | gemini 80 | 0.040 | 8.5% | 18% |
+
+  Synthetic is 4.6x more saturated than the real pool and carries 8x the
+  coloured ink, and 800 synthetic sheets against 165 real puts 83% of the
+  training signal on that distribution. Note this is a *different* comparison
+  from the colour work in `synth_progress.md` and
+  `image_generation/README.md`, which measured the GENERATED pools against the
+  real 28 eval set; nobody had compared the v5 synthetic pool against the
+  Roboflow pools.
+
+  An earlier version of this entry blamed the generator drawing "region edges as
+  clean geometric fills — the wrong boundary prior". **That was speculation and
+  was never measured**; the colour gap above is measured and is far larger. The
+  edge-shape hypothesis may still hold, but it is not the recorded reason.
+  Before re-opening synthetic for this task, desaturate the pool and re-run —
+  that is a one-line change and tests the measured gap directly.
 
 - **Holes are not predicted.** A window punched out of a wall stays filled; it is
   cut afterwards as a separate `remove` polygon, which is what the Roboflow
