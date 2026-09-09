@@ -320,16 +320,71 @@ polygon IoU because it is what the labeller actually receives.
 
 ## Reproduce
 
+**Prerequisite: the Roboflow pools.** `build_sam3_finetune_data.py` reads
+`data/roboflow/*-clean`, which a clone does not have. Build them first with the
+"Real data from Roboflow" section of `startup.md` (four projects, then
+`roboflow_to_local.py`, then merge the two Gemini rounds). Verified 2026-09-09:
+86/282, 28/107, 36/231, 44/247 instances, and the manifest below then lands on
+165 train / 767 instances and 29 val / 98 exactly.
+
 ```bash
 pip install --user "transformers>=4.50"          # 5.16.1 verified
-python3 scripts/build_sam3_finetune_data.py --out data/sam3_ft
+set -a; . ~/.env; set +a                         # HF_TOKEN, ROBOFLOW_API_KEY
+PYTHONPATH=. python3 scripts/build_sam3_finetune_data.py --out data/sam3_ft
 #   train 165 images / 767 instances | val 29 images / 98 instances
-PYTHONPATH=. python3 scripts/train_sam3_boxseg.py --epochs 16 --out data/runs/sam3_ft
+```
+
+The three published decoders, ~20 min each on one GH200:
+
+```bash
+# 1. outer ring -> abshetty/floz-sam3-labelassist
+PYTHONPATH=. python3 scripts/train_sam3_boxseg.py   --aug nodihedral --seed 7 --epochs 24 --out data/runs/sam3_nodihedral_s7
+
+# 2. openings -> abshetty/floz-sam3-labelassist-holes
+PYTHONPATH=. python3 scripts/train_sam3_boxseg.py --target holes   --aug nodihedral --seed 7 --epochs 24 --out data/runs/sam3_holes_s7
+
+# 3. click-prompted -> abshetty/floz-sam3-labelassist-clicks
+PYTHONPATH=. python3 scripts/train_sam3_boxseg.py   --prompt point --max-pos 3 --max-neg 2   --aug nodihedral --seed 7 --epochs 24 --out data/runs/sam3_pointneg_s7
+```
+
+Then publish anything worth keeping, or it is not persisted:
+
+```bash
+python3 scripts/publish_sam3.py --checkpoint data/runs/<run>/best.pth \
+  --history data/runs/<run>/history.json --repo abshetty/<name>
+```
+
+Evaluate:
+
+```bash
+PYTHONPATH=. python3 scripts/sam3_crop_probe.py --checkpoint <ck> --zooms 0 1.5 2 3
+PYTHONPATH=. python3 scripts/sam3_holes_eval.py            # outer vs outer-holes
+PYTHONPATH=. python3 scripts/sam3_point_probe.py --checkpoint <ck> --clicks 1 2 3 5
+PYTHONPATH=. python3 scripts/sam3_aug_report.py            # augmentation arms
+bash scripts/sam3_status.sh -w                             # live progress
+```
+
+The RefUNet matcher for the chain (not published; ~35 min, and the chain is not
+adopted -- see above):
+
+```bash
+bash scripts/build_refunet_matcher.sh
 ```
 
 `facebook/sam3` is a gated HF repo; the account behind `HF_TOKEN` must have
 accepted its terms. Loading reports 0 missing / 0 unexpected / 0 mismatched keys
 — the `sam3_video`/`sam3_tracker` type warning it prints is cosmetic.
+
+### What a clone does and does not have
+
+Source, docs and every command above are committed. **Model weights live on the
+HF Hub**, so inference needs no local artifacts. Everything under `data/` is
+git-ignored and is a provenance record, not a file you have: the Roboflow pools,
+the manifests, and every `data/runs/*` checkpoint rebuild from the commands
+above. Experimental arms that were measured and not adopted (`none`, `default`,
+`mixedprompt`, `pointpos`, `mixedneg`, `synth800`) are documented with their
+numbers and rebuild from the same script with different flags; their weights
+were deliberately not published.
 
 ## Use it
 
