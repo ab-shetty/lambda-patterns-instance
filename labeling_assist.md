@@ -185,6 +185,25 @@ extent. The sampler puts half the negatives in a band 8-40px outside the region
 and half inside other labelled regions on the sheet (the confusable-material
 case).
 
+**One decoder for both gestures does not dominate two specialists.** Adding
+negatives to the mixed arm (`--prompt mixed --max-neg 2`) keeps the box almost
+exactly and lifts clicks well above the box-only decoder, but loses to each
+specialist on that specialist's own gesture:
+
+| decoder | box | 5 clicks |
+|---|---|---|
+| box-only (`floz-sam3-labelassist`) | **0.8678 / 86.7%** | 0.8332 / 77.6% |
+| points+negatives (`...-clicks`) | 0.8473 / 78.6% | **0.8850 / 91.8%** |
+| mixed + negatives | 0.8673 / 84.7% | 0.8764 / 86.7% |
+
+So the shipped setup is the **pair**, not the all-rounder. The usual argument for
+one model is memory and it does not apply: the decoders are 4.2M of a 458M
+model and `RegionModel._swap()` already hot-swaps them over one shared frozen
+encoder, which is how the holes path works. Two specialists cost one extra 17 MB
+download and a few ms per swap, and buy +2 points on boxes and +5 on clicks.
+Reach for `--prompt mixed --max-neg 2` only if a single decoder is a hard
+requirement; it is the best all-rounder by a clear margin.
+
 **Mixed prompting is free on boxes.** Training on box AND click alternating per
 sheet scores 85.7% on boxes against the box-only decoder's 86.7% -- inside the
 noise. So supporting clicks costs nothing on the gesture already relied upon.
