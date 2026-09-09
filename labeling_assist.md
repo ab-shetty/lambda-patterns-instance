@@ -463,7 +463,34 @@ python3 scripts/sam3_box_to_polygon.py \
 
   Synthetic is 4.6x more saturated than the real pool and carries 8x the
   coloured ink, and 800 synthetic sheets against 165 real puts 83% of the
-  training signal on that distribution. Note this is a *different* comparison
+  training signal on that distribution.
+
+  **But measure HF14 before concluding synthetic is the odd one out.** The
+  product acceptance set is far more colourful than any Roboflow pool, and
+  synthetic is the pool CLOSEST to it:
+
+  | set | mean saturation | coloured ink | distance from HF14 |
+  |---|---:|---:|---:|
+  | **HF14 (acceptance)** | **0.085** | **19.7%** | — |
+  | synth 1600 | 0.107 | 29.8% | +10.1 pt |
+  | gemini 80 | 0.040 | 8.5% | -11.2 pt |
+  | real 86 | 0.023 | 3.6% | -16.1 pt |
+
+  (HF14's 14-image validation complement reads the same, 17.6%, so this is the
+  eval distribution and not a quirk of the acceptance split. Three HF14 sheets
+  are 59-72% coloured ink.)
+
+  So "synthetic is too colourful" holds only against **this track's val set**,
+  which is 29 Roboflow sheets at 3.6% coloured ink -- and that val set is itself
+  unrepresentative of the drawings the product is scored on. Two consequences,
+  and the second is the one that matters:
+
+  1. It is consistent with synthetic helping the product model, which is scored
+     on HF14, while hurting here, where it is scored on near-monochrome sheets.
+  2. **The labelling numbers in this file are measured on a near-monochrome
+     val set.** Around a fifth of real sheets are colourised; none of the 88.8%,
+     91.8% or 90.8% figures test that case. Before trusting them on a colourised
+     drawing, build a val split that contains some. Note this is a *different* comparison
   from the colour work in `synth_progress.md` and
   `image_generation/README.md`, which measured the GENERATED pools against the
   real 28 eval set; nobody had compared the v5 synthetic pool against the
