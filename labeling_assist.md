@@ -64,6 +64,51 @@ data rebuild matched every recorded count (86/282, 28/107, 36/231, 44/247;
 (0.8203/0.8794 mask, 0.7978/0.8564 poly, 71.4%), and the run peaked at **0.8971**
 val polygon median against the recorded 0.897.
 
+## Chaining to RefUNet: one box -> a pattern family (2026-09-09)
+
+76% of held-out instances sit in a family of >1 and one sheet carries a family
+of 15, so the BOXES are the labelling cost, not the tracing. The chain:
+user box -> SAM 3 mask -> reference crop sampled inside it -> RefUNet union ->
+connected components -> SAM 3 polygon per component.
+`scripts/sam3_refunet_chain.py`, `--oracle` for the ceiling.
+
+Scored as gestures on the 29 held-out sheets (468 regions, so the hand-drawn
+baseline is 468 boxes):
+
+| matcher | family recall | FP / box | regions from 98 boxes | deletions |
+|---|---:|---:|---:|---:|
+| ORACLE (union IoU 1.0) | 0.913 | 1.32 | 435 | 129 |
+| RefUNet real-165 @1280 (0.63), tuned | 0.612 | 2.11 | 212 | 207 |
+| same, unfiltered | 0.648 | 6.06 | 232 | 594 |
+
+**Not adopted.** At 0.63 the chain buys 212 of 468 regions for 98 boxes but
+costs 207 deletions -- break-even at best. The ceiling is a 44% gesture saving
+(260 vs 468), so the idea is sound and the matcher is the binding constraint.
+
+**Two findings worth keeping.**
+
+- **The size filter is the whole lever.** Requiring a component to be >= 25% of
+  the prompted region's area cuts false proposals 4.7 -> 1.0 for ~0.03 of
+  recall; RefUNet's spurious fragments are small. The probability threshold
+  barely matters (0.35 to 0.80 changes little). Defaults are `--min-frac 0.25
+  --topk 8`.
+- **The oracle's 9% miss is SAM 3, not the matcher.** SAM 3's standalone accept
+  rate is 90.8%; oracle family recall is 91.3%. Converting a perfect union into
+  boxes loses almost no regions. What it does lose is precision -- the 1.32
+  false proposals -- and that is irreducible here, because **a union mask cannot
+  represent the boundary between two touching same-family regions.** No
+  threshold recovers a split that is not in the representation.
+
+So more matcher quality pays up to the ceiling and nothing past it. Going
+further means changing the decomposition -- SAM 3 proposes regions, the matcher
+scores them -- which drops the union->components step and, unlike a union mask,
+lets a proposal carry holes.
+
+**Beware the cheap proxy.** Tuning on component masks at IoU >= 0.5 predicted
+0.90 FP/box; the full chain at >= 0.8 on polygons gave 2.11. SAM 3 tracing a
+fragment box, rather than a region box, is what the proxy misses. Tune on the
+proxy, but confirm on the chain.
+
 ## Inference-time cropping (2026-09-09) — the largest lever found on this track
 
 No retraining. Run the encoder on a window around the prompt box instead of on
