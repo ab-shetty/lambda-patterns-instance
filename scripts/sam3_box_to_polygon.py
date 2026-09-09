@@ -11,11 +11,16 @@ becomes a regularized polygon on the region it encloses.
         --out   data/proposals/<batch>_polygons.coco.json \
         --preview data/proposals/<batch>_preview
 
-Measured on 321 held-out instances (see scripts/regularize_polygon.py): median 7
-vertices at median IoU 0.831 against human polygons, from a hand-drawn box. The
-mask is not hole-aware -- windows punched out of a wall stay filled and are cut
-afterwards as separate `remove` polygons, which is how the Roboflow pipeline
+The mask is not hole-aware -- windows punched out of a wall stay filled and are
+cut afterwards as separate `remove` polygons, which is how the Roboflow pipeline
 already handles them.
+
+This runs the FINE-TUNED decoder through `RegionModel`, with the zoom-crop on by
+default. Until 2026-09-09 it built its own stock `facebook/sam3` and ignored the
+fine-tune entirely, so the batch path was labelling zero-shot: `>=0.8` 71.4%
+where the tuned decoder plus `--crop-zoom 3` measures 91.8%. Pass
+`--checkpoint ""` to get the old zero-shot behaviour back (and note that
+cropping is negative there, so it also forces `--crop-zoom 0`).
 """
 import argparse, json, os, sys
 import numpy as np, cv2, torch
@@ -23,27 +28,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.regularize_polygon import regularize
-
-
-def load_sam3(device):
-    from transformers import Sam3TrackerProcessor, Sam3TrackerModel
-    tok = os.environ.get("HF_TOKEN")
-    proc = Sam3TrackerProcessor.from_pretrained("facebook/sam3", token=tok)
-    model = Sam3TrackerModel.from_pretrained("facebook/sam3", token=tok).to(device).eval()
-    return proc, model
-
-
-def mask_for_box(proc, model, image, box_xyxy, device):
-    """Best-scoring SAM3 mask for one box prompt. Returns HxW bool."""
-    inputs = proc(images=image, input_boxes=[[list(map(float, box_xyxy))]],
-                  return_tensors="pt").to(device)
-    with torch.no_grad():
-        out = model(**inputs, multimask_output=True)
-    masks = proc.post_process_masks(out.pred_masks.cpu(),
-                                    inputs["original_sizes"].cpu())[0][0].numpy()
-    masks = masks if masks.ndim == 3 else masks[None]
-    scores = out.iou_scores.detach().cpu().numpy().reshape(-1)
-    return masks[int(np.argmax(scores[:len(masks)]))].astype(bool)
+from scripts.sam3_region_model import RegionModel, DEFAULT_CHECKPOINT
 
 
 def main():
@@ -57,10 +42,24 @@ def main():
     ap.add_argument("--eps-frac", type=float, default=0.010,
                     help="Douglas-Peucker tolerance as a fraction of perimeter")
     ap.add_argument("--min-area", type=int, default=100)
+    ap.add_argument("--checkpoint", default=None,
+                    help="local .pth/.safetensors or Hub repo id; default is the "
+                         'published decoder. Pass "" for stock zero-shot SAM 3.')
+    ap.add_argument("--crop-zoom", type=float, default=2.0,
+                    help="run the encoder on a window this many times the box's "
+                         "long side (0 = whole sheet). Costs one forward per box "
+                         "instead of per sheet; worth it on a GPU.")
     args = ap.parse_args()
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    proc, model = load_sam3(device)
+    zoom = args.crop_zoom
+    if args.checkpoint == "":                 # explicit zero-shot
+        ck, zoom = None, 0.0
+    else:
+        ck = args.checkpoint if args.checkpoint else DEFAULT_CHECKPOINT
+    rm = RegionModel(checkpoint=ck, eps_frac=args.eps_frac,
+                     crop_zoom=zoom if zoom else None)
+    print(f"decoder: {ck or 'stock zero-shot'}   crop_zoom: {zoom or 'off'}   "
+          f"device: {rm.device}")
 
     # ---- gather {file_name: [box_xyxy, ...]} -------------------------------
     jobs, categories, coco = {}, [], None
@@ -90,7 +89,7 @@ def main():
         out_images.append({"id": iid, "file_name": fn, "width": W, "height": H})
         overlay = np.asarray(image).copy() if args.preview else None
         for box, cat in boxes:
-            m = mask_for_box(proc, model, image, box, device)
+            m = rm.masks(image, [box])[0]
             if m.sum() < args.min_area:
                 skipped += 1; continue
             poly = regularize(m, eps_frac=args.eps_frac)

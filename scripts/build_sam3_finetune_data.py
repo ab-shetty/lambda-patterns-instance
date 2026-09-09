@@ -27,9 +27,46 @@ POOLS = ["data/roboflow/floz-real-pool-v2-clean",
          "data/roboflow/floz-gen-gemini-r23-clean"]
 
 
+def load_pool(pool, min_area):
+    """Read one local-data pool (images/ + annotations/) into scene dicts."""
+    out = []
+    for f in sorted(glob.glob(f"{pool}/annotations/*.json")):
+        d = json.load(open(f))
+        img = os.path.join(pool, "images", d["image"]["file_name"])
+        if not os.path.exists(img):
+            continue
+        H, W = d["image"]["height"], d["image"]["width"]
+        insts = []
+        for a in d["annotations"]:
+            seg = a["segmentation"]
+            if isinstance(seg, str):
+                seg = json.loads(seg)
+            outer = render_instance_mask([seg[0]], H, W).astype(bool)
+            if outer.sum() < min_area:
+                continue
+            ys, xs = np.where(outer)
+            insts.append({
+                "bbox_xyxy": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+                "outer_polygon": [round(float(v), 2) for v in seg[0]],
+                "n_holes": len(seg) - 1,
+                "category_name": a.get("category_name", "pattern"),
+                "area_px": int(outer.sum())})
+        if insts:
+            out.append({"image": img, "width": W, "height": H,
+                        "pool": os.path.basename(pool),
+                        "mode": d.get("mode", "unknown"), "instances": insts})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pools", nargs="*", default=POOLS)
+    ap.add_argument("--train-only-pools", nargs="*", default=[],
+                    help="extra pools that go entirely into train (synthetic). "
+                         "Val stays the real held-out sheets, so adding supply "
+                         "never moves the measuring stick.")
+    ap.add_argument("--max-per-train-only", type=int, default=0,
+                    help="cap images taken from each train-only pool (0 = all)")
     ap.add_argument("--out", default="data/sam3_ft")
     ap.add_argument("--val-frac", type=float, default=0.15)
     ap.add_argument("--min-area", type=int, default=100)
@@ -39,38 +76,27 @@ def main():
     rng = np.random.default_rng(args.seed)
     scenes = []
     for pool in args.pools:
-        for f in sorted(glob.glob(f"{pool}/annotations/*.json")):
-            d = json.load(open(f))
-            img = os.path.join(pool, "images", d["image"]["file_name"])
-            if not os.path.exists(img):
-                continue
-            H, W = d["image"]["height"], d["image"]["width"]
-            insts = []
-            for a in d["annotations"]:
-                seg = a["segmentation"]
-                if isinstance(seg, str):
-                    seg = json.loads(seg)
-                outer = render_instance_mask([seg[0]], H, W).astype(bool)
-                if outer.sum() < args.min_area:
-                    continue
-                ys, xs = np.where(outer)
-                insts.append({
-                    "bbox_xyxy": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
-                    "outer_polygon": [round(float(v), 2) for v in seg[0]],
-                    "n_holes": len(seg) - 1,
-                    "category_name": a.get("category_name", "pattern"),
-                    "area_px": int(outer.sum())})
-            if insts:
-                scenes.append({"image": img, "width": W, "height": H,
-                               "pool": os.path.basename(pool),
-                               "mode": d.get("mode", "unknown"), "instances": insts})
+        scenes.extend(load_pool(pool, args.min_area))
 
     # split by source image
     idx = rng.permutation(len(scenes))
     n_val = max(1, int(round(args.val_frac * len(scenes))))
     val = set(idx[:n_val].tolist())
-    for i, s in enumerate(scenes):
-        s["split"] = "val" if i in val else "train"
+    for i, sc in enumerate(scenes):
+        sc["split"] = "val" if i in val else "train"
+
+    # Train-only pools (synthetic) never enter val: the measuring stick stays
+    # the real held-out sheets, so a gain from added supply is a real gain and
+    # not an easier test set.
+    for pool in args.train_only_pools:
+        extra = load_pool(pool, args.min_area)
+        if args.max_per_train_only and len(extra) > args.max_per_train_only:
+            keep = rng.permutation(len(extra))[:args.max_per_train_only]
+            extra = [extra[k] for k in sorted(keep.tolist())]
+        for sc in extra:
+            sc["split"] = "train"
+        scenes.extend(extra)
+        print(f"train-only: {len(extra):5d} images from {os.path.basename(pool)}")
 
     os.makedirs(args.out, exist_ok=True)
     for split in ("train", "val"):
@@ -91,7 +117,9 @@ def main():
     print("\nby pool:")
     for k, (a, b) in sorted(by_pool.items()):
         print(f"  {k:34} {a:4d} images  {b:5d} instances")
-    json.dump({"pools": args.pools, "val_frac": args.val_frac, "seed": args.seed,
+    json.dump({"pools": args.pools, "train_only_pools": args.train_only_pools,
+               "max_per_train_only": args.max_per_train_only,
+               "val_frac": args.val_frac, "seed": args.seed,
                "n_images": len(scenes),
                "n_instances": sum(len(s["instances"]) for s in scenes),
                "target": "outer ring, holes filled",

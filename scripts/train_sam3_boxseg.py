@@ -21,6 +21,7 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from refmask2former.dataset import render_instance_mask
 from scripts.regularize_polygon import regularize
+from scripts.sam3_augment import PRESETS, augment
 
 MASK_RES = 288
 
@@ -93,7 +94,11 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.08)
     ap.add_argument("--max-boxes", type=int, default=12, help="cap boxes per forward (memory)")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--aug", default="none", choices=sorted(PRESETS),
+                    help="sheet augmentation arm (scripts/sam3_augment.py); "
+                         "'none' reproduces the 2026-09-08 result")
     args = ap.parse_args()
+    aug_cfg = PRESETS[args.aug]
 
     dev = "cuda"
     tok = os.environ.get("HF_TOKEN")
@@ -132,14 +137,20 @@ def main():
         for si in order:
             s = train[si]
             im = Image.open(s["image"]).convert("RGB")
+            insts = s["instances"]
+            if aug_cfg is not None:
+                arr, insts = augment(np.array(im), insts, rng, aug_cfg)
+                if not insts:          # crop lost every region; skip the sheet
+                    continue
+                im = Image.fromarray(arr)
             W, H = im.size
-            idx = np.arange(len(s["instances"]))
+            idx = np.arange(len(insts))
             if len(idx) > args.max_boxes:
                 idx = rng.choice(idx, args.max_boxes, replace=False)
-            boxes = [jitter(s["instances"][k]["bbox_xyxy"], W, H, args.jitter, rng) for k in idx]
+            boxes = [jitter(insts[k]["bbox_xyxy"], W, H, args.jitter, rng) for k in idx]
             tgt = torch.from_numpy(targets_for(
                 {"height": H, "width": W,
-                 "instances": [s["instances"][k] for k in idx]})).to(dev)
+                 "instances": [insts[k] for k in idx]})).to(dev)
             inp = proc(images=im, input_boxes=[boxes], return_tensors="pt").to(dev)
             with torch.no_grad():
                 emb = model.get_image_embeddings(inp["pixel_values"])
@@ -164,7 +175,14 @@ def main():
         if np.median(pi) > best:
             best = float(np.median(pi))
             torch.save({"mask_decoder": model.mask_decoder.state_dict(),
-                        "epoch": ep, "poly_median": best}, f"{args.out}/best.pth")
+                        "epoch": ep, "poly_median": best,
+                        "poly_mean": float(pi.mean()), "ge80": float((pi >= .8).mean()),
+                        "aug": args.aug, "seed": args.seed, "epochs": args.epochs,
+                        "jitter": args.jitter, "lr": args.lr,
+                        "base_model": "facebook/sam3",
+                        "n_train_images": len(train),
+                        "n_train_instances": sum(len(s["instances"]) for s in train)},
+                       f"{args.out}/best.pth")
             print(f"   -> saved best (poly median {best:.4f})")
         json.dump(hist, open(f"{args.out}/history.json", "w"), indent=1)
     print(f"\nbest val polygon IoU (median): {best:.4f}")
