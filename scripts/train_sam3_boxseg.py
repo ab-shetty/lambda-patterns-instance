@@ -38,6 +38,46 @@ def jitter(box, W, H, frac, rng):
     return [max(0.0, j[0]), max(0.0, j[1]), min(W - 1.0, j[2]), min(H - 1.0, j[3])]
 
 
+def interior_points(mask, n, rng, keep_frac=0.5):
+    """`n` clicks inside `mask`, biased away from the boundary by a distance
+    transform. A person clicks somewhere obviously inside a region, not on its
+    edge, so uniform sampling over the mask would model the gesture badly."""
+    d = cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 5)
+    if d.max() <= 0:
+        return []
+    ys, xs = np.where(d >= keep_frac * d.max())
+    if len(xs) == 0:
+        ys, xs = np.where(mask)
+    idx = rng.choice(len(xs), size=min(n, len(xs)), replace=False)
+    return [[int(xs[i]), int(ys[i])] for i in idx]
+
+
+def negative_points(region, others, n, rng, band=(8, 40)):
+    """`n` clicks meaning "not this region".
+
+    Half come from a band just OUTSIDE the boundary and half from other labelled
+    regions on the sheet. The band is the informative half: a single positive
+    click cannot say where a region ends -- on repeating siding it is equally
+    consistent with one course, one panel, or the whole wall -- and a negative
+    just past the edge supplies exactly that missing extent.
+    """
+    if n <= 0:
+        return []
+    d = cv2.distanceTransform((~region).astype(np.uint8), cv2.DIST_L2, 5)
+    ys, xs = np.where((d >= band[0]) & (d <= band[1]))
+    pts = []
+    n_band = n if others is None or not others.any() else (n + 1) // 2
+    if len(xs):
+        idx = rng.choice(len(xs), size=min(n_band, len(xs)), replace=False)
+        pts += [[int(xs[i]), int(ys[i])] for i in idx]
+    if others is not None and others.any() and len(pts) < n:
+        oy, ox = np.where(others & ~region)
+        if len(ox):
+            idx = rng.choice(len(ox), size=min(n - len(pts), len(ox)), replace=False)
+            pts += [[int(ox[i]), int(oy[i])] for i in idx]
+    return pts[:n]
+
+
 def _hole_union(inst, H, W):
     """Union of an instance's holes. NOT render_instance_mask: that treats the
     first polygon as an outer ring and subtracts the rest, where here every
@@ -141,6 +181,15 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.08)
     ap.add_argument("--max-boxes", type=int, default=12, help="cap boxes per forward (memory)")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--prompt", default="box", choices=["box", "point", "mixed"],
+                    help="gesture the decoder is trained on. 'mixed' alternates "
+                         "per sheet so one decoder serves both a drag and a click.")
+    ap.add_argument("--max-pos", type=int, default=3,
+                    help="positive clicks per instance; drawn 1..max each sheet")
+    ap.add_argument("--max-neg", type=int, default=0,
+                    help="negative clicks per instance, drawn 0..max each sheet. "
+                         "Without these the decoder never sees a negative in "
+                         "training but is handed them at inference.")
     ap.add_argument("--target", default="outer", choices=["outer", "holes"],
                     help="'holes' trains the subtractive second model: same box "
                          "prompt, target is the union of that region's holes")
@@ -218,15 +267,55 @@ def main():
             idx = np.arange(len(insts))
             if len(idx) > args.max_boxes:
                 idx = rng.choice(idx, args.max_boxes, replace=False)
-            boxes = [jitter(insts[k]["bbox_xyxy"], W, H, args.jitter, rng) for k in idx]
             tgt = torch.from_numpy(targets_for(
                 {"height": H, "width": W,
                  "instances": [insts[k] for k in idx]}, target=args.target)).to(dev)
-            inp = proc(images=im, input_boxes=[boxes], return_tensors="pt").to(dev)
+            # gesture is chosen per SHEET, not per instance: one processor call
+            # takes one prompt type, and padding a ragged mix buys nothing here
+            use_pt = (args.prompt == "point" or
+                      (args.prompt == "mixed" and rng.random() < 0.5))
+            if use_pt:
+                # counts are drawn once per sheet: one processor call takes a
+                # rectangular points tensor, so every instance in this forward
+                # must carry the same number of clicks
+                n_pos = int(rng.integers(1, args.max_pos + 1))
+                n_neg = int(rng.integers(0, args.max_neg + 1)) if args.max_neg else 0
+                all_outer = (np.logical_or.reduce(
+                    [render_instance_mask([insts[k]["outer_polygon"]], H, W).astype(bool)
+                     for k in idx]) if args.max_neg else None)
+                pts, labs = [], []
+                for k in idx:
+                    region = render_instance_mask(
+                        [insts[k]["outer_polygon"]], H, W).astype(bool)
+                    solid = render_instance_mask(
+                        [insts[k]["outer_polygon"]] + insts[k].get("hole_polygons", []),
+                        H, W).astype(bool)
+                    p = interior_points(solid if solid.any() else region, n_pos, rng)
+                    if not p:                      # degenerate: fall back to centre
+                        x0, y0, x1, y1 = insts[k]["bbox_xyxy"]
+                        p = [[int((x0 + x1) / 2), int((y0 + y1) / 2)]]
+                    while len(p) < n_pos:          # keep the tensor rectangular
+                        p.append(p[-1])
+                    l = [1] * n_pos
+                    if n_neg:
+                        neg = negative_points(region, all_outer, n_neg, rng)
+                        while len(neg) < n_neg:
+                            neg.append(neg[-1] if neg else p[0])
+                        l = l + [0] * n_neg
+                        p = p + neg
+                    pts.append(p); labs.append(l)
+                inp = proc(images=im, input_points=[pts], input_labels=[labs],
+                           return_tensors="pt").to(dev)
+            else:
+                boxes = [jitter(insts[k]["bbox_xyxy"], W, H, args.jitter, rng)
+                         for k in idx]
+                inp = proc(images=im, input_boxes=[boxes], return_tensors="pt").to(dev)
             with torch.no_grad():
                 emb = model.get_image_embeddings(inp["pixel_values"])
             out = model(image_embeddings=[e.detach() for e in emb],
-                        input_boxes=inp["input_boxes"], multimask_output=False)
+                        input_points=inp.get("input_points"),
+                        input_labels=inp.get("input_labels"),
+                        input_boxes=inp.get("input_boxes"), multimask_output=False)
             logits = out.pred_masks[0, :, 0]                     # [N, 288, 288]
             loss = dice_bce(logits.float(), tgt)
             opt.zero_grad(set_to_none=True)
@@ -244,7 +333,9 @@ def main():
             torch.save({"mask_decoder": model.mask_decoder.state_dict(),
                         "epoch": ep, "poly_median": best, "target": args.target,
                         "poly_mean": e.get("poly_mean", best), "ge80": e["ge80"],
-                        "aug": args.aug, "seed": args.seed, "epochs": args.epochs,
+                        "aug": args.aug, "prompt": args.prompt,
+                        "max_pos": args.max_pos, "max_neg": args.max_neg,
+                        "seed": args.seed, "epochs": args.epochs,
                         "jitter": args.jitter, "lr": args.lr,
                         "base_model": "facebook/sam3",
                         "n_train_images": len(train),

@@ -149,6 +149,53 @@ Final output: outer ring median 5.5 vertices (human 6.0), hole ring 4.0 (human
 Still open: a box-per-hole fallback for the ones it misses. That needs no new
 model -- `RegionModel` is already box -> mask -- so it is a UI affordance.
 
+## Clicks vs boxes (2026-09-09): negatives are what make a click work
+
+A box is a drag that must enclose the region; a click is one event that only has
+to land inside. `scripts/sam3_point_probe.py` prices them, sampling clicks from
+the region interior by distance transform (and from the region with holes
+removed -- a labeller selecting a wall clicks on wall, never through a window).
+Corrective clicks go in the largest area the current prediction gets wrong,
+labelled 1 to add a missed area or 0 to remove a false one.
+
+Polygon IoU mean, 29 held-out sheets, `--prompt` is what the decoder trained on:
+
+| decoder | 1 click | 2 | 3 | 5 | box |
+|---|---:|---:|---:|---:|---:|
+| box only (shipped) | 0.6435 | 0.8087 | 0.8141 | 0.8332 | **0.8678** |
+| mixed, 1 positive | 0.7361 | 0.8067 | 0.8067 | 0.8388 | 0.8648 |
+| points, 1-3 positive | 0.7531 | 0.8036 | 0.8367 | 0.8559 | 0.8554 |
+| **points + 1-2 NEGATIVE** | 0.7383 | 0.8166 | 0.8610 | **0.8850** | 0.8473 |
+
+At `>= 0.8`, points+negatives with 5 clicks reaches **91.8%** against the box's
+86.7%.
+
+**The result is in the scaling, not the level.** Every arm without negative
+training saturates -- the box-trained decoder goes 0.809 -> 0.814 -> 0.833 over
+2 to 5 clicks and buys almost nothing. The negatives arm climbs the whole way,
+0.817 -> 0.861 -> 0.885. Training on negatives is what makes a corrective click
+corrective: without it the model is handed a signal at inference that it never
+learned to read, which was a straight train/test mismatch in the first two arms.
+
+Why it should work: a single positive click cannot say where a region *ends*. On
+repeating siding it is equally consistent with one course, one panel or the
+whole wall -- the same ambiguity that gives SAM 3's PCS 0.308 on the product
+task. A negative click just past the boundary supplies exactly that missing
+extent. The sampler puts half the negatives in a band 8-40px outside the region
+and half inside other labelled regions on the sheet (the confusable-material
+case).
+
+**Mixed prompting is free on boxes.** Training on box AND click alternating per
+sheet scores 85.7% on boxes against the box-only decoder's 86.7% -- inside the
+noise. So supporting clicks costs nothing on the gesture already relied upon.
+
+**What this does and does not buy.** On gesture count the box still wins for an
+ordinary region: 5 clicks is 5 gestures against one drag. What changed is the
+achievable ceiling -- clicks can now exceed what a box reaches, which makes them
+the right tool for the ~13% of regions a box gets wrong, not a replacement for
+it. Note also that the corrective clicks here are placed using ground truth to
+find the worst error, so these are an upper bound on a real user.
+
 ## Chaining to RefUNet: one box -> a pattern family (2026-09-09)
 
 76% of held-out instances sit in a family of >1 and one sheet carries a family
