@@ -48,6 +48,10 @@ converged checkpoint, repeatedly. On `mix6676_with_r4` seed 31 (one seed):
 | **20 (+2 restarts, peak)** | 0.8615 | **0.8127** |
 | 28 (+2 restarts, final) | 0.8762 | 0.8064 |
 
+The epoch-20 checkpoint is published: `abshetty/floz-refunet-warmrestart-e20`
+(private HF Hub repo, `scripts/publish_refunet.py`) — the machine that trained
+it is gone, this is the only surviving copy.
+
 Real gain through epoch 20 (+0.033 over the documented recipe's own epoch 8),
 then a plateau: epochs 22-28 kept climbing on train (0.85->0.88) without val
 following past the epoch-20 peak — the overfitting signature, just not a
@@ -76,7 +80,9 @@ crossattn` on `train_refunet.py`. On `mix6676_with_r4` seed 31:
 Gaps of −0.005 and +0.001 respectively — a clean tie under two different
 training regimes now, not just one. RefUNet went on to a second restart (peak
 0.8127 at epoch 20); crossattn's second restart wasn't run — that's the natural
-next step, from `ck_crossattn_mixr4_res2048_seed31_cont/epoch_18.pth`.
+next step. The epoch-17 checkpoint is published:
+`abshetty/floz-refunet-crossattn-e17` (same reason as above); the machine's
+`epoch_18.pth` to continue from is not.
 
 This is NOT the same territory as `--corr-grid` (screened negative, monotonic
 with matching precision): corr-grid only ever produced similarity *scores* as
@@ -169,6 +175,9 @@ are implemented but screened negative — read the warnings before touching eith
 - `refmask2former/ref_unet.py` — shared backbone, conditioning blocks, FPN mask.
 - `refmask2former/ref_attn_unet.py` — cross-attention conditioning variant
   (2026-09-17, item 3 above); `--model crossattn` on `train_refunet.py`.
+- `scripts/publish_refunet.py` — publish a `RefUNet`/`RefCrossAttnUNet`
+  checkpoint to the HF Hub as safetensors, mirroring `publish_sam3.py`'s
+  rationale: `data/runs/` doesn't survive the machine, a Hub repo does.
 - `refmask2former/dataset.py` — `sample_reference_box` (fixed) and
   `sample_reference_box_legacy`; `render_instance_mask` hole convention.
 - `scripts/train_refunet.py` — union targets, BCE + Dice, continuation
