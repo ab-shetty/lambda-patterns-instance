@@ -148,6 +148,12 @@ Verified working stack: Python 3.10.12, torch 2.7.0, torchvision 0.22.0,
 datasets 5.0.1, OpenCV 4.10.0, Pillow 12.3.0, numpy 1.26.4, shapely 2.1.2, on one
 NVIDIA GH200 with 64 CPUs. Minor nondeterminism can change the last decimals.
 
+**Install `roboflow` together with `requirements.txt`, not separately** (the
+command above already does this). `roboflow` alone pulls numpy 2.x, which
+breaks the system `torch`/`scipy` install (compiled against numpy 1.x) with
+`ValueError: numpy.dtype size changed`. If this happens, rerun
+`pip install --user -r requirements.txt` to re-pin numpy `<2.0.0`.
+
 Anything that runs `generate_synthetic_v5.py` also needs the curated tiles, which
 are a separate HF dataset and are **not** fetched by the commands above:
 
@@ -253,6 +259,23 @@ These are the two Gemini rounds; 80 of the 100 generated were worth labelling.
 Merge the two clean dirs into `floz-gen-gemini-r23-clean` before augmenting, so
 the 18x replication and the `item_XXXXXX` renaming stay deterministic.
 
+A fourth round, labelled and pulled 2026-09-17, **tested and NOT adopted** (null
+result, see "Durable comparison points" below — do not re-add without a reason
+beyond "more Gemini data"). It had no version yet:
+
+```bash
+rf.project("floz-gen-gemini-r4").generate_version(settings={"augmentation": {}, "preprocessing": {}})
+# wait for generation, then:
+rf.project("floz-gen-gemini-r4").version(1).download(
+    "coco-segmentation", location="data/roboflow/floz-gen-gemini-r4-raw", overwrite=True)
+# 88 images, 929 annotations -> roboflow_to_local.py -> 88 images, 612 instances,
+# 317 remove polygons attached 317 times
+```
+
+If picking this thread back up, merge as `floz-gen-gemini-r234-clean` (168
+images) rather than replacing r23, so the null result's baseline (`r23`) stays
+rebuildable.
+
 `floz-generated-realistic-label-pool` v1 holds the 28 salvageable, hand-labelled
 images from the AI-generation batch. If it has no version yet, generate one with
 **no preprocessing and no augmentation** — resizing and offline augmentation are
@@ -344,6 +367,17 @@ file). At 2048 both mixes were still improving at the final epoch, where at 1280
 they peaked mid-run and declined -- higher resolution delays overfitting. A
 16-epoch schedule was tried and is **null**: 0.7568 ± 0.0090 against 0.7594 ±
 0.0191 at 9 epochs. One seed showed +0.017 and the second erased it; keep 9.
+
+**That null is about ONE long schedule, not about whether more training helps
+at all (2026-09-17, one seed, not yet adopted).** Instead of one continuously-
+annealing cosine, reset the optimizer and give a fresh cosine restart from a
+converged checkpoint, repeatedly (`--reset-optimizer --init-from <checkpoint>`,
+same as the documented two-phase recipe already does once). On `mixr4` seed 31:
+val-complement climbed from 0.7924 (documented recipe's epoch 8) to a peak of
+**0.8127 at epoch 20** (two restarts, ~20 total epochs), then plateaued through
+epoch 28 (train mIoU kept rising 0.85→0.88 without val following — the
+overfitting signature, not a blowup). One seed; needs replication before it
+changes this recipe. See `codex_doc.md` (2026-09-17) and `synth_progress.md`.
 
 **`--compile --pad-grid 512` is optional speed** (1.5x/epoch: channels_last,
 `torch.compile`, bucketed padding, fused AdamW). Bucketed padding enters
@@ -454,14 +488,13 @@ resolution column says otherwise. The sampler column is load-bearing.
 | **`mix5092` (194 sources)** | 1280 | 3 | 0.7097 ± 0.0157 |
 | **`mix5092`** | **2048** | **2** | **0.7594 ± 0.0191** |
 | `mix5092`, 16 ep | 2048 | 2 | 0.7568 ± 0.0090 |
+| `mix6676_with_r4` (282 sources, +88 4th-round Gemini) | 2048 | 2 | 0.7366 val-sel / 0.7702 avg — **null vs. mix5092**, not adopted (2026-09-17) |
 | locally generated synth, `--confusable-prob 1.0` | 1280 | 3 | 0.5787 ± 0.0433 |
 
 Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
 0.0175 and its 2026-08-12 rebuild 0.6954 ± 0.0023; locally generated synth
-without confusable pairs 0.6823 ± 0.0190. Broken-sampler / query-model lineage,
-**not comparable**: synthetic-only 0.5506, Roboflow-only strong18 0.4646, 86
-clean with live flips 0.3494, synth+Roboflow query model 0.5886, `RefUNet`
-0.6127, `mix3148` 0.6001, `mix3652` 0.6331.
+without confusable pairs 0.6823 ± 0.0190. Pre-2026-08-06 (broken sampler) and
+retired query-model numbers: `synth_progress_archive.md`, not comparable here.
 
 ### What the comparisons establish
 
@@ -493,9 +526,10 @@ adding generated sources is now the best-value supply there is.
 
 Train IoU (derived from the Dice term) was still climbing at the final epoch in
 every arm -- `mix5092` reached 0.758 while HF14 turned over at epoch 4. Fitting
-is not the constraint, so bigger models and longer training push the wrong
-lever; `real86only` fits as well as the winning mix (0.749) and scores less than
-half as well. Regularization and data quality are the levers that remain.
+is not the constraint; `real86only` fits as well as the winning mix (0.749) and
+scores less than half as well. Regularization and data quality are the levers
+that remain — **with one 2026-09-17 caveat on "longer training push[es] the
+wrong lever": see "16-epoch schedule" under Train, one seed, not yet adopted.**
 
 ## Evaluation rules
 

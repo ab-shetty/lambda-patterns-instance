@@ -1,98 +1,149 @@
 # Handoff
 
-Last updated: 2026-09-08
+Last updated: 2026-09-17
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-09-08)
+## Pick up here (2026-09-17)
 
-Two things happened this session: the v6d synthetic round was tested on the mix
-and **not adopted**, and a **labelling-assist model** was built, which is a new
-track. Numbers live in `startup.md` (product), `labeling_assist.md` (labelling)
-and `synth_progress.md` (per-experiment history).
+Four things happened this session, on a machine that no longer exists — every
+`data/runs/*` checkpoint named below is gone; only what's written here and in
+`synth_progress.md` survives. **Nothing below is adopted into the documented
+recipe yet.** `synth_progress.md` was also reorganized: the pre-2026-08-06 /
+retired-query-model material is now `synth_progress_archive.md`, actually moved
+out this time rather than relabeled in place.
 
-**1. v6d added to the documented mix: unsettled, not pursued.** Paired 2x2 on one
-GH200, rebuilt from a clean clone (every count matched `startup.md`; `mixbase`
-reproduced at 0.7410 val-selected against the recorded 0.7394). `mixv6d` = mix5092
-+ 1,600 v6d plans, 2048, seeds 7 and 31: **+0.028 val-selected (positive at both
-seeds), null (+0.001) averaged**. At 1.3x the baseline sd that is under the ~2x
-threshold requiring a third seed, so it is not a result. Dropped by decision: the
-gap to the 0.90 target is ~0.14 and source count, not the generator, is what moves
-that. Full entry and the per-epoch traces: `synth_progress.md` (2026-09-08).
+**1. A fourth Gemini round (`floz-gen-gemini-r4`, 88 images) is a clean null.**
+Merged with r2+r3 into `floz-gen-gemini-r234-clean` (168 images), augmented 18x
+(3,024 records), substituted for r23 in the documented mix ->
+`mix6676_with_r4` (6,676 records) vs. baseline `mix5092`, 2 seeds each, 2048px:
 
-**A protocol finding worth keeping from it.** Checkpoint averaging assumes the
-run has plateaued. Both `mixv6d` runs peaked at the *final* epoch where both
-baselines peaked mid-run, and averaging then reads ~0.04 low -- which is the
-entire disagreement between the two selection protocols. **Check whether a run
-has turned over before trusting the averaged number.** Not the step-budget
-effect: v6d had more optimizer steps and still had not converged.
+| protocol | mix5092 | mix6676_with_r4 | Δ |
+|---|---:|---:|---:|
+| val-selected | 0.7443 ± 0.0263 | 0.7366 ± 0.0000 | −0.0077 |
+| averaged (SWA) | 0.7559 ± 0.0147 | 0.7702 ± 0.0172 | +0.0143 |
 
-**2. Labelling assist (`labeling_assist.md`) -- new track.** Roboflow's SAM 3
-Label Assist was rejected in practice because its polygons carry ~284 vertices
-against a human's 5. That is a post-processing problem: Douglas-Peucker takes
-284 -> 7 for 1.7 points of IoU. Fine-tuning SAM 3's mask decoder (encoder frozen,
-41 s/epoch) then took held-out polygon IoU **0.798 -> 0.853 mean, and >=0.8 from
-71.4% to 84.7%**. Checkpoint `data/runs/sam3_ft/best.pth`, entry point
-`scripts/sam3_region_model.py`. One split, one seed -- needs a second before it
-is quoted.
+Sign flips between protocols, both gaps under 1x sd — noise, not signal. r4 is
+stylistically indistinguishable from r2/r3 by `pool_style_stats.py` (same
+generator, same prompt family) and the model already fits r2/r3/r4 equally well
+in-sample (0.850/0.870/0.844 mean IoU) — it isn't under-fit, it's redundant.
+Consistent with the existing finding that the Gemini pool's marginal value
+already shrank to +0.010 (noise) at 2048px before r4 existed. **Do not re-run
+this exact test; a fifth Gemini round would need to look different, not just be
+more of the same.**
 
-**Also settled about SAM 3, so nobody re-derives it:** its vision encoder is
-fixed at **1008x1008**, so it is a poor backbone candidate for the product model
-(whose largest win is training at 2048). And it **cannot do the product task**:
-zero-shot PCS with the reference box as exemplar scores 0.308 on the 52 HF14
-selections against RefUNet's 0.769. Details and the measured negatives are in
-`labeling_assist.md`.
+**2. The documented 9-epoch schedule stops before the real ceiling — found by
+warm-restarting, not by a longer single schedule.** The existing "16-epoch
+schedule is null" finding (`startup.md`) used one continuously-annealing
+cosine. Instead: reset the optimizer and give a **fresh** cosine restart from a
+converged checkpoint, repeatedly. On `mix6676_with_r4` seed 31 (one seed):
 
-**Open, in priority order:**
+| epoch | train mIoU (full-mix sample) | val-complement IoU (14 img / 77 sel) |
+|---|---:|---:|
+| 8 (documented recipe's last epoch) | — | 0.7924 |
+| 18 (+1 restart, 10 epochs) | 0.8704 | 0.7993 |
+| **20 (+2 restarts, peak)** | 0.8615 | **0.8127** |
+| 28 (+2 restarts, final) | 0.8762 | 0.8064 |
 
-1. **More labelled sources.** The binding constraint, and the only lever sized to
-   the remaining ~0.14 (28 -> 86 sources bought +0.073; a generated plan is worth
-   1.65x a scraped one). The labelling-assist model exists to make this cheaper;
-   a browser UI on a non-GPU box is the next build.
-2. **Push resolution past 2048.** 2560 is +0.05 at one seed with averaging and
-   the Gemini pool's median long side is 3168px, so 2048 may still be truncating
-   the best data. Cheap, and still the largest per-hour model-side lever.
-3. **Re-measure the per-pool value at 2048.** The Gemini pool is +0.033 at 1280
-   but +0.010 at 2048 with overlapping 2-seed arms. Unresolved as recorded.
-4. **Regularization.** The train/HF14 gap is ~0.09 and widens with epochs;
-   fitting is not the constraint.
+Real gain through epoch 20 (+0.033 over the documented recipe's own epoch 8),
+then a plateau: epochs 22-28 kept climbing on train (0.85->0.88) without val
+following past the epoch-20 peak — the overfitting signature, just not a
+blowup. A further low-LR (5e-6, well under the ~1e-5 floor every restart cosine
+bottoms out at) sustained continuation from epoch 28 also plateaued (HF14 diag
+0.69-0.75, no trend). **One seed. Needs replication before this changes the
+documented recipe**, but it means the 9-epoch number in `startup.md` is
+probably not this setup's ceiling, and checkpoint-averaging's "check whether the
+run has turned over" caution (2026-09-08 entry below) applies to schedule length
+too, not just pool composition.
+
+**3. A cross-attention variant of `RefUNet` exists and ties it at both the
+documented budget AND under extended training.** `refmask2former/ref_attn_unet.py`:
+same ResNet50 backbone, same FPN, same direct-union training objective — only
+the two *coarsest* scales' conditioning changes from global-average-pooled-
+vector-plus-conv (`ConditionBlock`) to multi-head cross-attention (image tokens
+as queries, reference tokens as keys/values, so a location gets a learned blend
+of the reference's actual features instead of one broadcast vector). `--model
+crossattn` on `train_refunet.py`. On `mix6676_with_r4` seed 31:
+
+| | 9 epochs (documented budget) | +1 warm restart (epochs 9-18) |
+|---|---:|---:|
+| RefUNet | val-sel 0.7366 | val-complement 0.7993 (ep 18) |
+| crossattn | val-sel 0.7314 | val-complement 0.8004 (ep 17) / 0.7992 (ep 18) |
+
+Gaps of −0.005 and +0.001 respectively — a clean tie under two different
+training regimes now, not just one. RefUNet went on to a second restart (peak
+0.8127 at epoch 20); crossattn's second restart wasn't run — that's the natural
+next step, from `ck_crossattn_mixr4_res2048_seed31_cont/epoch_18.pth`.
+
+This is NOT the same territory as `--corr-grid` (screened negative, monotonic
+with matching precision): corr-grid only ever produced similarity *scores* as
+extra channels, never aggregated the reference's feature *values*. Full
+attention did not regress the way corr-grid did — parity, not harm — so the
+hypothesis that value-aggregation avoids corr-grid's overfitting-to-spatial-
+correspondence failure is not falsified, just not yet confirmed as a win either.
+
+**4. Visual quality audit of the synthetic generator — new, and it changes how
+much weight the "generator quality" deprioritization should carry.** Full
+write-up and 8 example images: `synth_progress.md` (2026-09-17 entry),
+`synth_quality_audit/`. Every prior synth-vs-real comparison in this project
+(ink, saturation, contrast, aspect, `pool_style_stats.py`) is an aggregate
+statistic; nobody had looked at the images next to real ones until this
+session. v6 (`generate_synthetic_v6.py`) is a real composition improvement over
+v5 (the pool still in the documented mix) — but has a **confirmed bug** (2-story
+level-mark label collision, ~line 1451, one-line fix) and systematically
+implausible material colours (blue clay tile, blue cultured stone, pure-green
+brick — real instances of these materials don't look like that). v6d's own
++0.028 val-selected (2026-09-08 entry) was measured on a generator carrying
+these defects. **The "source count, not the generator" deprioritization in
+priority #1 below was reached from statistics that miss this — it should be
+read as weaker than it was written.** Cheap next step: fix the label-collision
+bug and constrain colourisation to per-material plausible hue ranges, then
+re-measure v6d before drawing a stronger conclusion either way.
+
+**Open, in priority order (revised 2026-09-17):**
+
+1. **Replicate the warm-restart extended-training finding** (item 2 above) at a
+   second seed, and on `mix5092` too (not just the r4-inclusive mix) — this is
+   the single biggest number this session produced and it is one seed.
+2. **More labelled sources**, still the structural constraint — but see item 4
+   above before treating "generator quality doesn't matter" as settled.
+3. **Fix the two confirmed/likely v6 generator defects** (label collision,
+   material-colour plausibility) and re-measure v6d on the mix. Cheap, and the
+   prior null may not have been a fair test of the generator.
+4. **Push resolution past 2048.** Unchanged from 2026-09-08: 2560 is +0.05 at
+   one seed with averaging, Gemini's median long side is 3168px.
+5. **Run crossattn's second warm restart** (item 3 above) — ties RefUNet
+   through the first restart; RefUNet's peak needed a second.
+6. Re-measure the Gemini pool's per-pool value at 2048 (unresolved, +0.033 at
+   1280 vs. +0.010 at 2048) — today's r4 null is consistent with "already near
+   its ceiling at 2048" but doesn't fully resolve it.
+7. Regularization — train/HF14 gap widens with epochs, though item 2's finding
+   complicates "fitting is not the constraint" somewhat: val DID follow train up
+   for 10 extra epochs before plateauing, further than the 9-epoch recipe alone
+   showed.
 
 **Do not re-open:** connectivity, tile-similarity confusables, v6e look-alike
-pairs, orientation snapping in the polygon regularizer, `--anchor`, and SAM 3 as
-a product-task model without fine-tuning it on that task.
+pairs, orientation snapping in the polygon regularizer, `--anchor`, SAM 3 as a
+product-task model without fine-tuning it on that task, and — new this
+session — adding a further same-style Gemini round without a genuinely
+different generator or source (see item 1 above). MixUp (pixel-blending two
+scenes) was reasoned through and not tried: it directly conflicts with the
+project's repeated finding that fine local texture is the signal, so pixel
+blending is expected to actively hurt, not just be neutral.
 
-## Superseded — 2026-08-08 (measurements sound, conclusions retracted)
-
-Share of the target union lying in the connected component holding the user's
-rectangle. Reproduces exactly via `scripts/connectivity_stats.py --hf14`, which
-needs full resolution (at 1024 nearby components merge and it reads 0.558 / 33%).
-
-| pool | share local | single-component |
-|---|---:|---:|
-| synthetic 1600 | 0.893 | 84% |
-| real 86 | 0.523 | 29% |
-| generated 28 | 0.551 | 36% |
-| HF14 (eval) | 0.537 | 27% |
-
-The gap is real. Both conclusions drawn from it are not: the anchor evidence was
-a bug (`synth_progress.md`), and selecting for disconnected families is null at 3 seeds — its
-mode quotas are also unfillable, only 3 of 2,833 all-disconnected images being
-elevations against a quota of 889. Do not re-derive that experiment from here.
-
-**Baseline to compare against.** `data/runs/ck_a10_mix3652_seed31/epoch_4.pth`,
-**0.6801** on HF14, one seed. The documented recipe runs unchanged on a 23GB A10
-(batch 8 at 1280 peaks at 19.3GiB; use `--num-workers 12`), ~55 min for the full
-two-stage run. Single-seed screening only — treat anything under ~0.03 as noise.
-
-**Also worth knowing.** Image 14 is 9 of 52 selections (17% of the metric) and
-averages 0.291; fixing it alone would give +0.105. Its failures are wrong-region,
-not fuzzy-boundary, and are *not* explained by resolution or aspect ratio.
-Two levers were closed this session — see `synth_progress.md`: the auxiliary
-ranking loss (null, +0.007) and classical template matching (`scripts/hatch_matcher.py`
-beats the Gabor probe by a wide margin but is redundant with `RefUNet`).
+Older handoffs (2026-09-08, 2026-08-08) removed 2026-09-17: their substance was
+fully duplicated in `synth_progress.md` (v6d, checkpoint-averaging-plateau
+caution, connectivity/disconnection findings, ranking loss, template matching)
+and `labeling_assist.md` (SAM 3 fine-tuning, its encoder-resolution and
+zero-shot limits), and their priority/do-not-reopen lists were superseded by
+the 2026-09-17 ones above. The two facts that weren't preserved elsewhere —
+image 14's outsized weight in HF14 (9/52 selections, 0.291 mean) and a 2026-08
+A10 GPU memory baseline — are now in `synth_progress.md`; the A10 note was
+dropped as stale (measured at 1280px/19.3GiB, the documented recipe is now
+2048px/~51GB).
 
 ## Facts that live elsewhere
 
@@ -105,8 +156,9 @@ Single copies, so they cannot drift. Do not restate them here.
 | current result, both selection protocols, the checkpoint and its artifacts | `startup.md` |
 | every reproduction command, the data rebuild, the validation split | `startup.md` |
 | evaluation rules and the fixed HF14 indices | `startup.md` |
-| per-experiment history and the screened levers | `synth_progress.md` |
+| per-experiment history and the screened levers | `synth_progress.md` (pre-2026-08-06 / retired query-model material: `synth_progress_archive.md`) |
 | the labelling-assist model, its numbers and its negatives | `labeling_assist.md` |
+| the synthetic generator's visual quality audit and example images | `synth_progress.md` (2026-09-17), `synth_quality_audit/` |
 
 Two standing traps: the reference resize in `refmask2former/dataset.py` looks
 like a bug and "fixing" it costs 0.153, and `--corr-grid` / `--scale-matched-ref`
@@ -115,6 +167,8 @@ are implemented but screened negative — read the warnings before touching eith
 ## Relevant implementation
 
 - `refmask2former/ref_unet.py` — shared backbone, conditioning blocks, FPN mask.
+- `refmask2former/ref_attn_unet.py` — cross-attention conditioning variant
+  (2026-09-17, item 3 above); `--model crossattn` on `train_refunet.py`.
 - `refmask2former/dataset.py` — `sample_reference_box` (fixed) and
   `sample_reference_box_legacy`; `render_instance_mask` hole convention.
 - `scripts/train_refunet.py` — union targets, BCE + Dice, continuation

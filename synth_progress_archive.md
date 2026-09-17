@@ -1,0 +1,222 @@
+# Synthetic Dataset Progress — archive (pre-2026-08-06, broken sampler / query-model lineage)
+
+Archived 2026-09-17 out of `synth_progress.md` to keep that file to
+current, RefUNet-era, fixed-sampler material. Everything below predates the
+2026-08-06 `sample_reference_box` fix (`PROJECT_UNDERSTANDING.md`) and, in the
+earlier sections, predates `RefUNet` itself (the query-model / Mask2Former
+lineage this repo no longer uses — see `README.md`'s top note). Numbers here
+are internally consistent but **not comparable** to anything in the current
+`synth_progress.md`, `startup.md`, or `codex_doc.md`. Kept for provenance only.
+
+## Status of the pre-2026-08-06 material below
+
+Everything below was measured with the pre-2026-08-06 reference-box sampler,
+which could place the user rectangle outside the pattern it sampled. Those
+numbers remain internally consistent and the generator conclusions still hold,
+but they are **not comparable** to anything measured after the fix. See
+`startup.md` for the fix and the current results.
+
+Two further corrections from 2026-08-06:
+
+- The source pools `data/synthetic/faintcad2500` and `data/synthetic/cadneg2500`
+  referenced throughout this file **no longer exist and cannot be rebuilt** — the
+  generator flags that produced them were never committed. Use the 20k HF config
+  via `scripts/hf_to_local.py` instead; the substitution costs ~0.006.
+- The synthetic pools were the one part of the data **never** affected by the
+  sampler bug (0% bad boxes), because their images are 2-5k px wide so 128px
+  reference boxes fit trivially. The bug bit only the 640px real plans.
+
+## Mixed-data successor
+
+The synthetic-only result below remains fully reproducible and is an important
+baseline. The current accepted single-model result now uses the same 1,600
+synthetic images plus 1,548 Roboflow records and reaches **0.6127448856** on the
+same corrected HF14 metric at actual epoch 8. The implementation is the direct
+reference-conditioned `RefUNet`; see `codex_doc.md` and `startup.md` for the
+architecture, exact two-stage schedule, data construction, and evaluation.
+
+Roboflow-only reference points are 0.349361 for 86 originals with live
+flip/rotation and 0.464606 for the strong18 offline pool. These do not change the
+verified synthetic-only outcome documented below.
+
+## Outcome
+
+The synthetic-only target is achieved.
+
+| Requirement | Verified result |
+|---|---|
+| Dataset size | 1,600 unique images |
+| Training inputs | Fully synthetic |
+| Training duration | 10 actual epochs |
+| Real evaluation | Fixed HF14 |
+| Task metric | Reference-conditioned union IoU |
+| Target | `>= 0.55` |
+| Result | **`0.5506125168`** |
+
+Passing checkpoint:
+`data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth`
+
+Authoritative audit:
+`data/evaluations/verified_rank1_hf14/metrics.json`
+
+The audit covers all 14 fixed real images and all 52 annotated reference
+selections. Comparison images are beside the metrics file.
+
+## Dataset construction
+
+Two existing 2,500-image generator pools supply all source images:
+
+- `data/synthetic/faintcad2500`
+- `data/synthetic/cadneg2500`
+
+The canonical 1,600-image selection is:
+
+```bash
+python scripts/select_toparea_local.py \
+  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
+  --out data/synthetic/toparea1600_balanced \
+  --n 1600 \
+  --mode-quotas elevation=889,roof_plan=540,freeform=171
+```
+
+Selection statistics:
+
+```text
+n              1600
+score_min       0.168350
+score_median    0.292692
+score_mean      0.394379
+score_max       0.853069
+elevation       889
+roof_plan       540
+freeform        171
+faintcad        785
+cadneg          815
+```
+
+The high-area curriculum subset is:
+
+```bash
+python scripts/select_toparea_local.py \
+  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
+  --out data/synthetic/toparea750_balanced \
+  --n 750 \
+  --mode-quotas elevation=476,roof_plan=196,freeform=78
+```
+
+All 750 source identities are members of the 1,600-image set. The curriculum
+therefore uses one fully synthetic dataset, starting with its strongest subset.
+
+## Successful ten-epoch curriculum
+
+### Phase 1: joint instance and reference training
+
+Train on the 750-image subset at 1280 px with batch 4. The successful checkpoint
+is `epoch_4.pth`, after five completed epochs. The run was configured with a
+ten-epoch cosine schedule; stop once epoch 4 is saved.
+
+Important model settings:
+
+```text
+num_queries             200
+mask_weight             10
+dice_weight             10
+ref_weight              2
+eos_coef                0.03
+domain_random           true
+ref_siamese_backbone    true
+ref_siamese_level       res3+res5
+seed                     0
+```
+
+Phase-one checkpoint:
+`data/runs/ck_toparea750_hybrid_1280_s0/epoch_4.pth`
+
+### Phase 2: hard reference ranking
+
+Warm-start phase one and train five more epochs on all 1,600 images. Freeze all
+segmentation parameters and update only the Siamese reference projector.
+
+```text
+batch_size              8
+reference_only          true
+ref_ranking_margin      1.0
+lr                      1e-4
+epochs                  5
+```
+
+This completes ten actual epochs. The passing point is phase-two epoch 0, the
+sixth actual epoch, and is retained even though later phase-two checkpoints
+regress slightly.
+
+Full commands are maintained in [`startup.md`](startup.md).
+
+## Acceptance evaluation
+
+```bash
+PYTHONPATH=. python scripts/evaluate_reference_selection.py \
+  --checkpoint data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth \
+  --image-max-size 1280 \
+  --score-thresh 0.6 \
+  --match-margin 0.1 \
+  --out data/evaluations/verified_rank1_hf14
+```
+
+Verified output:
+
+```text
+metric                  reference-conditioned union IoU
+checkpoint_epoch        0 (phase two; sixth actual epoch)
+n_images                14
+n_reference_selections  52
+mean_iou                0.5506125168094088
+```
+
+The model returns separate matched instance masks. The evaluator unions those
+masks only for the strict acceptance calculation.
+
+## Progression to the result
+
+| Experiment | Corrected HF14 IoU | Conclusion |
+|---|---:|---|
+| 500-image res5 Siamese | 0.457807 | Valid initial baseline |
+| 750-image `res3+res5` Siamese | 0.519512 | Fine + coarse reference features matter |
+| 1,600-image joint training | 0.504098 | More data improved masks, not grouping |
+| Ranking margin 2.0 | 0.536815 | Hard-pair ranking was the right loss |
+| Ranking margin 1.0 | **0.550613** | Passed |
+
+## Useful negative evidence (earlier lineage, broken sampler)
+
+These variants were evaluated with the corrected task metric and should not be
+repeated without a materially new hypothesis:
+
+- 1,000-image ordinary top-area training at 1024 or 1280 px
+- all-repeated and 500-plus-250 repeated-image selections
+- preferentially sampling repeated reference categories
+- fine-only `res3` matching
+- feature mean/variance texture statistics
+- a separate frozen ImageNet matching backbone
+- whole-instance and fixed-size ROI ImageNet matching
+- rank fusion, fixed top-k, largest-gap, and two-cluster inference
+- nonlinear pairwise matching head
+- mask-only warm-start fine-tuning
+- reference-only BCE without hard ranking
+- hard-ranking margin 4.0
+
+Mask threshold tuning did not materially improve the baseline. Oracle query
+selection scored about 0.61, showing that instance mask coverage was not the
+main limitation; the winning change had to improve the hardest reference-match
+decisions.
+
+## Operational rules (this lineage)
+
+- Evaluate with the corrected reference-conditioned script, never the old
+  class-agnostic `mean_gt_iou` proxy.
+- Keep every epoch checkpoint for short experiments because the accepted score
+  may occur before the final epoch.
+- Stop a run early when corrected HF14 trajectory makes the target effectively
+  impossible.
+- Use all 64 CPU workers for generation or single-run loading on this GH200 VM.
+- Keep generated data, logs, checkpoints, and audits in the repository workspace
+  under git-ignored directories.
+- Never expose `HF_TOKEN` or `ROBOFLOW_API_KEY` values.

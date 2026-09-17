@@ -1,5 +1,71 @@
 # Synthetic Dataset Progress
 
+## 2026-09-17 — Visual quality audit: the generator looks synthetic in ways the metrics never caught
+
+Every synth-vs-real comparison in this file and `labeling_assist.md` (ink,
+saturation, contrast, aspect, family/instance counts, `pool_style_stats.py`) is
+an aggregate statistic. Nobody had actually looked at the images side by side
+against real ones until now. Examples: `synth_quality_audit/` (repo root).
+
+**v5 (`toparea1600_balanced`, still the pool in the documented `mix5092` /
+`mix6676_with_r4`, i.e. every headline number in `startup.md`).** Roof plans
+render as flat hatched-fill polygons with no per-material texture at all
+(`01_v5_roofplan_flat_fill.png`). Material-texture assignment can be
+structurally wrong: an elevation's roof is filled with a brick/subway-tile grid
+pattern instead of shingle coursing (`02_v5_elevation_brick_pattern_on_roof.png`).
+Against a real elevation from the same pool (`03_...png`) — individually
+rendered shingle courses, lap siding, stone base, proper callouts and title
+block — the gap is not subtle.
+
+**v6 (`generate_synthetic_v6.py`, tested standalone in the entries below but
+never adopted into the documented mix).** Composition is a real improvement:
+townhouse rows, dormers, garages, multi-unit sheets, material callouts with
+leader lines (`05_v6_townhouse_saturated_colours.png`,
+`06_v6_blue_claytile_stone_plus_label_overlap_bug.png`). Two defects found and
+one confirmed in source, none previously documented:
+
+1. **Material colours ignore physical plausibility.** Clay tile and cultured
+   stone both rendered in saturated royal blue (`06_...png`); brick rendered
+   pure saturated green (`07_v6_green_brick_with_markup_dots.png`). Real
+   instances of these materials have a narrow, muted, earthy palette; the
+   colourised-mode palette picks arbitrary saturated hues with no per-material
+   constraint.
+2. **Confirmed bug: 2-story level-mark label collision.**
+   `generate_synthetic_v6.py` ~line 1451-1453: `labels = [("FIN. FLOOR", 0.0),
+   ("T.O. PLATE", -(fh))]`, then for `stories >= 2` appends `("SECOND FLOOR",
+   -fh)` — "T.O. PLATE" and "SECOND FLOOR" land at the identical y-coordinate
+   and render on top of each other, illegibly. Visible in `06_...png`. Not
+   fixed; a one-line offset fix.
+3. **Unexplained:** one roof-plan facet fills with a nested-concentric-rectangle
+   pattern matching no real roofing convention (`08_v6_roofplan_unexplained_concentric_pattern.png`).
+   No `taper`/`drain`/`concentric` logic found in a quick source search — flagged,
+   not confirmed as a bug.
+4. All texture line-work (siding, standing-seam, brick coursing) stays
+   perfectly regular and evenly spaced in both v5 and v6 — no drafting
+   irregularity, no weathering, no line-weight variation. Real and
+   Gemini-generated examples (`04_...png`) show genuine irregularity (no two
+   drawn stones alike). This is likely the single biggest visual tell and
+   nothing in either generator currently addresses it.
+
+**Correction, checked before writing this down:** the scattered dot markup
+visible on some v6 samples (`07_...png`) is *not* a bug — it's
+`DOT_MARKUP_PROB`, an intentional feature simulating highlighter/review markup,
+consistent with `PROJECT_UNDERSTANDING.md`'s note that HF14 images 24/25/27
+carry real markup and robustness to it is a model requirement.
+
+**Why this matters for the "source count vs. generator quality" question below
+and in `codex_doc.md`:** that conclusion was reached from aggregate statistics
+that this audit shows miss the actual, visible defect. v6d's own +0.028
+val-selected (positive at both seeds, `synth_progress.md` 2026-09-08) was
+measured on a generator that still has at least one confirmed rendering bug and
+systematically implausible material colours — the deprioritization of
+"generator quality" versus "more sources" should be treated as resting on a
+weaker foundation than it reads as. Not re-tested this session; the fixes above
+(label-collision offset, constrain colourisation to per-material plausible hue
+ranges, investigate the concentric-fill facet) are cheap and worth doing before
+the next v6 measurement, independent of the texture-irregularity question,
+which is a bigger, unscoped generator change.
+
 ## 2026-09-08 — v6d added to the documented mix: unsettled, not pursued
 
 Paired 2x2 on one GH200, rebuilt from a clean clone (every pipeline count matched
@@ -462,182 +528,15 @@ components merge), `select_disconnected_local.py`, `select_by_connectivity.py`,
 `--elev-repeat-prob` (default 0). Also fixed: `load_refunet` never passed
 `anchor`, so anchored checkpoints could not be loaded outside training.
 
-## Status of the pre-2026-08-06 material below
+## Archived material (pre-2026-08-06 sampler / query-model lineage)
 
-Everything below was measured with the pre-2026-08-06 reference-box sampler,
-which could place the user rectangle outside the pattern it sampled. Those
-numbers remain internally consistent and the generator conclusions still hold,
-but they are **not comparable** to anything measured after the fix. See
-`startup.md` for the fix and the current results.
-
-Two further corrections from 2026-08-06:
-
-- The source pools `data/synthetic/faintcad2500` and `data/synthetic/cadneg2500`
-  referenced throughout this file **no longer exist and cannot be rebuilt** — the
-  generator flags that produced them were never committed. Use the 20k HF config
-  via `scripts/hf_to_local.py` instead; the substitution costs ~0.006.
-- The synthetic pools were the one part of the data **never** affected by the
-  sampler bug (0% bad boxes), because their images are 2-5k px wide so 128px
-  reference boxes fit trivially. The bug bit only the 640px real plans.
-
-## Mixed-data successor
-
-The synthetic-only result below remains fully reproducible and is an important
-baseline. The current accepted single-model result now uses the same 1,600
-synthetic images plus 1,548 Roboflow records and reaches **0.6127448856** on the
-same corrected HF14 metric at actual epoch 8. The implementation is the direct
-reference-conditioned `RefUNet`; see `codex_doc.md` and `startup.md` for the
-architecture, exact two-stage schedule, data construction, and evaluation.
-
-Roboflow-only reference points are 0.349361 for 86 originals with live
-flip/rotation and 0.464606 for the strong18 offline pool. These do not change the
-verified synthetic-only outcome documented below.
-
-## Outcome
-
-The synthetic-only target is achieved.
-
-| Requirement | Verified result |
-|---|---|
-| Dataset size | 1,600 unique images |
-| Training inputs | Fully synthetic |
-| Training duration | 10 actual epochs |
-| Real evaluation | Fixed HF14 |
-| Task metric | Reference-conditioned union IoU |
-| Target | `>= 0.55` |
-| Result | **`0.5506125168`** |
-
-Passing checkpoint:
-`data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth`
-
-Authoritative audit:
-`data/evaluations/verified_rank1_hf14/metrics.json`
-
-The audit covers all 14 fixed real images and all 52 annotated reference
-selections. Comparison images are beside the metrics file.
-
-## Dataset construction
-
-Two existing 2,500-image generator pools supply all source images:
-
-- `data/synthetic/faintcad2500`
-- `data/synthetic/cadneg2500`
-
-The canonical 1,600-image selection is:
-
-```bash
-python scripts/select_toparea_local.py \
-  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
-  --out data/synthetic/toparea1600_balanced \
-  --n 1600 \
-  --mode-quotas elevation=889,roof_plan=540,freeform=171
-```
-
-Selection statistics:
-
-```text
-n              1600
-score_min       0.168350
-score_median    0.292692
-score_mean      0.394379
-score_max       0.853069
-elevation       889
-roof_plan       540
-freeform        171
-faintcad        785
-cadneg          815
-```
-
-The high-area curriculum subset is:
-
-```bash
-python scripts/select_toparea_local.py \
-  --sources data/synthetic/faintcad2500 data/synthetic/cadneg2500 \
-  --out data/synthetic/toparea750_balanced \
-  --n 750 \
-  --mode-quotas elevation=476,roof_plan=196,freeform=78
-```
-
-All 750 source identities are members of the 1,600-image set. The curriculum
-therefore uses one fully synthetic dataset, starting with its strongest subset.
-
-## Successful ten-epoch curriculum
-
-### Phase 1: joint instance and reference training
-
-Train on the 750-image subset at 1280 px with batch 4. The successful checkpoint
-is `epoch_4.pth`, after five completed epochs. The run was configured with a
-ten-epoch cosine schedule; stop once epoch 4 is saved.
-
-Important model settings:
-
-```text
-num_queries             200
-mask_weight             10
-dice_weight             10
-ref_weight              2
-eos_coef                0.03
-domain_random           true
-ref_siamese_backbone    true
-ref_siamese_level       res3+res5
-seed                     0
-```
-
-Phase-one checkpoint:
-`data/runs/ck_toparea750_hybrid_1280_s0/epoch_4.pth`
-
-### Phase 2: hard reference ranking
-
-Warm-start phase one and train five more epochs on all 1,600 images. Freeze all
-segmentation parameters and update only the Siamese reference projector.
-
-```text
-batch_size              8
-reference_only          true
-ref_ranking_margin      1.0
-lr                      1e-4
-epochs                  5
-```
-
-This completes ten actual epochs. The passing point is phase-two epoch 0, the
-sixth actual epoch, and is retained even though later phase-two checkpoints
-regress slightly.
-
-Full commands are maintained in [`startup.md`](startup.md).
-
-## Acceptance evaluation
-
-```bash
-PYTHONPATH=. python scripts/evaluate_reference_selection.py \
-  --checkpoint data/runs/ck_stage750e4_rank1_refonly5/epoch_0.pth \
-  --image-max-size 1280 \
-  --score-thresh 0.6 \
-  --match-margin 0.1 \
-  --out data/evaluations/verified_rank1_hf14
-```
-
-Verified output:
-
-```text
-metric                  reference-conditioned union IoU
-checkpoint_epoch        0 (phase two; sixth actual epoch)
-n_images                14
-n_reference_selections  52
-mean_iou                0.5506125168094088
-```
-
-The model returns separate matched instance masks. The evaluator unions those
-masks only for the strict acceptance calculation.
-
-## Progression to the result
-
-| Experiment | Corrected HF14 IoU | Conclusion |
-|---|---:|---|
-| 500-image res5 Siamese | 0.457807 | Valid initial baseline |
-| 750-image `res3+res5` Siamese | 0.519512 | Fine + coarse reference features matter |
-| 1,600-image joint training | 0.504098 | More data improved masks, not grouping |
-| Ranking margin 2.0 | 0.536815 | Hard-pair ranking was the right loss |
-| Ranking margin 1.0 | **0.550613** | Passed |
+Moved to `synth_progress_archive.md` on 2026-09-17 — not relabeled in place
+this time, actually moved out, because last time's "condensation" was just this
+same marker with the material left sitting below it, and it grew another 280
+lines past that point anyway. That file covers the broken-sampler numbers, the
+retired Mask2Former query-model architecture and curriculum, and their
+superseded negative-evidence list. Not comparable to anything below or in
+`startup.md`; kept for provenance only.
 
 ## Useful negative evidence (2026-08-06, fixed sampler, RefUNet)
 
@@ -692,6 +591,11 @@ selections versus ~0.59 elsewhere: the two fail on the same inputs. An oracle
 that perfectly overrode the 5 selections where `RefUNet` fails and the matcher is
 confident would gain only +0.076.
 
+Image 14 alone is 9 of the 52 HF14 selections (17% of the metric) and averages
+0.291 (2026-08-08); fixing it alone would be worth +0.105. Its failures are
+wrong-region, not fuzzy-boundary, and not explained by resolution or aspect —
+consistent with the intrinsic-confusability finding above.
+
 Three measurements agree that the residual difficulty is intrinsic, not a
 resolution or architecture deficit: 74% of the matcher's false positives are real
 linework a labeller assigned to a different material; no region-recovery scheme
@@ -710,38 +614,5 @@ Two mechanisms worth remembering:
   chance*, because CAD hatch is periodic and NCC is phase-sensitive — and
   phase-invariant Gabor energy only reaches 0.674.
 
-## Useful negative evidence (earlier lineage, broken sampler)
-
-These variants were evaluated with the corrected task metric and should not be
-repeated without a materially new hypothesis:
-
-- 1,000-image ordinary top-area training at 1024 or 1280 px
-- all-repeated and 500-plus-250 repeated-image selections
-- preferentially sampling repeated reference categories
-- fine-only `res3` matching
-- feature mean/variance texture statistics
-- a separate frozen ImageNet matching backbone
-- whole-instance and fixed-size ROI ImageNet matching
-- rank fusion, fixed top-k, largest-gap, and two-cluster inference
-- nonlinear pairwise matching head
-- mask-only warm-start fine-tuning
-- reference-only BCE without hard ranking
-- hard-ranking margin 4.0
-
-Mask threshold tuning did not materially improve the baseline. Oracle query
-selection scored about 0.61, showing that instance mask coverage was not the
-main limitation; the winning change had to improve the hardest reference-match
-decisions.
-
-## Operational rules
-
-- Evaluate with the corrected reference-conditioned script, never the old
-  class-agnostic `mean_gt_iou` proxy.
-- Keep every epoch checkpoint for short experiments because the accepted score
-  may occur before the final epoch.
-- Stop a run early when corrected HF14 trajectory makes the target effectively
-  impossible.
-- Use all 64 CPU workers for generation or single-run loading on this GH200 VM.
-- Keep generated data, logs, checkpoints, and audits in the repository workspace
-  under git-ignored directories.
-- Never expose `HF_TOKEN` or `ROBOFLOW_API_KEY` values.
+(Older negative-evidence list and the retired-architecture operational rules:
+`synth_progress_archive.md`.)

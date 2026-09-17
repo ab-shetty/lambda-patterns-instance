@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from refmask2former import build_datasets, collate_fn, load_local_records, load_parquet_records
 from refmask2former.ref_unet import RefUNet
+from refmask2former.ref_attn_unet import RefCrossAttnUNet
 from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model
 
 
@@ -34,6 +35,15 @@ def parse_args():
     p.add_argument("--image-max-size", type=int, default=1280)
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--width", type=int, default=128)
+    p.add_argument("--model", choices=("unet", "crossattn"), default="unet",
+                   help="unet = RefUNet (global-average conditioning, default). "
+                        "crossattn = RefCrossAttnUNet (multi-head cross-attention "
+                        "conditioning at the two coarsest scales; see "
+                        "refmask2former/ref_attn_unet.py). Ablation-only "
+                        "arguments below (--anchor, --corr-grid, --rank-weight, "
+                        "--self-support, --dynamic-filter) apply to 'unet' only.")
+    p.add_argument("--attn-heads", type=int, default=4,
+                   help="crossattn only: heads in each AttnConditionBlock.")
     p.add_argument("--rank-weight", type=float, default=0.0,
                    help="Auxiliary hard-pair ranking loss on image-local pattern "
                         "identity. 0 = off, giving the exact baseline model.")
@@ -208,15 +218,19 @@ def main():
         generator=generator, **loader_options)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
-    model = RefUNet(args.width, pretrained=args.init_from is None,
-                    corr_grid=args.corr_grid,
-                    metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
-                    anchor=args.anchor,
-                    anchor_dropout=args.anchor_dropout,
-                    anchor_ref_plane=args.anchor_ref_plane,
-                    self_support=args.self_support,
-                    self_support_thresh=args.self_support_thresh,
-                    dynamic_filter=args.dynamic_filter).to(device)
+    if args.model == "crossattn":
+        model = RefCrossAttnUNet(args.width, pretrained=args.init_from is None,
+                                 num_heads=args.attn_heads).to(device)
+    else:
+        model = RefUNet(args.width, pretrained=args.init_from is None,
+                        corr_grid=args.corr_grid,
+                        metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
+                        anchor=args.anchor,
+                        anchor_dropout=args.anchor_dropout,
+                        anchor_ref_plane=args.anchor_ref_plane,
+                        self_support=args.self_support,
+                        self_support_thresh=args.self_support_thresh,
+                        dynamic_filter=args.dynamic_filter).to(device)
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
