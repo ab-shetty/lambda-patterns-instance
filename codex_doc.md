@@ -1,11 +1,76 @@
 # Handoff
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-09-18)
+
+An overnight session on a fresh GH200, rebuilt from a clean clone (every
+pipeline count matched `startup.md`). The machine was killed at ~06:50; every
+`data/runs/*` path below is gone. Two checkpoints were published:
+`abshetty/floz-refunet-res2560-e4` and `abshetty/floz-refunet-synth100k-e1`.
+Full detail and tables: `synth_progress.md` (2026-09-18). **One seed per arm —
+nothing below is adopted into the documented recipe.**
+
+**The three things that matter, in order:**
+
+1. **The model is underfitting, and that reverses a standing conclusion.** On
+   100,000 single-pass procedural plans: 0.837 train / 0.798 fresh-synthetic /
+   0.713 HF14. A train/fresh gap of 0.039 with 100k unique images means it
+   cannot fit its own training distribution — not memorisation. `startup.md`'s
+   "the limit is generalization, not fit" was measured at 3–8k records and does
+   not hold here. At `--width 128` only ~2.4M of 28.0M parameters sit outside
+   the ResNet50 backbone. **The capacity sweep (width 128/256/384,
+   `run_capacity_probe.sh`) was queued and the machine died first — run it
+   first.** If capacity is the limit, every data experiment in this repo has
+   been measuring the wrong axis.
+
+2. **Training at 2560 gave 0.7834 val-selected**, +0.038 over the identical run
+   at 2048 and above the recorded best of 0.7594. One seed, under 2× sd, so not
+   a result until replicated — but it is the strongest single lever found.
+   It selects an early epoch (4), so schedule it short.
+
+3. **Procedural volume pays past 2.5×, then decelerates.** v6d-only 1,600 →
+   12,000 → 100,000 gave 0.6400 → 0.6934 → 0.7130 (+0.053 then +0.020 per ~8×).
+   The recorded volume nulls tested 2–2.5× and were under-powered, not wrong.
+   With enough unique data you need **steps, not epochs**: 100k seen twice beat
+   12k seen eighteen times at fewer steps, and warm restarts are a small-data
+   patch. Do not scale past ~100k — item 1 says the ceiling is now fit and
+   transfer, not supply.
+
+**Two methodological findings worth more than any single number:**
+
+- **The 52 evaluation reference boxes are byte-identical across every run**
+  (verified across epochs, runs and training sets). The eval is 52 fixed
+  questions, so arms can be compared **paired per selection** rather than by
+  means with sd ~0.02. That is much more power at the same compute and nothing
+  in this repo has used it.
+- **77% of the HF14 deficit is four images** (14, 12, 18, 7); the other ten sit
+  at 0.83–0.99 where only boundary precision remains and four boundary methods
+  already measured ~0.000. Median selection IoU is 0.816 against a 0.745 mean —
+  a tail problem. Image 7 is the known reference-box-on-text artefact (~+0.011,
+  do not chase).
+
+**Open, in priority order (revised 2026-09-18):**
+
+1. **The capacity sweep** — `./run_capacity_probe.sh 7`, ~1h. Item 1 above.
+2. **Second seed at 2560**, and whether 3072 continues the trend.
+3. **Close the 0.085 fresh-synthetic → real transfer gap.** This is now the
+   binding term on the synthetic route, and it is a generator-realism problem:
+   the 2026-09-17 audit's open items (texture irregularity, implausible
+   material colours, the 2-story label-collision bug) are unaddressed.
+4. **crossattn on 100k** — it fit better mid-run (dice 0.041 vs RefUNet's
+   0.089) but its epoch-1 number did not finish. The small-data ties tell us
+   nothing; a weak-prior model needs the data regime.
+5. More labelled real sources — still the structural constraint for 0.9.
+
+**Do not re-open:** everything in the 2026-09-17 list, plus — new — synthetic
+volume beyond ~100k plans, and warm restart #2 (both val-selection and
+checkpoint-averaging chose windows inside restart 1 on every run that had two).
 
 ## Pick up here (2026-09-17)
 

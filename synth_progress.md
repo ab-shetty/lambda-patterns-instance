@@ -1,5 +1,111 @@
 # Synthetic Dataset Progress
 
+## 2026-09-18 — Procedural volume, single-pass training, and the fit ceiling
+
+Rebuilt from a clean clone on a fresh GH200 (every pipeline count in
+`startup.md` matched exactly). One seed per arm unless stated; treat all of it
+as screening, not as results.
+
+**1. Synthetic volume works, but only past the scale the old nulls tested.**
+v6d-only, 2048, val-selected HF14:
+
+| pool | steps | repeats/image | HF14 |
+|---:|---:|---:|---:|
+| 1,600 | 5,742 | 29 | 0.6400 |
+| 12,000 | 26,730 | 18 | 0.6934 |
+| 100,000 (single-pass) | 25,000 | 2 | 0.7130 |
+
++0.053 then +0.020 per ~8x -- decelerating by ~60% each time, so the next 8x is
+worth ~+0.008. The two recorded volume nulls (v5 1,600->3,200; v6b
+1,600->4,000) tested 2x and 2.5x jumps at 1280, below where the effect appears.
+They are not wrong, they were under-powered. **0.7130 from procedural plans
+with zero labelled data exceeds `mix5092` at 1280 (0.7097, 3 seeds).**
+
+**2. With enough unique data you need steps, not epochs.** 100,000 plans seen
+TWICE beats 12,000 seen eighteen times, at fewer steps. Warm restarts are
+revealed as a small-data patch -- they recycle a pool that has nothing left to
+teach. No restarts were used in the 100k run.
+
+**3. The grammar does not saturate in pixels but does in teaching.** At 2,000
+drawn plans only ~4% have a near-duplicate (cosine > 0.95) and NN-distance
+scaling implies intrinsic dimension ~23, so draws stay genuinely novel. But the
+model already handles novel draws: see item 4. Pixel novelty that poses no new
+problem is not diversity in the sense that matters. `scripts/fresh_synth_iou.py`.
+
+**4. The model is UNDERFITTING, which contradicts "fitting is not the
+constraint" in `startup.md`.** RefUNet, 100k single-pass, epoch-1 checkpoint:
+
+| measured on | union IoU |
+|---|---:|
+| train images (2nd pass) | 0.837 |
+| fresh synthetic, never seen (400 of the 1,401 held out) | 0.798 |
+| HF14 real | 0.713 |
+
+A train/fresh gap of **0.039** is not memorisation -- at 100k unique plans there
+is nothing to memorise. The model cannot fit its own training distribution.
+The old conclusion was measured on 3-8k records where val turned over; it does
+not hold in this regime. The remaining **0.085 fresh-synthetic -> real** gap is
+domain transfer, and it -- not data volume -- is what caps the synthetic route.
+At `--width 128` the ResNet50 backbone is ~25.6M of 28.0M parameters, leaving
+~2.4M for the reference-conditioned decoder, so capacity is the obvious suspect
+(width 256 -> 39.6M, 384 -> 58.3M). A capacity sweep was queued and the machine
+died first; it is the open question.
+
+**5. Training resolution 2560 beats 2048 (one seed).** Same mix
+(`mix5092` + 3,200 v6d = 8,292), same seed, same schedule:
+
+| res | val | HF14 val-selected |
+|---|---:|---:|
+| 2048 | 0.8119 | 0.7453 (0.7676 averaged) |
+| **2560** | **0.8296** | **0.7834** (epoch 4) |
+
++0.038, above the project's recorded best of 0.7594. One seed and under 2x sd,
+so **not a result yet** -- needs a second seed. Checkpoint published:
+`abshetty/floz-refunet-res2560-e4`. Note it selected epoch 4: at 2560 the run
+peaks early.
+
+**6. Adding 3,200 v6d to the documented mix is null.** 0.7453 val-selected /
+0.7676 averaged vs the recorded 1,600-v6d mix at 0.7667 / 0.7454 -- sign flips
+between protocols, both gaps under 1x sd. Warm restarts to e28 did not help:
+both val-selection and checkpoint-averaging chose windows inside restart 1
+(e13-18), and every restart-2 window scored worse.
+
+**7. Where the HF14 deficit actually is.** Per-selection decomposition of the
+0.745 arm (`metrics_epoch_*.json` carries every selection):
+
+| image | sel | mean IoU | share of deficit |
+|---:|---:|---:|---:|
+| 14 | 9 | 0.466 | 36.3% |
+| 12 | 4 | 0.441 | 16.9% |
+| 18 | 10 | 0.787 | 16.1% |
+| 7 | 1 | 0.001 | 7.5% |
+| the other 10 images | 18 | 0.83-0.99 | 10.4% |
+
+**Four images carry 77%.** The other ten are boundary-precision-only, and four
+boundary methods already screened at ~0.000. Image 7 is the known
+reference-box-on-text artefact (worth ~+0.011, do not chase). Median selection
+IoU is 0.816 against a 0.745 mean: this is a tail problem.
+
+The visual audit (`scripts/visualize_refunet_selection.py`) shows image 14
+selecting the WRONG material (roof band when the reference is wall) and image 12
+finding only the poche fragment nearest the reference, not the perimeter run --
+i.e. a long-range propagation failure. **Caution:** a "sparse/faint targets"
+story fitted all three panels and is contradicted by the record -- faintness
+correlates -0.749 on HF14 but -0.003 on validation, and images 11/16/1 are
+sparse and score 0.926-0.952. Per-image stories remain cheap and wrong here.
+
+**8. The reference box is identical across every run.** Verified across epochs,
+runs and training sets: image 7's is always (1448, 550, 259, 259). So the eval
+is 52 FIXED questions, which means arm-to-arm comparison can be **paired** per
+selection instead of comparing means with sd ~0.02 -- far more power on the same
+compute. Nobody has used this. `scripts/reference_quality_probe.py` says crop
+representativeness does NOT predict IoU (corr +0.053 HF14, -0.257 validation),
+so hand-picking boxes would recover image 7 and little else.
+
+**Open:** the capacity sweep (item 4), a second seed at 2560 (item 5), and
+crossattn on 100k (it fit better mid-run -- dice 0.041 vs RefUNet's 0.089 -- but
+its epoch-1 result did not finish before the machine died).
+
 ## 2026-09-17 — Visual quality audit: the generator looks synthetic in ways the metrics never caught
 
 Every synth-vs-real comparison in this file and `labeling_assist.md` (ink,

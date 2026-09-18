@@ -154,6 +154,26 @@ breaks the system `torch`/`scipy` install (compiled against numpy 1.x) with
 `ValueError: numpy.dtype size changed`. If this happens, rerun
 `pip install --user -r requirements.txt` to re-pin numpy `<2.0.0`.
 
+**`--compile` also needs a newer `networkx` than the system one** (found on a
+clean 2026-09-17 rebuild; not in `requirements.txt`). `torch.compile` imports
+`functorch` -> `torch._functorch.partitioners` -> `networkx`, and Ubuntu's
+system `networkx` still calls `np.int`, which the pinned numpy 1.26 removed:
+
+```text
+AttributeError: module 'numpy' has no attribute 'int'.
+```
+
+So the repo's own numpy pin and `--compile` are mutually incompatible out of
+the box -- training dies in the first seconds, before any epoch. Fix once per
+machine, which shadows the system copy and leaves numpy alone:
+
+```bash
+pip install --user "networkx>=3.0"          # 3.4.2; numpy stays 1.26.4
+```
+
+An eager (non-`--compile`) run is unaffected, which is why a smoke test without
+`--compile` will not catch this.
+
 Anything that runs `generate_synthetic_v5.py` also needs the curated tiles, which
 are a separate HF dataset and are **not** fetched by the commands above:
 
@@ -490,6 +510,11 @@ resolution column says otherwise. The sampler column is load-bearing.
 | `mix5092`, 16 ep | 2048 | 2 | 0.7568 ± 0.0090 |
 | `mix6676_with_r4` (282 sources, +88 4th-round Gemini) | 2048 | 2 | 0.7366 val-sel / 0.7702 avg — **null vs. mix5092**, not adopted (2026-09-17) |
 | locally generated synth, `--confusable-prob 1.0` | 1280 | 3 | 0.5787 ± 0.0433 |
+| **`mix5092`+3,200 v6d @2560** (2026-09-18) | **2560** | 1 | **0.7834** val-sel — best recorded, one seed |
+| `mix5092`+3,200 v6d, 29 ep w/ restarts | 2048 | 1 | 0.7453 val-sel / 0.7676 avg — null vs. recorded 1,600-v6d mix |
+| v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |
+| v6d-only 12,000 | 2048 | 1 | 0.6934 |
+| v6d-only 1,600 | 2048 | 1 | 0.6400 |
 
 Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
 0.0175 and its 2026-08-12 rebuild 0.6954 ± 0.0023; locally generated synth
@@ -524,6 +549,14 @@ adding generated sources is now the best-value supply there is.
 
 ### The limit is generalization, not fit
 
+**Superseded in the large-data regime (2026-09-18).** At 100,000 single-pass
+procedural plans the model scores 0.837 train / 0.798 fresh-synthetic / 0.713
+HF14 — a train/fresh gap of 0.039 with nothing to memorise, i.e. it cannot fit
+its own training distribution. Fit IS the constraint there. The paragraph below
+holds for the 3-8k mixes it was measured on. `scripts/fresh_synth_iou.py`
+measures the ladder; `run_capacity_probe.sh` tests whether width is the cause.
+
+
 Train IoU (derived from the Dice term) was still climbing at the final epoch in
 every arm -- `mix5092` reached 0.758 while HF14 turned over at epoch 4. Fitting
 is not the constraint; `real86only` fits as well as the winning mix (0.749) and
@@ -533,6 +566,12 @@ wrong lever": see "16-epoch schedule" under Train, one seed, not yet adopted.**
 
 ## Evaluation rules
 
+- **The 52 reference boxes are deterministic and identical across every run**
+  (verified 2026-09-18 across epochs, runs and training sets; image 7's is
+  always `(1448, 550, 259, 259)`). So the eval is 52 *fixed questions*: compare
+  arms **paired per selection**, not as means ± sd. The paired test removes
+  question-difficulty variance, which dominates, and needs far fewer seeds.
+  Per-selection rows live in each `metrics_epoch_*.json`.
 - HF `real-world-test` images are evaluation-only.
 - Fixed indices: `12,16,27,7,11,25,23,1,18,2,0,3,14,24`.
 - Evaluate every labelled instance as a deterministic user selection: 52 total.
