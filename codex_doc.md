@@ -74,6 +74,15 @@ nothing below is adopted into the documented recipe.**
    - At `--width 128` the model is 28.0M parameters of which ~25.6M is the
      ResNet50 backbone, leaving **~2.4M task-specific** for dense
      reference-conditioned prediction at 2048².
+   - **Caveat on every "train IoU" in this repo, including the ~0.84 above:**
+     it is derived from the SOFT dice term (`mask_loss`, `train_refunet.py`
+     ~line 195, which uses `logits.sigmoid()` un-thresholded), so it is NOT
+     comparable to the hard threshold-0.35 union IoU that every reported
+     result uses. `startup.md`'s "Train IoU (derived from the Dice term)" and
+     the 2026-09-17 "train mIoU 0.85->0.88" carry the same defect. **A valid
+     hard train IoU has never been measured.** Measure it first — point
+     `scripts/fresh_synth_iou.py` at training images — before concluding
+     anything from a train/fresh or train/real gap.
    - **`RefCrossAttnUNet` is NOT a transformer and adds NO capacity**: 27.9M
      against RefUNet's 28.0M — *smaller*. It swaps cross-attention in for the
      conditioning block at the two coarsest scales of the same ResNet50+FPN
