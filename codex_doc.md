@@ -65,7 +65,28 @@ nothing below is adopted into the documented recipe.**
 
 **Open, in priority order (revised 2026-09-18):**
 
-1. **The capacity sweep** — `./run_capacity_probe.sh 7`, ~1h. Item 1 above.
+1. **Model capacity has never been tested, and it is the top suspect.**
+   Train IoU on 100,000 unique plans with deterministic labels tops out at
+   ~0.84. A correctly-sized model should fit far higher — the only irreducible
+   floor is the look-alike families v6d injects on purpose. Two facts make
+   capacity the obvious candidate:
+
+   - At `--width 128` the model is 28.0M parameters of which ~25.6M is the
+     ResNet50 backbone, leaving **~2.4M task-specific** for dense
+     reference-conditioned prediction at 2048².
+   - **`RefCrossAttnUNet` is NOT a transformer and adds NO capacity**: 27.9M
+     against RefUNet's 28.0M — *smaller*. It swaps cross-attention in for the
+     conditioning block at the two coarsest scales of the same ResNet50+FPN
+     CNN. Every "crossattn ties/loses" result in this repo is a conditioning-
+     mechanism result at constant, very small capacity. **The transformer
+     hypothesis has never actually been tested here.**
+
+   `./run_capacity_probe.sh 7` (width 128/256/384 → 28.0/39.6/58.3M, one epoch
+   each at 1024 on the 100k pool, ~1h) is written and unrun. It is only a first
+   step: it scales the decoder, not the backbone, so even width 384 leaves the
+   ResNet50 untouched. A real test of "is the model the limit" wants a larger
+   or attention-native backbone (ViT/Swin) at 100k+ single-pass, judged on
+   **train IoU reaching ~0.95** before anything else is concluded about data.
 2. **Second seed at 2560**, and whether 3072 continues the trend.
 3. **Close the 0.085 fresh-synthetic → real transfer gap.** This is now the
    binding term on the synthetic route, and it is a generator-realism problem:
