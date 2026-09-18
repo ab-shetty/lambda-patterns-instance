@@ -101,7 +101,29 @@ nothing below is adopted into the documented recipe.**
    binding term on the synthetic route, and it is a generator-realism problem:
    the 2026-09-17 audit's open items (texture irregularity, implausible
    material colours, the 2-story label-collision bug) are unaddressed.
-4. **crossattn on 100k loses to RefUNet at matched data** — after one pass
+4. **crossattn on 100k ties overall but WINS where it matters — chase this.**
+   Paired per-selection on the 52 fixed questions (same pool, steps, seed):
+   mean diff +0.0088 for RefUNet, **t = +0.36 — a tie**. But the per-image
+   split is large and structured:
+
+   | crossattn better | | crossattn worse | |
+   |---|---:|---|---:|
+   | img 7 (1 sel) | **+0.616** | **img 0 (2 sel)** | **−0.677** |
+   | **img 14 (9 sel)** | **+0.100** | img 18 (10 sel) | −0.046 |
+   | img 16, 2, 12, 24, 1 | +0.001..+0.034 | img 27, 25, 11, 23 | −0.009..−0.042 |
+
+   It gains on **image 14 — 36% of the entire HF14 deficit** and the
+   long-range/wrong-material failure — and recovers image 7's text-crop
+   reference. The whole tie is paid for by **one catastrophic collapse on
+   image 0** (0.861 → 0.185). Diagnose that single failure and the
+   architecture is ahead. This is the first evidence that attention conditioning
+   helps precisely where the propagation diagnosis says it should.
+
+   Headline numbers, for the record: HF14 val-selected 0.7069 vs 0.7130;
+   fresh-synthetic 0.7951 vs 0.8250 (1 pass), 0.7715 vs 0.7980 (2 passes) —
+   so it fits the generator worse while matching on real plans.
+
+   Superseded note: crossattn at matched data — after one pass
    each: fresh-synthetic 0.7951 vs 0.8250, HF14 0.7067 vs 0.7111, train_loss
    0.5360 vs 0.5072. It fits *worse*, consistent with a weak-prior model still
    being under-served at 100k rather than with an architecture win. (An earlier
