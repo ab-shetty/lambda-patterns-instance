@@ -549,12 +549,13 @@ adding generated sources is now the best-value supply there is.
 
 ### The limit is generalization, not fit
 
-**Superseded in the large-data regime (2026-09-18).** At 100,000 single-pass
-procedural plans the model scores 0.837 train / 0.798 fresh-synthetic / 0.713
-HF14 — a train/fresh gap of 0.039 with nothing to memorise, i.e. it cannot fit
-its own training distribution. Fit IS the constraint there. The paragraph below
-holds for the 3-8k mixes it was measured on. `scripts/fresh_synth_iou.py`
-measures the ladder; `run_capacity_probe.sh` tests whether width is the cause.
+**Qualified in the large-data regime (2026-09-18).** At 100,000 procedural
+plans: fresh-synthetic 0.825 after one pass and 0.798 after two, against HF14
+0.711/0.713 — so the ~0.11 synthetic→real transfer gap dominates, and the
+second pass *lowers* fresh-synthetic while train rises (overfitting at 2
+repeats). The paragraph below still describes the 3-8k mixes it was measured
+on. `scripts/fresh_synth_iou.py` measures the train/fresh/real ladder;
+`run_capacity_probe.sh` tests whether width also binds (untested).
 
 
 Train IoU (derived from the Dice term) was still climbing at the final epoch in

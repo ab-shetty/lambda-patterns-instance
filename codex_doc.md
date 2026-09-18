@@ -18,16 +18,24 @@ nothing below is adopted into the documented recipe.**
 
 **The three things that matter, in order:**
 
-1. **The model is underfitting, and that reverses a standing conclusion.** On
-   100,000 single-pass procedural plans: 0.837 train / 0.798 fresh-synthetic /
-   0.713 HF14. A train/fresh gap of 0.039 with 100k unique images means it
-   cannot fit its own training distribution — not memorisation. `startup.md`'s
-   "the limit is generalization, not fit" was measured at 3–8k records and does
-   not hold here. At `--width 128` only ~2.4M of 28.0M parameters sit outside
-   the ResNet50 backbone. **The capacity sweep (width 128/256/384,
-   `run_capacity_probe.sh`) was queued and the machine died first — run it
-   first.** If capacity is the limit, every data experiment in this repo has
-   been measuring the wrong axis.
+1. **The binding term is synthetic→real transfer, ~0.11.** RefUNet on 100,000
+   procedural plans, measured on 300 of the 1,401 held-out draws:
+
+   | | fresh-synthetic | HF14 | train |
+   |---|---:|---:|---:|
+   | after 1 pass (e0) | **0.8250** | 0.7111 | — |
+   | after 2 passes (e1) | 0.7980 | 0.7130 | 0.837 |
+
+   Fresh-synthetic is already 0.83 after ONE pass: the generator is close to
+   solved on unseen draws, so more of it cannot help. The ~0.11 gap to real is
+   domain transfer and that is the ceiling on the synthetic route.
+   **Note the second pass made fresh-synthetic WORSE (0.825 → 0.798) while
+   train rose to 0.837** — overfitting onset at 2 repeats, so single-pass is
+   the right regime and the train/fresh gap of 0.039 at e1 should NOT be read
+   as pure underfitting (an earlier draft of this entry did; corrected).
+   Whether capacity also binds is untested: at `--width 128` only ~2.4M of
+   28.0M parameters sit outside the ResNet50 backbone. **`run_capacity_probe.sh`
+   (width 128/256/384) was queued when the machine died — run it first.**
 
 2. **Training at 2560 gave 0.7834 val-selected**, +0.038 over the identical run
    at 2048 and above the recorded best of 0.7594. One seed, under 2× sd, so not
@@ -63,9 +71,13 @@ nothing below is adopted into the documented recipe.**
    binding term on the synthetic route, and it is a generator-realism problem:
    the 2026-09-17 audit's open items (texture irregularity, implausible
    material colours, the 2-story label-collision bug) are unaddressed.
-4. **crossattn on 100k** — it fit better mid-run (dice 0.041 vs RefUNet's
-   0.089) but its epoch-1 number did not finish. The small-data ties tell us
-   nothing; a weak-prior model needs the data regime.
+4. **crossattn on 100k loses to RefUNet at matched data** — after one pass
+   each: fresh-synthetic 0.7951 vs 0.8250, HF14 0.7067 vs 0.7111, train_loss
+   0.5360 vs 0.5072. It fits *worse*, consistent with a weak-prior model still
+   being under-served at 100k rather than with an architecture win. (An earlier
+   draft claimed it fit better, from a single noisy tqdm batch — wrong.) Its
+   epoch-1 number did not finish. A fair test needs a larger data regime again,
+   or more capacity.
 5. More labelled real sources — still the structural constraint for 0.9.
 
 **Do not re-open:** everything in the 2026-09-17 list, plus — new — synthetic

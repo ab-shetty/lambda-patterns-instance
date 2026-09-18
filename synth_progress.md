@@ -32,17 +32,24 @@ scaling implies intrinsic dimension ~23, so draws stay genuinely novel. But the
 model already handles novel draws: see item 4. Pixel novelty that poses no new
 problem is not diversity in the sense that matters. `scripts/fresh_synth_iou.py`.
 
-**4. The model is UNDERFITTING, which contradicts "fitting is not the
-constraint" in `startup.md`.** RefUNet, 100k single-pass, epoch-1 checkpoint:
+**4. The binding term is synthetic->real transfer (~0.11), and a second pass
+already overfits.** RefUNet, 100k, on held-out draws (300-400 of 1,401):
 
-| measured on | union IoU |
-|---|---:|
-| train images (2nd pass) | 0.837 |
-| fresh synthetic, never seen (400 of the 1,401 held out) | 0.798 |
-| HF14 real | 0.713 |
+| checkpoint | train | fresh synthetic | HF14 real |
+|---|---:|---:|---:|
+| epoch 0 (one pass) | -- | **0.8250** | 0.7111 |
+| epoch 1 (two passes) | 0.837 | 0.7980 | 0.7130 |
 
-A train/fresh gap of **0.039** is not memorisation -- at 100k unique plans there
-is nothing to memorise. The model cannot fit its own training distribution.
+Fresh-synthetic reaches 0.83 after a SINGLE pass -- the generator is nearly
+solved on unseen draws, so additional volume cannot help. **The second pass
+lowered fresh-synthetic (0.825 -> 0.798) while train rose**: overfitting onset
+at only 2 repeats, which is why single-pass is the right regime.
+
+An earlier draft of this entry read the e1 train/fresh gap of 0.039 as proof of
+underfitting and "reversal" of `startup.md`'s "fitting is not the constraint".
+That was too strong -- the e0->e1 fresh-synthetic decline is an overfitting
+signature. What is solid: fresh-synthetic ~0.80-0.83 against real 0.71, so
+**transfer, not supply and not (demonstrably) capacity, is the ceiling**.
 The old conclusion was measured on 3-8k records where val turned over; it does
 not hold in this regime. The remaining **0.085 fresh-synthetic -> real** gap is
 domain transfer, and it -- not data volume -- is what caps the synthetic route.
