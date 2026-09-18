@@ -74,7 +74,24 @@ nothing below is adopted into the documented recipe.**
    - At `--width 128` the model is 28.0M parameters of which ~25.6M is the
      ResNet50 backbone, leaving **~2.4M task-specific** for dense
      reference-conditioned prediction at 2048².
-   - **Caveat on every "train IoU" in this repo, including the ~0.84 above:**
+   - **MEASURED 2026-09-18, hard threshold 0.35, 300 training images**
+     (`fresh_synth_iou.py` pointed at the training pool). This is the first
+     valid train IoU in the project:
+
+     | epoch-1 checkpoint | train | fresh synthetic | HF14 |
+     |---|---:|---:|---:|
+     | RefUNet (28.0M) | **0.8022** | 0.7980 | 0.7130 |
+     | crossattn (27.9M) | **0.7668** | 0.7715 | 0.7042 |
+
+     **Train ~= fresh for both** (+0.004, -0.005): zero generalization gap
+     within synthetic, on 100,000 unique plans. Absolute fit is ~0.80 where a
+     correctly-sized model on deterministic labels should reach ~0.95.
+     **This is unambiguous underfitting and it is not a data problem.**
+     Note this supersedes an intermediate "overfitting onset" reading, which
+     came from comparing a soft-dice train number against a hard fresh number.
+
+   - **Caveat on every OTHER "train IoU" in this repo (the ~0.84 figure, and
+     all earlier entries):**
      it is derived from the SOFT dice term (`mask_loss`, `train_refunet.py`
      ~line 195, which uses `logits.sigmoid()` un-thresholded), so it is NOT
      comparable to the hard threshold-0.35 union IoU that every reported
