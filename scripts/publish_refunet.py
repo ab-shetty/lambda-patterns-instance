@@ -73,7 +73,13 @@ def main():
     ck = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     sd = {k: v.contiguous() for k, v in ck["model"].items()}
     train_args = ck.get("args", {})
-    model_class = "RefCrossAttnUNet" if train_args.get("model") == "crossattn" else "RefUNet"
+    # The class must follow the checkpoint's own --model. Getting this wrong is
+    # how floz-refunet-synth100k-e1 ended up carrying another run's weights
+    # under the wrong name; a card that misnames the architecture is the same
+    # failure one step earlier.
+    _m = str(train_args.get("model", "unet"))
+    model_class = ("RefCrossAttnUNet" if _m == "crossattn"
+                   else "RefSwinUNet" if _m.startswith("swin") else "RefUNet")
 
     meta = {k: v for k, v in ck.items() if k not in ("model", "optimizer", "scheduler")}
     meta["args"] = train_args
@@ -97,7 +103,9 @@ def main():
     prov += "\n" + "\n".join(f"- `{k}`: {v}" for k, v in sorted(train_args.items())
                              if k in {"local_data", "seed", "image_max_size",
                                       "width", "lr", "attn_heads"})
-    extra_args = ", num_heads=4" if model_class == "RefCrossAttnUNet" else ", pretrained=False"
+    extra_args = (", num_heads=4" if model_class == "RefCrossAttnUNet"
+                  else f", pretrained=False, backbone=\"{_m}\""
+                  if model_class == "RefSwinUNet" else ", pretrained=False")
     repo_name = args.repo.split("/")[-1]
     open(f"{out}/README.md", "w").write(
         CARD.replace("{REPO_NAME}", repo_name).replace("{MODEL_CLASS}", model_class)

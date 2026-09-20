@@ -276,6 +276,20 @@ method being sold here:**
   a third time, in a third regime. **Generator realism is still a live lever;
   it is just no longer the only one.**
 
+**6d. Published checkpoints from this session** (the machine is ephemeral):
+
+- `abshetty/floz-refunet-swint-v6d-e8` -- RefSwinUNet/swin_t, HF14 **0.7066**,
+  v6d-only 1,995 plans @2048. The best synthetic-only result on record.
+- `abshetty/floz-refunet-resnet50-v6d-e8` -- the matched ResNet50 control,
+  HF14 0.6359, which reproduces the documented `v6d-only @2048 = 0.6400`.
+
+Verified byte-distinct from each other and from the earlier uploads before
+this entry was written, because `floz-refunet-synth100k-e1` was not.
+`publish_refunet.py` also had a smaller version of that same failure: it
+inferred `model_class` from a two-way crossattn/RefUNet test and stamped a
+Swin checkpoint "RefUNet". Fixed; a card that misnames the architecture is the
+duplicate-weights bug one step earlier.
+
 **Caveats on item 6, before anyone trains on it.** One learning rate (3e-4) for
 every backbone, chosen for the incumbent; ResNet50 carries `IMAGENET1K_V2`
 weights against Swin's V1 recipe; 200 synthetic images at 1024 px; frozen
