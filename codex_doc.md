@@ -68,6 +68,11 @@ identical everything but `--model`:
 augmentation, the architecture's plateau on this distribution is a function of
 STEPS, not of how many of the 100k it has seen. So:
 
+**`./run_fit_100k.sh` does all of this end to end** -- generates the pool if
+absent, sizes the epoch count to the step budget, trains each arm and prints
+the hard train IoU. `./run_fit_100k.sh swin_t` for one arm. The steps it
+automates:
+
 1. Generate 100k v6d (`--seed 6 --start 0 --workers 48`; 10k takes 77 s, so
    100k is ~13 min).
 2. Give each architecture the SAME step budget -- 25,000 steps matches the
