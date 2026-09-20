@@ -143,8 +143,10 @@ Three readings, in order of importance:
   unseen->real **+0.1039**, against the +0.085-0.114 measured at 100,000 images
   on a fully trained model. Two very different regimes, the same number -- so
   the 200-image frozen probe is measuring the real thing, not an artefact.
-- **The domain gap is a property of the BACKBONE, not the data.** Every
-  ResNet50 arm carries +0.085 to +0.175; every Swin arm with attention
+- **The domain gap is PARTLY a property of the backbone, not only of the data.**
+  (Frozen numbers; item 6c measures it unfrozen, where the reduction is real
+  but far smaller -- 0.112 -> 0.083, not to zero. Read this row with that.)
+  Every ResNet50 arm carries +0.085 to +0.175; every Swin arm with attention
   conditioning carries ~0.000 or negative -- it transfers to real plans as well
   as to unseen synthetic draws. The project has been treating that gap as a
   generator-realism problem to be fixed with better synthetic data
@@ -229,6 +231,50 @@ side of both -- but the two effects were never measured together above 2048.
 25.6M) scores 0.5244 at N=200 against resnet50's 0.4976 and swin_b's 0.5313 --
 within noise of the 3x larger model. The win is architectural, and a
 size-matched transformer has no more parameters to feed than the incumbent.
+
+**6c. UNFROZEN, IN THE REAL PIPELINE (the probe's own prediction, tested).**
+`run_backbone_ab.sh`: v6d-only 1,995 plans, 2048 px, documented two-phase
+9-epoch schedule, backbone TRAINING at `--backbone-lr-mult 0.1`, epoch chosen
+on the validation complement (never on HF14). Only `--model` differs.
+**One seed.**
+
+| arm | TRAIN (hard) | UNSEEN | REAL | fit->unseen | unseen->real |
+|---|---:|---:|---:|---:|---:|
+| `unet` ResNet50, 28.0M | 0.6811 | 0.7482 | 0.6359 | -0.067 | **+0.112** |
+| `swin_t` RefSwinUNet, 31.4M | **0.7826** | **0.7891** | **0.7066** | -0.007 | **+0.083** |
+| difference | +0.1015 | +0.0409 | **+0.0707** | | -0.030 |
+
+Paired over the 52 fixed selections: **+0.0707, t(51) = +2.20, p = 0.032**,
+better on 31 / worse on 15 / tied on 6, sign-test p = 0.026. The baseline arm
+reproduces the documented `v6d-only 1,600 @2048 = 0.6400` at 0.6359, so the
+comparison rests on a verified control.
+
+For scale: **0.7066 with ZERO real plans in training** beats the best
+synthetic-only result on record (0.686 +/- 0.009) and sits level with
+`mix5092 @1280` (0.7097), which uses all 194 real-ish sources.
+
+Where it wins is where the deficit is. Per-image paired difference: image 14
+**+0.142** (35% of the total, and the single largest deficit contributor in
+the project), image 7 **+0.726** (the known reference-box-on-text failure),
+16 +0.190, 11 +0.245, 23 +0.230, 3 +0.129, 18 +0.087. It LOSES on image 2
+(-0.171) and 27 (-0.100). So it is not a uniform lift; it trades, and it wins
+the trade.
+
+**Two things the frozen probe got wrong, recorded because the probe is the
+method being sold here:**
+
+- **The fit column inverted.** Frozen, Swin fit WORSE than ResNet50 (0.79 vs
+  0.90) and that inversion was read as evidence that fit and transfer trade
+  off. Unfrozen, Swin fits BETTER (0.783 vs 0.681). Frozen ImageNet features
+  had simply never seen line drawings; finetuning fixes that for the
+  transformer more than for the CNN. **The probe ranks TRANSFER reliably and
+  its fit column does not survive unfreezing.**
+- **The domain gap is reduced, not eliminated.** Frozen, Swin arms showed
+  unseen->real ~0.000 and item 6a called the gap "a property of the backbone".
+  Unfrozen it is +0.083 against ResNet50's +0.112 -- a 26% reduction, not a
+  disappearance. ResNet50's +0.112 does reproduce the documented ~0.085-0.11
+  a third time, in a third regime. **Generator realism is still a live lever;
+  it is just no longer the only one.**
 
 **Caveats on item 6, before anyone trains on it.** One learning rate (3e-4) for
 every backbone, chosen for the incumbent; ResNet50 carries `IMAGENET1K_V2`
