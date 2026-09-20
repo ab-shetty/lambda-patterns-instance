@@ -523,6 +523,10 @@ retired query-model numbers: `synth_progress_archive.md`, not comparable here.
 
 ### Frozen-backbone probe rows (2026-09-20, NOT product numbers)
 
+`swin_b` is a hierarchical vision transformer (windowed self-attention, strides
+4/8/16/32). It is the first transformer backbone tested in this project --
+`RefCrossAttnUNet`, despite the name, was attention bolted onto a ResNet.
+
 Same decoder, same 200 synthetic images, 1024 px, backbone frozen; HF14 is 52
 cached real selections. Useful only for ranking, and far below the real
 pipeline's 0.78 because of the freeze and the resolution.

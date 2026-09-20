@@ -119,8 +119,14 @@ reported by `decoder_search.py`, 0.9175, is a FLOOR on the true bound, not a
 cap -- the model legitimately exceeds it by finding a sharper stride-4 encoding
 than area-pooling, exactly as the convex analysis predicts.)
 
-**6. Backbone matters, and it trades fit against transfer.** Same decoder, same
-data, same steps; ImageNet-pretrained and frozen; 4 seeds on the main arms.
+**6. A VISION TRANSFORMER BACKBONE WINS -- the hypothesis this repo has been
+deferring since 2026-09-18.** `swin_b` is a Shifted-Window Transformer: real
+multi-head self-attention, but hierarchical (strides 4/8/16/32) and windowed
+(7x7, shifted between blocks), so it emits the same pyramid a ResNet does and
+drops into the existing decoder unchanged. That hierarchy is also why 200
+images suffice here: it is ImageNet-pretrained and FROZEN, so only a 4.6M
+decoder is fitted on top. Same decoder, same data, same steps; 4 seeds on the
+main arms.
 HF14 here is 52 cached real selections at 1024 with a frozen backbone, so it is
 a RANKING number, far below the product's 0.78:
 
@@ -160,6 +166,34 @@ the difficulty is fine-scale and spatial, not semantic. Swin scores *lower*
 here (AUC 0.9498, margin +0.0245) while transferring better, so patch-level
 separability is not the mechanism behind item 6.
 
+**6b. Does the transformer need MORE data? Frozen, no -- it needs less.**
+Baseline decoder, 1024 px, HF14 transfer, 2 runs per cell:
+
+| N images | resnet50 | swin_b | gap | train fit r50/swin |
+|---:|---:|---:|---:|---|
+| 8 | 0.0920 | 0.2169 | **+0.125** | 0.995 / 0.993 |
+| 32 | 0.2294 | 0.3656 | **+0.136** | 0.975 / 0.963 |
+| 64 | 0.2571 | 0.2975 | +0.040 | 0.962 / 0.911 |
+| 200 | 0.4976 | 0.5313 | +0.034 | 0.910 / 0.746 |
+
+ImageNet paid the transformer's data bill, and the frozen representation is
+most valuable exactly where task data is scarcest. **But the gap NARROWS as
+data grows** (+0.13 -> +0.03), so do not assume it survives to 5-8k records;
+that is the main risk in item 1.
+
+**What the gap DOES grow with is resolution.** At a matched N=64:
+1024 px gap **+0.041**, 2048 px gap **+0.190** (13.5 sd, n=6 per arm). An
+earlier draft of this entry read the 2048 result as evidence that Swin does
+better with LESS data -- that compared 2048/N=64 against 1024/N=200 and
+confounded the two. Same resolution, more data narrows it; same data, more
+resolution widens it sharply. Production is 2560, which is the favourable
+side of both -- but the two effects were never measured together above 2048.
+
+**Size is not the mechanism.** `swin_t` (28.3M, the same class as ResNet50's
+25.6M) scores 0.5244 at N=200 against resnet50's 0.4976 and swin_b's 0.5313 --
+within noise of the 3x larger model. The win is architectural, and a
+size-matched transformer has no more parameters to feed than the incumbent.
+
 **Caveats on item 6, before anyone trains on it.** One learning rate (3e-4) for
 every backbone, chosen for the incumbent; ResNet50 carries `IMAGENET1K_V2`
 weights against Swin's V1 recipe; 200 synthetic images at 1024 px; frozen
@@ -169,11 +203,14 @@ absolute numbers are not.
 
 **Open, in priority order (revised 2026-09-20):**
 
-1. **Run `swin_b` (and a Swin/ConvNeXt-class backbone generally) in the real
-   pipeline**, unfrozen, at 2048-2560 on the documented mix. This is the first
-   lever in months with a >5x-sd margin behind it, and it is cheap to test
-   because `StagedBackbone` already exposes the 4-scale pyramid the decoder
-   wants.
+1. **Run the vision transformer (`swin_b`) in the real pipeline**, unfrozen,
+   at 2048-2560 on the documented mix. This is the first lever in months with a
+   >5x-sd margin behind it, and `StagedBackbone` already exposes the 4-scale
+   pyramid the decoder wants, so the code cost is small. Unfreezing is the
+   untested half: everything measured so far holds the backbone fixed.
+   Also worth one probe each: a plain ViT / DINOv2 backbone (no hierarchy,
+   much stronger pretraining) and `swin_t` (to separate architecture from the
+   88M-parameter size of `swin_b`).
 2. **Done 2026-09-20: the LR sweep clears item 6** (four LRs per backbone,
    swin_b ahead at each backbone's own best). What it still needs is the real
    pipeline, not more probing.
@@ -294,6 +331,12 @@ nothing below is adopted into the documented recipe.**
      CNN. Every "crossattn ties/loses" result in this repo is a conditioning-
      mechanism result at constant, very small capacity. **The transformer
      hypothesis has never actually been tested here.**
+     **Partly retired 2026-09-20**: a hierarchical vision-transformer BACKBONE
+     (Swin-B, frozen, ImageNet) now beats frozen ResNet50 by +0.0842 on real
+     plans (5.5 sd, n=5). Still untested: a plain non-hierarchical ViT
+     (DINOv2-class), and ANY transformer backbone finetuned rather than frozen
+     -- which is where the "a ViT needs far more than 200 images" objection
+     actually bites. See the 2026-09-20 entry.
 
    `./run_capacity_probe.sh 7` (width 128/256/384 → 28.0/39.6/58.3M, one epoch
    each at 1024 on the 100k pool, ~1h) is written and unrun. It is only a first
