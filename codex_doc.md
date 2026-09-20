@@ -60,9 +60,14 @@ identical everything but `--model`:
 - **swin_b buys nothing over swin_t** at 3x the parameters, matching the frozen
   probe. If that holds at a real budget, swin_t is the arm to scale and it is
   ~3x cheaper per step (1.16 it/s vs 2.01 under contention).
-- 248 steps is a tiny budget and a larger model may converge more slowly, so
-  the swin_b null is WEAK. Re-check it at the 25,000-step budget below before
-  dropping swin_b.
+- **Re-checked at 3x the budget (744 steps), same pool and settings:
+  swin_t 0.5744, swin_b 0.5343.** So swin_b does not merely tie -- it FALLS
+  BEHIND as the budget grows (tied at 248 steps, -0.040 at 744), which is the
+  opposite of the "a larger model just converges more slowly" caveat this line
+  originally carried. Two budgets, and the gap opens rather than closes.
+- swin_t is therefore the arm to scale: better fit AND ~1.7x faster per step.
+  Still worth one swin_b arm at 25,000 steps before closing it out, since both
+  of these budgets are tiny next to that.
 
 **How to answer it at 100k WITHOUT 20-hour runs.** Because train ~= fresh under
 augmentation, the architecture's plateau on this distribution is a function of

@@ -73,5 +73,6 @@ cat <<'NOTE'
   before believing either transformer arm.
   Prior expectation from smaller matched budgets: both transformers out-fit
   unet by 0.06-0.10, and swin_b ties swin_t despite 3x the parameters. If
-  swin_b still ties at this budget, scale swin_t -- it is ~1.7x faster per step.
+  swin_b still trails at this budget, scale swin_t -- it fits better AND is
+  ~1.7x faster per step (measured 0.5744 vs 0.5343 at 744 steps).
 NOTE
