@@ -21,13 +21,19 @@ of the per-step cost, and every open architecture question was downstream of
 `RefUNet.features()`. `scripts/cache_backbone_features.py` stores `c1..c4` for
 image and reference; `scripts/decoder_search.py` trains variants against tensors
 already on the GPU. A variant costs **40-90 s** instead of an hour, and the
-whole 8-variant sweep took 8 minutes. Seed noise on the probe is ~0.003-0.02
-(frozen backbone, only the decoder init varies), so it needs far fewer seeds
-than the full pipeline's 0.026.
+whole 8-variant sweep took 8 minutes. Seed noise differs sharply by metric -- see the
+repeatability numbers below.
 
 It ranks decoders and backbones. It cannot measure backbone finetuning, and its
 absolute numbers are not product numbers (frozen backbone, 200 synthetic images,
 1024 px). Survivors still need a real run.
+
+**The probe is cheap for FIT and only cheap for fit.** Five runs with identical
+arguments: train IoU 0.9079 **sd 0.0032**, HF14 transfer 0.4771 **sd 0.0243**.
+Fit is nearly deterministic, so one run settles it. Transfer carries the same
+~0.024 this repo has always had, because it is the same 52 hard questions --
+the freeze buys speed, not statistical power. Budget transfer seeds exactly as
+`startup.md` says, and prefer the paired-per-selection test.
 
 **1. `abshetty/floz-refunet-synth100k-e1` is a byte-identical duplicate of
 `abshetty/floz-refunet-res2560-e4`** -- same 372 tensors, same config, same
@@ -128,11 +134,16 @@ a RANKING number, far below the product's 0.78:
 | convnext_base | baseline | 1 | 0.6839 | 0.4702 | 0.4371 |
 | resnet50 | crossattn | 1 | 0.9086 | 0.5725 | 0.3976 |
 
-`swin_b + selfattn` beats `resnet50 + baseline` on real plans by **+0.0930
-(se 0.0134, t=6.96)** while fitting *worse* (0.789 vs 0.903). Across all 30
-probe runs, **corr(train fit, HF14 transfer) = -0.18** and corr(train fit,
-fresh synthetic) = +0.77. Fitting the generator better does not transfer;
-it is mildly anti-predictive.
+`swin_b + selfattn` beats `resnet50 + baseline` on real plans by **+0.0842
+(n=5 each, 5.5 sd using the measured per-run sd of 0.0243)** while fitting
+*worse* (0.789 vs 0.903). Across all 30 probe runs, **corr(train fit, HF14
+transfer) = -0.18** and corr(train fit, fresh synthetic) = +0.77. Fitting the
+generator better does not transfer; it is mildly anti-predictive.
+
+**It is not an LR artefact.** Sweeping 1e-4 / 3e-4 / 1e-3 / 3e-3 per backbone,
+each at its OWN best LR: swin_b reaches 0.5594-0.5600 at three different LRs,
+resnet50 tops out at 0.4959 (corr4 @3e-4). The gap narrows but never closes or
+flips, and swin_b fits worse at every LR it wins at. Both degrade at 3e-3.
 
 **So the original question answers itself: the architecture that reaches 0.95
 on train is the one already in the repo, given more steps -- and reaching it is
@@ -163,8 +174,9 @@ absolute numbers are not.
    lever in months with a >5x-sd margin behind it, and it is cheap to test
    because `StagedBackbone` already exposes the 4-scale pyramid the decoder
    wants.
-2. **Sweep the LR per backbone in the probe first** (minutes), so item 6 is not
-   an artefact of one LR tuned for ResNet50.
+2. **Done 2026-09-20: the LR sweep clears item 6** (four LRs per backbone,
+   swin_b ahead at each backbone's own best). What it still needs is the real
+   pipeline, not more probing.
 3. **Attack `false_region` and `missed_inside` directly** -- 46-56% of the
    error and the thing no lever in this repo has ever targeted. The features
    separate materials at AUC 0.99, so this is a propagation/objective problem:

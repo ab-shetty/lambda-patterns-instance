@@ -534,10 +534,12 @@ pipeline's 0.78 because of the freeze and the resolution.
 | resnet50 + corr4 | 4 | 0.9154 ± 0.006 | 0.4959 ± 0.026 |
 | resnet50 + baseline (incumbent) | 4 | 0.9025 ± 0.011 | 0.4661 ± 0.015 |
 
-Swin beats the incumbent by +0.0930 (se 0.0134, t=6.96) while fitting worse.
-Across all 30 probe runs corr(train fit, HF14) = **-0.18**: fitting the
-generator better is mildly ANTI-predictive of real transfer. One LR for every
-backbone -- sweep it per backbone before trusting the margin.
+Swin beats the incumbent by +0.0842 (n=5 each, 5.5 sd at the measured per-run
+sd of 0.0243) while fitting worse. Across all 30 probe runs corr(train fit,
+HF14) = **-0.18**: fitting the generator better is mildly ANTI-predictive of
+real transfer. Checked against an LR sweep (1e-4 to 3e-3): swin_b holds
+0.5594-0.5600 at three LRs, resnet50 peaks at 0.4959, so it is not an artefact
+of one LR tuned for the incumbent.
 
 ### What the comparisons establish
 
@@ -584,11 +586,13 @@ PYTHONPATH=. python3 scripts/decoder_search.py \
   --hf14-cache  data/cache/swin_b_hf14_1024 --steps 1500
 ```
 
-40-90 s per variant against ~1 h for a real run, and probe seed noise is
-~0.003-0.02 rather than 0.026, so 2-4 seeds settle what used to need many.
-**These are ranking numbers, not product numbers** -- frozen backbone, 200
-synthetic images, 1024 px -- so a winner still needs a real run. It cannot
-measure backbone finetuning at all.
+40-90 s per variant against ~1 h for a real run. **The speedup does not buy
+statistical power on the transfer metric.** Five runs, identical arguments:
+train IoU sd **0.0032**, cached-HF14 sd **0.0243**. Fit is settled by one run;
+transfer still carries the repo's usual ~0.024 because it is still the 52 hard
+questions. **These are ranking numbers, not product numbers** -- frozen
+backbone, 200 synthetic images, 1024 px -- so a winner still needs a real run.
+It cannot measure backbone finetuning at all.
 
 Before treating any fit target as reachable, run `scripts/label_ceiling.py`:
 the stride-4 head costs ~0.000, but the native -> input -> native resize chain

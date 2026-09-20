@@ -90,6 +90,36 @@ exactly this axis, an hour per point, judged on the invalid soft-dice number.
 Against an optimised ceiling of 0.9886. Fit is a step-budget question, not a
 capacity question, and at 200 images it is solved.
 
+**Probe repeatability, measured (important).** Five runs of the identical
+command, resnet50 + baseline:
+
+| metric | mean | sd |
+|---|---:|---:|
+| train IoU | 0.9079 | **0.0032** |
+| cached-HF14 transfer | 0.4771 | **0.0243** |
+
+Freezing the backbone makes the probe fast, not statistically powerful. Fit is
+near-deterministic and one run settles it; transfer carries the same ~0.024 the
+full pipeline does, for the same reason (52 hard questions, question difficulty
+dominating). An earlier draft of this session's writeup claimed ~0.003 noise
+for the probe generally -- that is true only of the fit column, and the
+backbone margin was initially quoted with error bars that were too tight
+(+0.0930 se 0.0134; corrected to +0.0842 at 5.5 sd with n=5 per arm).
+
+**LR sweep, per backbone** (1e-4 / 3e-4 / 1e-3 / 3e-3, best three shown, HF14):
+
+| backbone | best | second | third |
+|---|---|---|---|
+| swin_b | baseline@1e-3 0.5600 | selfattn@1e-4 0.5597 | selfattn@3e-4 0.5594 |
+| resnet50 | corr4@3e-4 0.4959 | baseline@3e-4 0.4752 | baseline@1e-4 0.4631 |
+| convnext_base | corr4@3e-4 0.4528 | baseline@3e-4 0.4371 | crossattn@3e-4 0.4239 |
+
+Swin is ahead at each backbone's own best LR, and is stable across three of
+them, so the margin is not an artefact of one LR tuned for the incumbent. Every
+backbone degrades at 3e-3. Note swin_b's winning configurations are also its
+WORST-fitting ones (train 0.761-0.803 against resnet50's 0.903-0.922), which is
+the fit/transfer inversion again.
+
 **Backbone bake-off.** `StagedBackbone` exposes ResNet50, ConvNeXt and Swin as
 the same stride-4/8/16/32 pyramid, so the decoder is unchanged across them.
 ConvNeXt-Base is worst on both axes (baseline train 0.6839, HF14 0.4371, one
