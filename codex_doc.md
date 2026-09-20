@@ -607,6 +607,11 @@ are implemented but screened negative — read the warnings before touching eith
 - `scripts/residual_decomp.py` — splits missing IoU into boundary / missed
   region / missed interior / wrong region / fringe, plus a threshold sweep.
   Says WHICH axis to spend on.
+- `scripts/paired_compare.py` — compares two arms PAIRED over the 52 fixed
+  selections, with a paired t, a sign test and a per-image share-of-total
+  breakdown. `startup.md` has recommended this since 2026-09-18 and nothing
+  had used it; it resolves an epoch-to-epoch step at t=7.3 where unpaired
+  means at sd 0.026 would need many seeds.
 - `scripts/material_separability.py` — within-image same-vs-different family
   separability of a frozen backbone's features. No training; an upper bound on
   what any decoder reading those features can group.
