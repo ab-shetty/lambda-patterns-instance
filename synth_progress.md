@@ -1,5 +1,122 @@
 # Synthetic Dataset Progress
 
+## 2026-09-20 — Cheap architecture screening, and what it retired
+
+Method session on a fresh GH200, rebuilt from a clean clone. Full narrative and
+the priority list are in `codex_doc.md` (2026-09-20); this entry holds the
+detail that does not belong there.
+
+**Pools.** `generate_synthetic_v6.py` is deterministic per `(seed, image_id)`
+(`compose()` seeds `random.Random(seed * 1_000_003 + image_id)`), and the
+documented build seed is 6 (`run_synth_v6.sh`). So a train-side slice and a
+genuinely-unseen slice of the same distribution are both reproducible:
+
+```bash
+python3 generate_synthetic_v6.py --n 2000 --out data/synthetic/v6d_train2000 \
+  --seed 6 --start 0      --workers 48          # 1,995 ok, 16 s
+python3 generate_synthetic_v6.py --n 600  --out data/synthetic/v6d_fresh600 \
+  --seed 6 --start 100000 --workers 48          # 603 ok
+```
+
+ids 0-1999 are inside `res2560-e4`'s v6d 3,200, so `v6d_train2000` is genuine
+training data for it; ids 100000+ were never generated before.
+
+**Ceiling by resolution** (`scripts/label_ceiling.py`, naive area-pooled grid):
+
+| res | HF14 | v6d |
+|---:|---:|---:|
+| 1280 | 0.9587 | 0.8628 |
+| 2048 | 0.9739 | 0.9058 |
+| 2560 | 0.9759 | 0.9210 |
+| 4096 | 0.9846 | 0.9450 |
+
+The convex-optimised bound is the honest one and it is tight against naive on
+HF14 (0.9798 vs 0.9759 at 2560) but much looser on small regions -- on the
+1024 px probe pool naive reads 0.9108 where the optimum is 0.9886. **Quote the
+optimised number, or label the naive one a floor.** Stride does not matter:
+optimised stride-4 and stride-1 are both 0.9798 on HF14 at 2560.
+
+The 1280 -> 2048 ceiling gain is +0.0152 against a measured +0.050, so the
+resolution lever is mostly real rather than mechanical. Worth remembering the
+next time resolution is credited or blamed.
+
+**Threshold sweeps** are flat on every pool: HF14 peaks at 0.35 exactly
+(0.7834), v6d train peaks at 0.20 for +0.0035 over 0.35. Calibration is not
+hiding anything.
+
+**Residual decomposition** (`scripts/residual_decomp.py`, res2560-e4 at 2560).
+The script reproduces the published HF14 mean to four decimals (0.7834 vs
+0.78331), which is the check that the whole decomposition is trustworthy.
+Buckets as a share of all error pixels:
+
+| | HF14 | v6d train | v6d fresh |
+|---|---:|---:|---:|
+| mean IoU | 0.7834 | 0.7485 | 0.7764 |
+| median | 0.8264 | 0.8510 | 0.8830 |
+| boundary (within 4 px of GT edge) | 19.3% | 16.6% | 21.2% |
+| missed whole region (recall < 0.25) | 14.5% | 9.3% | 5.3% |
+| missed inside a found region | 21.1% | 26.9% | 22.2% |
+| selected a wrong region | 23.9% | 37.0% | 42.4% |
+| fringe / spill | 21.2% | 10.2% | 8.8% |
+
+Two things to keep: boundary is never more than a fifth, and **train (0.7485)
+scores BELOW fresh (0.7764)**. A negative train/fresh gap means nothing
+image-specific survives training at all, which is the opposite of the
+memorisation the 2026-09-18 entry worried about at 2 repeats.
+
+**Target size does not explain HF14's deficit.** Selections run from
+sqrt(area) 189 px to 2972 px, and measured IoU is flat across that range
+(0.74-0.82) except the four largest, which are nearly solved (0.9713). The
+ceiling is >= 0.97 in every size band, so nothing about small selections is
+unreachable on real plans. corr(log size, IoU) = +0.18. The small-region
+ceiling problem is a **v6d pool artefact**: synthetic regions are far smaller
+relative to the sheet (ceiling 0.9023 under 500k px).
+
+**Decoder sweep** (frozen ResNet50, 200 images, 1500 steps, 1024 px). Full
+table in `codex_doc.md`. The shape of it: every conditioning mechanism lands
+within 0.007 on fit, and the two WIDE variants are the worst (w256 0.8662,
+w384 0.8675 against baseline 0.9067) -- at a fixed step budget, extra width
+costs more than it buys. `run_capacity_probe.sh` is superseded: it sweeps
+exactly this axis, an hour per point, judged on the invalid soft-dice number.
+
+**Fit ladder.** Baseline decoder, by pool size x step budget, hard IoU at 0.35:
+
+| N | 2 passes | 8 | 30 | 120 |
+|---:|---:|---:|---:|---:|
+| 8 | 0.394 | 0.552 | 0.795 | 0.890 |
+| 32 | 0.291 | 0.351 | 0.743 | 0.953 |
+| 200 | 0.396 | 0.620 | 0.905 | 0.9866 |
+
+Against an optimised ceiling of 0.9886. Fit is a step-budget question, not a
+capacity question, and at 200 images it is solved.
+
+**Backbone bake-off.** `StagedBackbone` exposes ResNet50, ConvNeXt and Swin as
+the same stride-4/8/16/32 pyramid, so the decoder is unchanged across them.
+ConvNeXt-Base is worst on both axes (baseline train 0.6839, HF14 0.4371, one
+seed). Swin-B transfers best and fits worst; ResNet50 the reverse. 4 seeds on
+the main arms, table in `codex_doc.md` and `startup.md`.
+
+**Material separability** (`scripts/material_separability.py`, no training).
+Within-image same-vs-different family cosine separability of frozen features,
+HF14, level 3 (1/32):
+
+| backbone | same | different | margin | AUC |
+|---|---:|---:|---:|---:|
+| resnet50 | +0.9020 | +0.4665 | +0.4354 | 0.9936 |
+| convnext_base | +0.9178 | +0.6280 | +0.2898 | 0.9644 |
+| swin_b | +0.9906 | +0.9661 | +0.0245 | 0.9498 |
+
+By patch size, resnet50: 224/96/48 px -> 0.9936/0.9661/0.9452 on HF14 and
+0.9406/0.9207/0.8776 on v6d. So the representation carries the material
+identity, degrading at fine scale and on synthetic. Note Swin has the WORST
+separability and the BEST transfer, so this metric does not explain the
+bake-off -- do not use it to pick a backbone.
+
+Only 7 of the 14 HF14 images have >= 2 labelled families, so the real-plan
+separability numbers rest on 7 images. The v6d rows (60 images, many families)
+are the better-powered half.
+
+
 ## 2026-09-18 — Procedural volume, single-pass training, and the fit ceiling
 
 Rebuilt from a clean clone on a fresh GH200 (every pipeline count in

@@ -1,11 +1,183 @@
 # Handoff
 
-Last updated: 2026-09-18
+Last updated: 2026-09-20
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-09-20)
+
+A method session. The question was "which architecture reaches ~0.95 train IoU",
+asked because every previous answer here cost an overnight run. The answer is
+that **fit questions do not need overnight runs**, and once measured cheaply,
+**capacity was never the limit** and the 0.95 target was partly unreachable and
+wholly beside the point.
+
+**The method: cache the frozen backbone once, and every architecture question
+costs seconds.** The backbone is ~25.6M of 28.0M parameters and essentially all
+of the per-step cost, and every open architecture question was downstream of
+`RefUNet.features()`. `scripts/cache_backbone_features.py` stores `c1..c4` for
+image and reference; `scripts/decoder_search.py` trains variants against tensors
+already on the GPU. A variant costs **40-90 s** instead of an hour, and the
+whole 8-variant sweep took 8 minutes. Seed noise on the probe is ~0.003-0.02
+(frozen backbone, only the decoder init varies), so it needs far fewer seeds
+than the full pipeline's 0.026.
+
+It ranks decoders and backbones. It cannot measure backbone finetuning, and its
+absolute numbers are not product numbers (frozen backbone, 200 synthetic images,
+1024 px). Survivors still need a real run.
+
+**1. `abshetty/floz-refunet-synth100k-e1` is a byte-identical duplicate of
+`abshetty/floz-refunet-res2560-e4`** -- same 372 tensors, same config, same
+`source_checkpoint`, same `real_mean_iou` 0.7833. The publish step was pointed
+at the wrong `.pth`. **The 100k single-pass checkpoint behind the 2026-09-18
+underfitting finding does not exist anywhere.** The entry below it in this file
+says it was published; that is wrong. Everything here used `res2560-e4`, whose
+training mix contains v6d ids 0-3199, so a regenerated `v6d_train2000`
+(`--seed 6 --start 0`, deterministic per `(seed, image_id)`) is genuine
+training data for it.
+
+**2. Three cheap measurements killed three hypotheses before any training.**
+
+- **Output stride is not the limit.** `scripts/label_ceiling.py` computes what
+  the best possible model with this output geometry would score, including a
+  convex hinge optimisation over the stride-4 grid (upsampling is linear, so
+  this is at or near the true optimum). On HF14 at 2560: stride-4 optimal
+  **0.9798**, stride-1 optimal **0.9798** -- identical. The stride-4 head costs
+  ~0.000; the whole ~0.02 shortfall is the evaluator's native -> input -> native
+  resize round trip.
+- **Threshold is not the limit.** The sweep is flat and 0.35 is already optimal
+  (HF14 0.7834 at both 0.35 and 0.40; on train, 0.20 buys +0.0035).
+- **The 0.95 train target was above the ceiling.** On the v6d pool the ceiling
+  is 0.9058 at 2048, **0.9210 at 2560**, 0.9450 at 4096, because v6d regions are
+  small: ceiling 0.9023 for regions under 500k native px, 0.9958 above 5M. So
+  "train IoU should reach ~0.95" was measuring against an impossible number on
+  that pool. On HF14 the ceiling is 0.9739/0.9759/0.9846 at 2048/2560/4096 and
+  never binds -- real targets clear 0.97 in every size band.
+
+  Related: the ceiling rises only +0.015 from 1280 to 2048 while the measured
+  score rose +0.050, so **at most a third of the project's largest lever is
+  mechanical ceiling-raising** and the rest is real.
+
+**3. The residual is region-level, not boundary-level.**
+`scripts/residual_decomp.py` splits every error pixel into five buckets
+(it reproduces the published HF14 number to four decimals, 0.7834 vs 0.78331):
+
+| | HF14 real | v6d train | v6d fresh |
+|---|---:|---:|---:|
+| mean IoU | 0.7834 | **0.7485** | 0.7764 |
+| boundary | 19.3% | 16.6% | 21.2% |
+| missed whole region | 14.5% | 9.3% | 5.3% |
+| missed inside found region | 21.1% | 26.9% | 22.2% |
+| **selected wrong region** | **23.9%** | **37.0%** | **42.4%** |
+| fringe / spill | 21.2% | 10.2% | 8.8% |
+
+Boundary is at most a fifth of the error anywhere. Note also the model scores
+**lower on its own training data (0.7485) than on data it has never seen
+(0.7764)** -- a negative train/fresh gap, so nothing image-specific is retained.
+
+**4. Decoder capacity is NOT the limit, and more of it is worse.** Eight
+variants on the frozen ResNet50, 200 cached images, 1500 steps:
+
+| variant | decoder params | train IoU |
+|---|---:|---:|
+| corr4 | 5.57M | 0.9099 |
+| selfattn (real self-attention) | 5.48M | 0.9074 |
+| baseline (width 128) | 5.12M | 0.9067 |
+| crossattn | 5.35M | 0.9037 |
+| deep | 6.30M | 0.8816 |
+| **w384** | **40.12M** | **0.8675** |
+| **w256** | **18.49M** | **0.8662** |
+
+Scaling the decoder 8x makes fit *worse*; conditioning mechanism moves fit by
+<0.007. **`run_capacity_probe.sh` would have spent an hour testing the one axis
+that does not matter** -- and against a soft-dice train number this repo has
+already declared invalid.
+
+**5. Fit is step-limited, and 0.9866 train IoU is reachable today.** Baseline
+decoder, frozen backbone, by pool size and step budget:
+
+| pool N | 2 passes | 8 passes | 30 passes | 120 passes |
+|---|---:|---:|---:|---:|
+| 8 | 0.394 | 0.552 | 0.795 | 0.890 |
+| 32 | 0.291 | 0.351 | 0.743 | 0.953 |
+| **200** | 0.396 | 0.620 | 0.905 | **0.9866** |
+
+The true optimised ceiling for this setup is **0.9886**, so the existing
+width-128 decoder sits essentially on it. The 2026-09-18 "train tops out at
+~0.80, a correctly-sized model should reach ~0.95" reading conflated *too few
+optimisation steps* with *too little capacity*. (The naive area-pooled ceiling
+reported by `decoder_search.py`, 0.9175, is a FLOOR on the true bound, not a
+cap -- the model legitimately exceeds it by finding a sharper stride-4 encoding
+than area-pooling, exactly as the convex analysis predicts.)
+
+**6. Backbone matters, and it trades fit against transfer.** Same decoder, same
+data, same steps; ImageNet-pretrained and frozen; 4 seeds on the main arms.
+HF14 here is 52 cached real selections at 1024 with a frozen backbone, so it is
+a RANKING number, far below the product's 0.78:
+
+| backbone | decoder | n | train | fresh synth | **HF14 real** |
+|---|---|--:|---:|---:|---:|
+| swin_b | selfattn | 4 | 0.7893±0.024 | 0.5534±0.014 | **0.5591±0.018** |
+| swin_b | corr4 | 4 | 0.8416±0.010 | 0.5590±0.018 | 0.5262±0.016 |
+| swin_b | baseline | 4 | 0.8278±0.028 | 0.5649±0.009 | 0.5179±0.046 |
+| resnet50 | corr4 | 4 | 0.9154±0.006 | 0.5813±0.006 | 0.4959±0.026 |
+| resnet50 | baseline | 4 | 0.9025±0.011 | 0.5700±0.015 | 0.4661±0.015 |
+| convnext_base | baseline | 1 | 0.6839 | 0.4702 | 0.4371 |
+| resnet50 | crossattn | 1 | 0.9086 | 0.5725 | 0.3976 |
+
+`swin_b + selfattn` beats `resnet50 + baseline` on real plans by **+0.0930
+(se 0.0134, t=6.96)** while fitting *worse* (0.789 vs 0.903). Across all 30
+probe runs, **corr(train fit, HF14 transfer) = -0.18** and corr(train fit,
+fresh synthetic) = +0.77. Fitting the generator better does not transfer;
+it is mildly anti-predictive.
+
+**So the original question answers itself: the architecture that reaches 0.95
+on train is the one already in the repo, given more steps -- and reaching it is
+not worth doing**, because train fit is anti-correlated with the product metric.
+
+**7. The representation already discriminates materials.**
+`scripts/material_separability.py` embeds patches from each labelled family with
+a frozen backbone and measures within-image separability. No training at all.
+On HF14, frozen ResNet50: same-family cos +0.902, different-family +0.467,
+**AUC 0.9936**. So `false_region` -- the single largest error bucket -- is not
+caused by features that cannot tell the materials apart. It degrades with patch
+size (224/96/48 px -> 0.994/0.966/0.945 on HF14, 0.941/0.921/0.878 on v6d), so
+the difficulty is fine-scale and spatial, not semantic. Swin scores *lower*
+here (AUC 0.9498, margin +0.0245) while transferring better, so patch-level
+separability is not the mechanism behind item 6.
+
+**Caveats on item 6, before anyone trains on it.** One learning rate (3e-4) for
+every backbone, chosen for the incumbent; ResNet50 carries `IMAGENET1K_V2`
+weights against Swin's V1 recipe; 200 synthetic images at 1024 px; frozen
+throughout, where production finetunes at `backbone_lr_mult 0.1`. The
+consistent 4-seed margin and the fit/transfer inversion are the signal; the
+absolute numbers are not.
+
+**Open, in priority order (revised 2026-09-20):**
+
+1. **Run `swin_b` (and a Swin/ConvNeXt-class backbone generally) in the real
+   pipeline**, unfrozen, at 2048-2560 on the documented mix. This is the first
+   lever in months with a >5x-sd margin behind it, and it is cheap to test
+   because `StagedBackbone` already exposes the 4-scale pyramid the decoder
+   wants.
+2. **Sweep the LR per backbone in the probe first** (minutes), so item 6 is not
+   an artefact of one LR tuned for ResNet50.
+3. **Attack `false_region` and `missed_inside` directly** -- 46-56% of the
+   error and the thing no lever in this repo has ever targeted. The features
+   separate materials at AUC 0.99, so this is a propagation/objective problem:
+   the model knows what the material looks like and still paints the wrong
+   region.
+4. **Retire train IoU as a target.** It is anti-correlated with transfer, its
+   ceiling is pool-dependent, and the number that motivated it came from a
+   checkpoint that no longer exists.
+5. More labelled real sources -- unchanged, still the structural constraint.
+
+**Do not re-open:** decoder width/depth as a capacity lever (item 4); output
+stride, mask threshold, and boundary methods as HF14 levers (items 2-3);
+`run_capacity_probe.sh` as written.
 
 ## Pick up here (2026-09-18)
 
@@ -13,6 +185,10 @@ An overnight session on a fresh GH200, rebuilt from a clean clone (every
 pipeline count matched `startup.md`). The machine was killed at ~06:50; every
 `data/runs/*` path below is gone. Two checkpoints were published:
 `abshetty/floz-refunet-res2560-e4` and `abshetty/floz-refunet-synth100k-e1`.
+**Correction (2026-09-20): the second upload carries the FIRST one's weights,
+byte for byte. The 100k checkpoint was never published and is gone; every
+number in this entry that came from it is unreproducible. See the 2026-09-20
+entry.**
 Full detail and tables: `synth_progress.md` (2026-09-18). **One seed per arm —
 nothing below is adopted into the documented recipe.**
 
@@ -360,6 +536,27 @@ are implemented but screened negative — read the warnings before touching eith
 - `run_synth_v6.sh` — reproduces any synthetic-only arm end to end (pool,
   merge, two-phase train, val-selection, averaging). `./run_synth_v6.sh
   headline 7` is the 0.686 result.
+- `scripts/cache_backbone_features.py` — runs a frozen backbone ONCE over a
+  pool and stores `c1..c4` for image and reference, padded to one grid with a
+  validity mask. `--backbone {resnet50,convnext_base,convnext_small,swin_b,
+  swin_t}` via `StagedBackbone`, which exposes all of them as the same
+  stride-4/8/16/32 pyramid; `--source {local,hf14,val14}` so real plans cache
+  as the 52 fixed questions.
+- `scripts/decoder_search.py` — trains reference-conditioned decoder variants
+  against that cache (seconds each, not hours): width, depth, dense
+  correlation, cross-attention, real self-attention. Reports hard train IoU,
+  fresh-synthetic and cached-HF14 transfer.
+- `scripts/label_ceiling.py` — what the best possible model with this output
+  geometry and resize chain could score, naive and convex-optimised. Run it
+  before treating any fit target as reachable.
+- `scripts/residual_decomp.py` — splits missing IoU into boundary / missed
+  region / missed interior / wrong region / fringe, plus a threshold sweep.
+  Says WHICH axis to spend on.
+- `scripts/material_separability.py` — within-image same-vs-different family
+  separability of a frozen backbone's features. No training; an upper bound on
+  what any decoder reading those features can group.
+- `scripts/hf_ckpt_to_pth.py` — rebuilds a loadable `.pth` from a published
+  safetensors + config.json pair.
 - `scripts/average_checkpoints.py` — averages the last epochs of a run and
   ranks the window on validation; the selection protocol as of 2026-09-07.
 - `scripts/select_epoch_on_val.py` — val-selected protocol; one process per run,

@@ -521,6 +521,24 @@ Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
 without confusable pairs 0.6823 ± 0.0190. Pre-2026-08-06 (broken sampler) and
 retired query-model numbers: `synth_progress_archive.md`, not comparable here.
 
+### Frozen-backbone probe rows (2026-09-20, NOT product numbers)
+
+Same decoder, same 200 synthetic images, 1024 px, backbone frozen; HF14 is 52
+cached real selections. Useful only for ranking, and far below the real
+pipeline's 0.78 because of the freeze and the resolution.
+
+| backbone + decoder | seeds | train | HF14 (probe) |
+|---|--:|---:|---:|
+| swin_b + selfattn | 4 | 0.7893 ± 0.024 | **0.5591 ± 0.018** |
+| swin_b + baseline | 4 | 0.8278 ± 0.028 | 0.5179 ± 0.046 |
+| resnet50 + corr4 | 4 | 0.9154 ± 0.006 | 0.4959 ± 0.026 |
+| resnet50 + baseline (incumbent) | 4 | 0.9025 ± 0.011 | 0.4661 ± 0.015 |
+
+Swin beats the incumbent by +0.0930 (se 0.0134, t=6.96) while fitting worse.
+Across all 30 probe runs corr(train fit, HF14) = **-0.18**: fitting the
+generator better is mildly ANTI-predictive of real transfer. One LR for every
+backbone -- sweep it per backbone before trusting the margin.
+
 ### What the comparisons establish
 
 - **Training resolution is the largest single effect: +0.05 to +0.07** (1280 ->
@@ -546,6 +564,42 @@ retired query-model numbers: `synth_progress_archive.md`, not comparable here.
 So: **train at 2048**, and generate more. Adding *records* without adding
 sources does nothing (2026-08-10 volume/ratio nulls in `synth_progress.md`), but
 adding generated sources is now the best-value supply there is.
+
+### Cheap architecture screening (2026-09-20)
+
+Architecture and fit questions no longer need a training run. Cache the frozen
+backbone once, then train decoder variants against the cached tensors:
+
+```bash
+PYTHONPATH=. python3 scripts/cache_backbone_features.py \
+  --backbone swin_b --local-data data/synthetic/v6d_train2000 --n 200 \
+  --image-max-size 1024 --out data/cache/swin_b_train_1024
+PYTHONPATH=. python3 scripts/cache_backbone_features.py \
+  --backbone swin_b --source hf14 --image-max-size 1024 \
+  --out data/cache/swin_b_hf14_1024            # the 52 fixed questions
+
+PYTHONPATH=. python3 scripts/decoder_search.py \
+  --train-cache data/cache/swin_b_train_1024 \
+  --fresh-cache data/cache/swin_b_fresh_1024 \
+  --hf14-cache  data/cache/swin_b_hf14_1024 --steps 1500
+```
+
+40-90 s per variant against ~1 h for a real run, and probe seed noise is
+~0.003-0.02 rather than 0.026, so 2-4 seeds settle what used to need many.
+**These are ranking numbers, not product numbers** -- frozen backbone, 200
+synthetic images, 1024 px -- so a winner still needs a real run. It cannot
+measure backbone finetuning at all.
+
+Before treating any fit target as reachable, run `scripts/label_ceiling.py`:
+the stride-4 head costs ~0.000, but the native -> input -> native resize chain
+caps HF14 at 0.9739/0.9759/0.9846 (2048/2560/4096) and the v6d pool at
+0.9058/0.9210/0.9450. **A "train IoU 0.95" target is above the v6d ceiling
+below 4096 px.** Small regions drive it: 0.9023 under 500k native px against
+0.9958 above 5M.
+
+`scripts/residual_decomp.py` says which axis a deficit lives on. On every pool
+measured, boundary error is at most a fifth of the total and region-level error
+(wrong region selected, interior not filled) is 46-56%.
 
 ### The limit is generalization, not fit
 
