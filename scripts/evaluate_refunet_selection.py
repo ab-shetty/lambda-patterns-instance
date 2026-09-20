@@ -17,6 +17,7 @@ from refmask2former.dataset import (_normalize_chw, render_instance_mask,
                                     sample_reference_box, scale_matched_reference)
 from refmask2former.ref_unet import RefUNet
 from refmask2former.ref_attn_unet import RefCrossAttnUNet
+from refmask2former.ref_swin_unet import RefSwinUNet
 
 HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
 
@@ -57,6 +58,10 @@ def load_refunet(checkpoint_path, device):
     if args.get("model", "unet") == "crossattn":
         model = RefCrossAttnUNet(width=int(args.get("width", 128)), pretrained=False,
                                  num_heads=int(args.get("attn_heads", 4))).to(device)
+    elif str(args.get("model", "unet")).startswith("swin"):
+        model = RefSwinUNet(width=int(args.get("width", 128)), pretrained=False,
+                            backbone=str(args["model"]),
+                            corr_grid=int(args.get("corr_grid", 0) or 0)).to(device)
     else:
         # `anchor` must be rebuilt from the saved args: it widens the stem to 4
         # channels, so an anchored checkpoint cannot load into a default model.

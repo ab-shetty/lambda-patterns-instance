@@ -17,6 +17,7 @@ from tqdm import tqdm
 from refmask2former import build_datasets, collate_fn, load_local_records, load_parquet_records
 from refmask2former.ref_unet import RefUNet
 from refmask2former.ref_attn_unet import RefCrossAttnUNet
+from refmask2former.ref_swin_unet import RefSwinUNet
 from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model
 
 
@@ -35,7 +36,8 @@ def parse_args():
     p.add_argument("--image-max-size", type=int, default=1280)
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--width", type=int, default=128)
-    p.add_argument("--model", choices=("unet", "crossattn"), default="unet",
+    p.add_argument("--model", choices=("unet", "crossattn", "swin_t", "swin_s",
+                                       "swin_b"), default="unet",
                    help="unet = RefUNet (global-average conditioning, default). "
                         "crossattn = RefCrossAttnUNet (multi-head cross-attention "
                         "conditioning at the two coarsest scales; see "
@@ -221,6 +223,11 @@ def main():
     if args.model == "crossattn":
         model = RefCrossAttnUNet(args.width, pretrained=args.init_from is None,
                                  num_heads=args.attn_heads).to(device)
+    elif args.model.startswith("swin"):
+        # Vision-transformer backbone, same decoder. See ref_swin_unet.py.
+        model = RefSwinUNet(args.width, pretrained=args.init_from is None,
+                            backbone=args.model,
+                            corr_grid=args.corr_grid).to(device)
     else:
         model = RefUNet(args.width, pretrained=args.init_from is None,
                         corr_grid=args.corr_grid,
