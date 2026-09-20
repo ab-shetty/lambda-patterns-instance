@@ -44,6 +44,26 @@ res, schedule, seed; only `--model` differs; see 6c):
 train IoU at 100k" question this is the relevant number, not the HF14 column
 the rest of this entry leads with.
 
+**Three-way matched-budget fit, including swin_b (2026-09-20, last 15 min of
+the VM).** 1,995 v6d plans, 248 steps, 1024 px, `--domain-random`, hard 0.35,
+identical everything but `--model`:
+
+| model | params | hard train IoU |
+|---|---:|---:|
+| RefUNet (ResNet50) | 28.0M | 0.3774 |
+| **swin_t** | 31.4M | **0.4385** |
+| swin_b | 90.8M | 0.4362 |
+
+- Both transformers out-fit the CNN by ~0.06 at a matched budget, in the same
+  direction as the 2048/9-epoch A/B (0.7826 vs 0.6811). Two budgets, two
+  resolutions, same sign.
+- **swin_b buys nothing over swin_t** at 3x the parameters, matching the frozen
+  probe. If that holds at a real budget, swin_t is the arm to scale and it is
+  ~3x cheaper per step (1.16 it/s vs 2.01 under contention).
+- 248 steps is a tiny budget and a larger model may converge more slowly, so
+  the swin_b null is WEAK. Re-check it at the 25,000-step budget below before
+  dropping swin_b.
+
 **How to answer it at 100k WITHOUT 20-hour runs.** Because train ~= fresh under
 augmentation, the architecture's plateau on this distribution is a function of
 STEPS, not of how many of the 100k it has seen. So:
