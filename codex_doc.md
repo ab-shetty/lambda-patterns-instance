@@ -119,6 +119,42 @@ reported by `decoder_search.py`, 0.9175, is a FLOOR on the true bound, not a
 cap -- the model legitimately exceeds it by finding a sharper stride-4 encoding
 than area-pooling, exactly as the convex analysis predicts.)
 
+**6a. Read it as the TRAIN / UNSEEN / REAL ladder, not as a backbone gap.**
+The two hops localise the loss: fit -> unseen is generalisation inside the
+generator, unseen -> real is domain transfer, and `codex_doc.md` (2026-09-18)
+named the second one **~0.085-0.11** as the binding constraint on the whole
+synthetic route. 1024 px, N=200, frozen, lr 3e-4:
+
+| backbone + decoder | TRAIN | UNSEEN | REAL | fit->unseen | **unseen->real** |
+|---|---:|---:|---:|---:|---:|
+| swin_b + selfattn | 0.7893 | 0.5534 | **0.5591** | +0.236 | **-0.006** |
+| swin_b + crossattn | 0.7914 | 0.5447 | 0.5525 | +0.247 | **-0.008** |
+| swin_t + selfattn | 0.7294 | 0.4856 | 0.4885 | +0.244 | **-0.003** |
+| swin_t + baseline | 0.8103 | 0.5336 | 0.5244 | +0.277 | +0.009 |
+| swin_b + baseline | 0.8278 | 0.5649 | 0.5179 | +0.263 | +0.047 |
+| resnet50 + corr4 | 0.9154 | 0.5813 | 0.4959 | +0.334 | +0.085 |
+| resnet50 + baseline | 0.9025 | 0.5700 | 0.4661 | +0.333 | **+0.104** |
+| resnet50 + selfattn | 0.8915 | 0.5563 | 0.4383 | +0.335 | +0.118 |
+| resnet50 + crossattn | 0.9086 | 0.5725 | 0.3976 | +0.336 | +0.175 |
+
+Three readings, in order of importance:
+
+- **The probe reproduces the binding constraint.** ResNet50 + baseline gives
+  unseen->real **+0.1039**, against the +0.085-0.114 measured at 100,000 images
+  on a fully trained model. Two very different regimes, the same number -- so
+  the 200-image frozen probe is measuring the real thing, not an artefact.
+- **The domain gap is a property of the BACKBONE, not the data.** Every
+  ResNet50 arm carries +0.085 to +0.175; every Swin arm with attention
+  conditioning carries ~0.000 or negative -- it transfers to real plans as well
+  as to unseen synthetic draws. The project has been treating that gap as a
+  generator-realism problem to be fixed with better synthetic data
+  (2026-09-18 open item 3). On this evidence it is substantially a
+  representation problem, and generator realism is attacking the wrong term.
+- **ResNet50 also loses the FIRST hop.** Its fit->unseen gap is +0.333 in every
+  arm against Swin's +0.236-0.283. It fits the generator hardest and carries
+  the least of that fit forward at both hops, which is the whole fit/transfer
+  inversion in one line.
+
 **6. A VISION TRANSFORMER BACKBONE WINS -- the hypothesis this repo has been
 deferring since 2026-09-18.** `swin_b` is a Shifted-Window Transformer: real
 multi-head self-attention, but hierarchical (strides 4/8/16/32) and windowed
@@ -345,8 +381,12 @@ nothing below is adopted into the documented recipe.**
    or attention-native backbone (ViT/Swin) at 100k+ single-pass, judged on
    **train IoU reaching ~0.95** before anything else is concluded about data.
 2. **Second seed at 2560**, and whether 3072 continues the trend.
-3. **Close the 0.085 fresh-synthetic → real transfer gap.** This is now the
-   binding term on the synthetic route, and it is a generator-realism problem:
+3. **Close the 0.085 fresh-synthetic → real transfer gap.** **Reframed
+   2026-09-20: it is backbone-dependent, not purely a generator problem --
+   Swin arms show ~0.000 on the same pool where ResNet50 shows +0.104. Fix the
+   representation before spending another round on generator realism.**
+   The original framing follows. This is the binding term on the synthetic
+   route, and it is a generator-realism problem:
    the 2026-09-17 audit's open items (texture irregularity, implausible
    material colours, the 2-story label-collision bug) are unaddressed.
 4. **crossattn on 100k ties overall but WINS where it matters — chase this.**
