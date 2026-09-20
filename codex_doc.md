@@ -7,6 +7,64 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-09-20, LAST -- read this before the rest of the day's entry)
+
+**Retraction.** Earlier in this entry I claimed the existing architecture
+"reaches 0.9866 train IoU, so fit is solved and only needs steps". That number
+came from **200 fixed images, no augmentation, frozen backbone, 120 passes** --
+a CNN memorising a tiny static pool. It says nothing about fit at scale, and
+the conclusion drawn from it ("capacity is not the limit") is **not
+supported**. Measured properly, same architecture, real pipeline, augmentation
+on, hard threshold:
+
+| RefUNet, unfrozen, --domain-random | plans | steps | res | hard train IoU |
+|---|---:|---:|---:|---:|
+| arm A | 2,000 | 7,500 | 1024 | **0.5400** |
+| arm B | 10,000 | 7,500 | 1024 | **0.6954** |
+| A/B control | 1,995 | ~2,200 | 2048 | 0.6811 |
+| (2026-09-18, on record) | 100,000 | 25,000 | 2048 | 0.8022 |
+
+**Train IoU here is not memorisation.** With `--domain-random` every sample is
+a fresh view, so train ~= fresh (0.8022 vs 0.7980 at 100k) and the number is
+"IoU on the generator distribution". That is why MORE data at a MATCHED step
+budget RAISES it (0.5400 -> 0.6954): the model is learning a function, not
+memorising items. RefUNet's curve is still climbing at 100k/25k steps, so its
+0.80 is not a demonstrated capacity wall either -- it is simply where the
+budget ran out.
+
+**The one matched-budget architecture comparison that exists** (identical pool,
+res, schedule, seed; only `--model` differs; see 6c):
+
+| 1,995 v6d plans, 2048, 9 epochs | hard train IoU |
+|---|---:|
+| RefUNet (ResNet50, 28.0M) | 0.6811 |
+| RefSwinUNet (swin_t, 31.4M) | **0.7826** |
+
+**+0.10 of fit at identical budget.** For the "can an architecture hold high
+train IoU at 100k" question this is the relevant number, not the HF14 column
+the rest of this entry leads with.
+
+**How to answer it at 100k WITHOUT 20-hour runs.** Because train ~= fresh under
+augmentation, the architecture's plateau on this distribution is a function of
+STEPS, not of how many of the 100k it has seen. So:
+
+1. Generate 100k v6d (`--seed 6 --start 0 --workers 48`; 10k takes 77 s, so
+   100k is ~13 min).
+2. Give each architecture the SAME step budget -- 25,000 steps matches the
+   RefUNet number on record -- at 1024 px, `--domain-random`, single pass.
+   At ~9 it/s that is **~45-60 min per architecture**, not 20 hours.
+3. Read fit with `scripts/fresh_synth_iou.py --seen` (hard 0.35), never the
+   soft-dice number in the training log.
+4. Arms: `--model unet` (the 0.8022 control), `swin_t`, `swin_b`. Three arms,
+   ~3 h total.
+
+Run it at 1024 for the ARCHITECTURE RANKING and do not read the absolute
+number as the 2048/2560 value -- resolution moves fit a lot (0.6811 at 2048
+against 0.5400 at 1024 on the same pool, though at different step counts).
+
+**Do not repeat today's mistake:** a fit experiment on a few hundred images
+with augmentation off cannot answer a 100k question, whatever it reports.
+
 ## Pick up here (2026-09-20)
 
 A method session. The question was "which architecture reaches ~0.95 train IoU",
