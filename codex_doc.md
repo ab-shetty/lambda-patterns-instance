@@ -7,410 +7,72 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-09-20, LAST -- read this before the rest of the day's entry)
-
-**Retraction.** Earlier in this entry I claimed the existing architecture
-"reaches 0.9866 train IoU, so fit is solved and only needs steps". That number
-came from **200 fixed images, no augmentation, frozen backbone, 120 passes** --
-a CNN memorising a tiny static pool. It says nothing about fit at scale, and
-the conclusion drawn from it ("capacity is not the limit") is **not
-supported**. Measured properly, same architecture, real pipeline, augmentation
-on, hard threshold:
-
-| RefUNet, unfrozen, --domain-random | plans | steps | res | hard train IoU |
-|---|---:|---:|---:|---:|
-| arm A | 2,000 | 7,500 | 1024 | **0.5400** |
-| arm B | 10,000 | 7,500 | 1024 | **0.6954** |
-| A/B control | 1,995 | ~2,200 | 2048 | 0.6811 |
-| (2026-09-18, on record) | 100,000 | 25,000 | 2048 | 0.8022 |
-
-**Train IoU here is not memorisation.** With `--domain-random` every sample is
-a fresh view, so train ~= fresh (0.8022 vs 0.7980 at 100k) and the number is
-"IoU on the generator distribution". That is why MORE data at a MATCHED step
-budget RAISES it (0.5400 -> 0.6954): the model is learning a function, not
-memorising items. RefUNet's curve is still climbing at 100k/25k steps, so its
-0.80 is not a demonstrated capacity wall either -- it is simply where the
-budget ran out.
-
-**The one matched-budget architecture comparison that exists** (identical pool,
-res, schedule, seed; only `--model` differs; see 6c):
-
-| 1,995 v6d plans, 2048, 9 epochs | hard train IoU |
-|---|---:|
-| RefUNet (ResNet50, 28.0M) | 0.6811 |
-| RefSwinUNet (swin_t, 31.4M) | **0.7826** |
-
-**+0.10 of fit at identical budget.** For the "can an architecture hold high
-train IoU at 100k" question this is the relevant number, not the HF14 column
-the rest of this entry leads with.
-
-**Three-way matched-budget fit, including swin_b (2026-09-20, last 15 min of
-the VM).** 1,995 v6d plans, 248 steps, 1024 px, `--domain-random`, hard 0.35,
-identical everything but `--model`:
-
-| model | params | hard train IoU |
-|---|---:|---:|
-| RefUNet (ResNet50) | 28.0M | 0.3774 |
-| **swin_t** | 31.4M | **0.4385** |
-| swin_b | 90.8M | 0.4362 |
-
-- Both transformers out-fit the CNN by ~0.06 at a matched budget, in the same
-  direction as the 2048/9-epoch A/B (0.7826 vs 0.6811). Two budgets, two
-  resolutions, same sign.
-- **swin_b buys nothing over swin_t** at 3x the parameters, matching the frozen
-  probe. If that holds at a real budget, swin_t is the arm to scale and it is
-  ~3x cheaper per step (1.16 it/s vs 2.01 under contention).
-- **Re-checked at 3x the budget (744 steps), same pool and settings:
-  swin_t 0.5744, swin_b 0.5343.** So swin_b does not merely tie -- it FALLS
-  BEHIND as the budget grows (tied at 248 steps, -0.040 at 744), which is the
-  opposite of the "a larger model just converges more slowly" caveat this line
-  originally carried. Two budgets, and the gap opens rather than closes.
-- swin_t is therefore the arm to scale: better fit AND ~1.7x faster per step.
-  Still worth one swin_b arm at 25,000 steps before closing it out, since both
-  of these budgets are tiny next to that.
-
-**How to answer it at 100k WITHOUT 20-hour runs.** Because train ~= fresh under
-augmentation, the architecture's plateau on this distribution is a function of
-STEPS, not of how many of the 100k it has seen. So:
-
-**`./run_fit_100k.sh` does all of this end to end** -- generates the pool if
-absent, sizes the epoch count to the step budget, trains each arm and prints
-the hard train IoU. `./run_fit_100k.sh swin_t` for one arm. The steps it
-automates:
-
-1. Generate 100k v6d (`--seed 6 --start 0 --workers 48`; 10k takes 77 s, so
-   100k is ~13 min).
-2. Give each architecture the SAME step budget -- 25,000 steps matches the
-   RefUNet number on record -- at 1024 px, `--domain-random`, single pass.
-   At ~9 it/s that is **~45-60 min per architecture**, not 20 hours.
-3. Read fit with `scripts/fresh_synth_iou.py --seen` (hard 0.35), never the
-   soft-dice number in the training log.
-4. Arms: `--model unet` (the 0.8022 control), `swin_t`, `swin_b`. Three arms,
-   ~3 h total.
-
-Run it at 1024 for the ARCHITECTURE RANKING and do not read the absolute
-number as the 2048/2560 value -- resolution moves fit a lot (0.6811 at 2048
-against 0.5400 at 1024 on the same pool, though at different step counts).
-
-**Do not repeat today's mistake:** a fit experiment on a few hundred images
-with augmentation off cannot answer a 100k question, whatever it reports.
-
 ## Pick up here (2026-09-20)
 
-A method session. The question was "which architecture reaches ~0.95 train IoU",
-asked because every previous answer here cost an overnight run. The answer is
-that **fit questions do not need overnight runs**, and once measured cheaply,
-**capacity was never the limit** and the 0.95 target was partly unreachable and
-wholly beside the point.
+Five facts and one command. Detail in `synth_progress.md` (2026-09-20);
+per-arm numbers in `startup.md`.
 
-**The method: cache the frozen backbone once, and every architecture question
-costs seconds.** The backbone is ~25.6M of 28.0M parameters and essentially all
-of the per-step cost, and every open architecture question was downstream of
-`RefUNet.features()`. `scripts/cache_backbone_features.py` stores `c1..c4` for
-image and reference; `scripts/decoder_search.py` trains variants against tensors
-already on the GPU. A variant costs **40-90 s** instead of an hour, and the
-whole 8-variant sweep took 8 minutes. Seed noise differs sharply by metric -- see the
-repeatability numbers below.
+**1. A vision-transformer backbone beats ResNet50 — the biggest lever found in
+months.** `refmask2former/ref_swin_unet.py` swaps the backbone and changes
+nothing else. `run_backbone_ab.sh`, v6d-only 1,995 plans @2048, documented
+9-epoch schedule, unfrozen, val-selected epoch, only `--model` differs:
 
-It ranks decoders and backbones. It cannot measure backbone finetuning, and its
-absolute numbers are not product numbers (frozen backbone, 200 synthetic images,
-1024 px). Survivors still need a real run.
+| arm | hard train IoU | HF14 |
+|---|---:|---:|
+| RefUNet (ResNet50, 28.0M) | 0.6811 | 0.6359 |
+| **RefSwinUNet (swin_t, 31.4M)** | **0.7826** | **0.7066** |
 
-**The probe is cheap for FIT and only cheap for fit.** Five runs with identical
-arguments: train IoU 0.9079 **sd 0.0032**, HF14 transfer 0.4771 **sd 0.0243**.
-Fit is nearly deterministic, so one run settles it. Transfer carries the same
-~0.024 this repo has always had, because it is the same 52 hard questions --
-the freeze buys speed, not statistical power. Budget transfer seeds exactly as
-`startup.md` says, and prefer the paired-per-selection test.
+Paired over the 52 fixed selections: **+0.0707, t(51)=2.20, p=0.032**. The
+control reproduces the documented `v6d-only @2048 = 0.6400`. **0.7066 with zero
+real plans** beats the best synthetic-only on record (0.686) and matches
+`mix5092 @1280` (0.7097). It wins where the deficit is: image 14 **+0.142**
+(35% of the total) and image 7 **+0.726**; it loses on 2 (−0.171) and 27
+(−0.100). **One seed — replicate before adopting.** Published:
+`abshetty/floz-refunet-swint-v6d-e8`, control `...-resnet50-v6d-e8`.
 
-**1. `abshetty/floz-refunet-synth100k-e1` is a byte-identical duplicate of
-`abshetty/floz-refunet-res2560-e4`** -- same 372 tensors, same config, same
-`source_checkpoint`, same `real_mean_iou` 0.7833. The publish step was pointed
-at the wrong `.pth`. **The 100k single-pass checkpoint behind the 2026-09-18
-underfitting finding does not exist anywhere.** The entry below it in this file
-says it was published; that is wrong. Everything here used `res2560-e4`, whose
-training mix contains v6d ids 0-3199, so a regenerated `v6d_train2000`
-(`--seed 6 --start 0`, deterministic per `(seed, image_id)`) is genuine
-training data for it.
-
-**2. Three cheap measurements killed three hypotheses before any training.**
-
-- **Output stride is not the limit.** `scripts/label_ceiling.py` computes what
-  the best possible model with this output geometry would score, including a
-  convex hinge optimisation over the stride-4 grid (upsampling is linear, so
-  this is at or near the true optimum). On HF14 at 2560: stride-4 optimal
-  **0.9798**, stride-1 optimal **0.9798** -- identical. The stride-4 head costs
-  ~0.000; the whole ~0.02 shortfall is the evaluator's native -> input -> native
-  resize round trip.
-- **Threshold is not the limit.** The sweep is flat and 0.35 is already optimal
-  (HF14 0.7834 at both 0.35 and 0.40; on train, 0.20 buys +0.0035).
-- **The 0.95 train target was above the ceiling.** On the v6d pool the ceiling
-  is 0.9058 at 2048, **0.9210 at 2560**, 0.9450 at 4096, because v6d regions are
-  small: ceiling 0.9023 for regions under 500k native px, 0.9958 above 5M. So
-  "train IoU should reach ~0.95" was measuring against an impossible number on
-  that pool. On HF14 the ceiling is 0.9739/0.9759/0.9846 at 2048/2560/4096 and
-  never binds -- real targets clear 0.97 in every size band.
-
-  Related: the ceiling rises only +0.015 from 1280 to 2048 while the measured
-  score rose +0.050, so **at most a third of the project's largest lever is
-  mechanical ceiling-raising** and the rest is real.
+**2. swin_b is worse than swin_t, and the gap widens with budget.** 248 steps:
+0.4362 vs 0.4385 (tie). 744 steps: 0.5343 vs **0.5744**. Not slow convergence —
+90.8M buys nothing over 31.4M and costs ~1.7x per step. Scale swin_t.
 
 **3. The residual is region-level, not boundary-level.**
-`scripts/residual_decomp.py` splits every error pixel into five buckets
-(it reproduces the published HF14 number to four decimals, 0.7834 vs 0.78331):
+`scripts/residual_decomp.py` (reproduces the published HF14 mean to 4 decimals).
+Boundary is ≤21% of all error everywhere; wrong-region-selected plus
+unfilled-interior is 46–56%. Output stride, mask threshold and boundary methods
+are all dead ends — optimised stride-4 and stride-1 both score 0.9798 on HF14,
+and the threshold sweep is flat at 0.35. **Attack `false_region`.**
 
-| | HF14 real | v6d train | v6d fresh |
-|---|---:|---:|---:|
-| mean IoU | 0.7834 | **0.7485** | 0.7764 |
-| boundary | 19.3% | 16.6% | 21.2% |
-| missed whole region | 14.5% | 9.3% | 5.3% |
-| missed inside found region | 21.1% | 26.9% | 22.2% |
-| **selected wrong region** | **23.9%** | **37.0%** | **42.4%** |
-| fringe / spill | 21.2% | 10.2% | 8.8% |
+**4. Cheap screening ranks TRANSFER, not FIT.** Cache the frozen backbone once
+(`cache_backbone_features.py`), then decoder/backbone variants train in 40–90 s
+(`decoder_search.py`). It predicted the unfrozen A/B to within 0.012. But five
+identical runs give train sd **0.0032** and HF14 sd **0.0243** — the freeze buys
+speed, not statistical power, and its fit column inverts once you unfreeze
+(frozen: swin fits worse; unfrozen: swin fits better).
 
-Boundary is at most a fifth of the error anywhere. Note also the model scores
-**lower on its own training data (0.7485) than on data it has never seen
-(0.7764)** -- a negative train/fresh gap, so nothing image-specific is retained.
+**5. RETRACTED: "the existing architecture reaches 0.9866 train IoU, so
+capacity is not the limit."** That was 200 fixed images, augmentation off,
+frozen backbone, 120 passes — a CNN memorising a static pool. Real pipeline,
+`--domain-random`, hard 0.35: 2,000 plans/7,500 steps → **0.5400**; 10,000
+plans/7,500 steps → **0.6954**; 100,000/25,000 steps → 0.8022 (on record).
+Train ≈ fresh under augmentation, so this is function-learning, not
+memorisation — which is why *more* data at a matched budget *raises* it, and
+why RefUNet's 0.80 is where its budget ran out, not a proven wall.
+**A fit experiment on a few hundred images with augmentation off cannot answer
+a 100k question.**
 
-**4. Decoder capacity is NOT the limit, and more of it is worse.** Eight
-variants on the frozen ResNet50, 200 cached images, 1500 steps:
+**The open question, and the command that settles it:** can any architecture
+hold a high hard train IoU on 100k v6d? `./run_fit_100k.sh` — generates the
+pool, gives `unet`/`swin_t`/`swin_b` a matched 25,000-step budget at 1024, and
+prints hard train IoU. ~1 h per arm. The `unet` arm must land near 0.8022 or
+something is broken.
 
-| variant | decoder params | train IoU |
-|---|---:|---:|
-| corr4 | 5.57M | 0.9099 |
-| selfattn (real self-attention) | 5.48M | 0.9074 |
-| baseline (width 128) | 5.12M | 0.9067 |
-| crossattn | 5.35M | 0.9037 |
-| deep | 6.30M | 0.8816 |
-| **w384** | **40.12M** | **0.8675** |
-| **w256** | **18.49M** | **0.8662** |
+**Also:** `abshetty/floz-refunet-synth100k-e1` is a byte-identical duplicate of
+`floz-refunet-res2560-e4` — the 100k checkpoint behind the 2026-09-18
+underfitting entry was never published and is gone. `publish_refunet.py` had
+the same class of bug (stamped a Swin checkpoint "RefUNet"); fixed.
 
-Scaling the decoder 8x makes fit *worse*; conditioning mechanism moves fit by
-<0.007. **`run_capacity_probe.sh` would have spent an hour testing the one axis
-that does not matter** -- and against a soft-dice train number this repo has
-already declared invalid.
-
-**5. Fit is step-limited, and 0.9866 train IoU is reachable today.** Baseline
-decoder, frozen backbone, by pool size and step budget:
-
-| pool N | 2 passes | 8 passes | 30 passes | 120 passes |
-|---|---:|---:|---:|---:|
-| 8 | 0.394 | 0.552 | 0.795 | 0.890 |
-| 32 | 0.291 | 0.351 | 0.743 | 0.953 |
-| **200** | 0.396 | 0.620 | 0.905 | **0.9866** |
-
-The true optimised ceiling for this setup is **0.9886**, so the existing
-width-128 decoder sits essentially on it. The 2026-09-18 "train tops out at
-~0.80, a correctly-sized model should reach ~0.95" reading conflated *too few
-optimisation steps* with *too little capacity*. (The naive area-pooled ceiling
-reported by `decoder_search.py`, 0.9175, is a FLOOR on the true bound, not a
-cap -- the model legitimately exceeds it by finding a sharper stride-4 encoding
-than area-pooling, exactly as the convex analysis predicts.)
-
-**6a. Read it as the TRAIN / UNSEEN / REAL ladder, not as a backbone gap.**
-The two hops localise the loss: fit -> unseen is generalisation inside the
-generator, unseen -> real is domain transfer, and `codex_doc.md` (2026-09-18)
-named the second one **~0.085-0.11** as the binding constraint on the whole
-synthetic route. 1024 px, N=200, frozen, lr 3e-4:
-
-| backbone + decoder | TRAIN | UNSEEN | REAL | fit->unseen | **unseen->real** |
-|---|---:|---:|---:|---:|---:|
-| swin_b + selfattn | 0.7893 | 0.5534 | **0.5591** | +0.236 | **-0.006** |
-| swin_b + crossattn | 0.7914 | 0.5447 | 0.5525 | +0.247 | **-0.008** |
-| swin_t + selfattn | 0.7294 | 0.4856 | 0.4885 | +0.244 | **-0.003** |
-| swin_t + baseline | 0.8103 | 0.5336 | 0.5244 | +0.277 | +0.009 |
-| swin_b + baseline | 0.8278 | 0.5649 | 0.5179 | +0.263 | +0.047 |
-| resnet50 + corr4 | 0.9154 | 0.5813 | 0.4959 | +0.334 | +0.085 |
-| resnet50 + baseline | 0.9025 | 0.5700 | 0.4661 | +0.333 | **+0.104** |
-| resnet50 + selfattn | 0.8915 | 0.5563 | 0.4383 | +0.335 | +0.118 |
-| resnet50 + crossattn | 0.9086 | 0.5725 | 0.3976 | +0.336 | +0.175 |
-
-Three readings, in order of importance:
-
-- **The probe reproduces the binding constraint.** ResNet50 + baseline gives
-  unseen->real **+0.1039**, against the +0.085-0.114 measured at 100,000 images
-  on a fully trained model. Two very different regimes, the same number -- so
-  the 200-image frozen probe is measuring the real thing, not an artefact.
-- **The domain gap is PARTLY a property of the backbone, not only of the data.**
-  (Frozen numbers; item 6c measures it unfrozen, where the reduction is real
-  but far smaller -- 0.112 -> 0.083, not to zero. Read this row with that.)
-  Every ResNet50 arm carries +0.085 to +0.175; every Swin arm with attention
-  conditioning carries ~0.000 or negative -- it transfers to real plans as well
-  as to unseen synthetic draws. The project has been treating that gap as a
-  generator-realism problem to be fixed with better synthetic data
-  (2026-09-18 open item 3). On this evidence it is substantially a
-  representation problem, and generator realism is attacking the wrong term.
-- **ResNet50 also loses the FIRST hop.** Its fit->unseen gap is +0.333 in every
-  arm against Swin's +0.236-0.283. It fits the generator hardest and carries
-  the least of that fit forward at both hops, which is the whole fit/transfer
-  inversion in one line.
-
-**6. A VISION TRANSFORMER BACKBONE WINS -- the hypothesis this repo has been
-deferring since 2026-09-18.** `swin_b` is a Shifted-Window Transformer: real
-multi-head self-attention, but hierarchical (strides 4/8/16/32) and windowed
-(7x7, shifted between blocks), so it emits the same pyramid a ResNet does and
-drops into the existing decoder unchanged. That hierarchy is also why 200
-images suffice here: it is ImageNet-pretrained and FROZEN, so only a 4.6M
-decoder is fitted on top. Same decoder, same data, same steps; 4 seeds on the
-main arms.
-HF14 here is 52 cached real selections at 1024 with a frozen backbone, so it is
-a RANKING number, far below the product's 0.78:
-
-| backbone | decoder | n | train | fresh synth | **HF14 real** |
-|---|---|--:|---:|---:|---:|
-| swin_b | selfattn | 4 | 0.7893±0.024 | 0.5534±0.014 | **0.5591±0.018** |
-| swin_b | corr4 | 4 | 0.8416±0.010 | 0.5590±0.018 | 0.5262±0.016 |
-| swin_b | baseline | 4 | 0.8278±0.028 | 0.5649±0.009 | 0.5179±0.046 |
-| resnet50 | corr4 | 4 | 0.9154±0.006 | 0.5813±0.006 | 0.4959±0.026 |
-| resnet50 | baseline | 4 | 0.9025±0.011 | 0.5700±0.015 | 0.4661±0.015 |
-| convnext_base | baseline | 1 | 0.6839 | 0.4702 | 0.4371 |
-| resnet50 | crossattn | 1 | 0.9086 | 0.5725 | 0.3976 |
-
-`swin_b + selfattn` beats `resnet50 + baseline` on real plans by **+0.0842
-(n=5 each, 5.5 sd using the measured per-run sd of 0.0243)** while fitting
-*worse* (0.789 vs 0.903). Across all 30 probe runs, **corr(train fit, HF14
-transfer) = -0.18** and corr(train fit, fresh synthetic) = +0.77. Fitting the
-generator better does not transfer; it is mildly anti-predictive.
-
-**It is not an LR artefact.** Sweeping 1e-4 / 3e-4 / 1e-3 / 3e-3 per backbone,
-each at its OWN best LR: swin_b reaches 0.5594-0.5600 at three different LRs,
-resnet50 tops out at 0.4959 (corr4 @3e-4). The gap narrows but never closes or
-flips, and swin_b fits worse at every LR it wins at. Both degrade at 3e-3.
-
-**So the original question answers itself: the architecture that reaches 0.95
-on train is the one already in the repo, given more steps -- and reaching it is
-not worth doing**, because train fit is anti-correlated with the product metric.
-
-**7. The representation already discriminates materials.**
-`scripts/material_separability.py` embeds patches from each labelled family with
-a frozen backbone and measures within-image separability. No training at all.
-On HF14, frozen ResNet50: same-family cos +0.902, different-family +0.467,
-**AUC 0.9936**. So `false_region` -- the single largest error bucket -- is not
-caused by features that cannot tell the materials apart. It degrades with patch
-size (224/96/48 px -> 0.994/0.966/0.945 on HF14, 0.941/0.921/0.878 on v6d), so
-the difficulty is fine-scale and spatial, not semantic. Swin scores *lower*
-here (AUC 0.9498, margin +0.0245) while transferring better, so patch-level
-separability is not the mechanism behind item 6.
-
-**6b. Does the transformer need MORE data? Frozen, no -- it needs less.**
-Baseline decoder, 1024 px, HF14 transfer, 2 runs per cell:
-
-| N images | resnet50 | swin_b | gap | train fit r50/swin |
-|---:|---:|---:|---:|---|
-| 8 | 0.0920 | 0.2169 | **+0.125** | 0.995 / 0.993 |
-| 32 | 0.2294 | 0.3656 | **+0.136** | 0.975 / 0.963 |
-| 64 | 0.2571 | 0.2975 | +0.040 | 0.962 / 0.911 |
-| 200 | 0.4976 | 0.5313 | +0.034 | 0.910 / 0.746 |
-
-ImageNet paid the transformer's data bill, and the frozen representation is
-most valuable exactly where task data is scarcest. **But the gap NARROWS as
-data grows** (+0.13 -> +0.03), so do not assume it survives to 5-8k records;
-that is the main risk in item 1.
-
-**What the gap DOES grow with is resolution.** At a matched N=64:
-1024 px gap **+0.041**, 2048 px gap **+0.190** (13.5 sd, n=6 per arm). An
-earlier draft of this entry read the 2048 result as evidence that Swin does
-better with LESS data -- that compared 2048/N=64 against 1024/N=200 and
-confounded the two. Same resolution, more data narrows it; same data, more
-resolution widens it sharply. Production is 2560, which is the favourable
-side of both -- but the two effects were never measured together above 2048.
-
-**Size is not the mechanism.** `swin_t` (28.3M, the same class as ResNet50's
-25.6M) scores 0.5244 at N=200 against resnet50's 0.4976 and swin_b's 0.5313 --
-within noise of the 3x larger model. The win is architectural, and a
-size-matched transformer has no more parameters to feed than the incumbent.
-
-**6c. UNFROZEN, IN THE REAL PIPELINE (the probe's own prediction, tested).**
-`run_backbone_ab.sh`: v6d-only 1,995 plans, 2048 px, documented two-phase
-9-epoch schedule, backbone TRAINING at `--backbone-lr-mult 0.1`, epoch chosen
-on the validation complement (never on HF14). Only `--model` differs.
-**One seed.**
-
-| arm | TRAIN (hard) | UNSEEN | REAL | fit->unseen | unseen->real |
-|---|---:|---:|---:|---:|---:|
-| `unet` ResNet50, 28.0M | 0.6811 | 0.7482 | 0.6359 | -0.067 | **+0.112** |
-| `swin_t` RefSwinUNet, 31.4M | **0.7826** | **0.7891** | **0.7066** | -0.007 | **+0.083** |
-| difference | +0.1015 | +0.0409 | **+0.0707** | | -0.030 |
-
-Paired over the 52 fixed selections: **+0.0707, t(51) = +2.20, p = 0.032**,
-better on 31 / worse on 15 / tied on 6, sign-test p = 0.026. The baseline arm
-reproduces the documented `v6d-only 1,600 @2048 = 0.6400` at 0.6359, so the
-comparison rests on a verified control.
-
-For scale: **0.7066 with ZERO real plans in training** beats the best
-synthetic-only result on record (0.686 +/- 0.009) and sits level with
-`mix5092 @1280` (0.7097), which uses all 194 real-ish sources.
-
-Where it wins is where the deficit is. Per-image paired difference: image 14
-**+0.142** (35% of the total, and the single largest deficit contributor in
-the project), image 7 **+0.726** (the known reference-box-on-text failure),
-16 +0.190, 11 +0.245, 23 +0.230, 3 +0.129, 18 +0.087. It LOSES on image 2
-(-0.171) and 27 (-0.100). So it is not a uniform lift; it trades, and it wins
-the trade.
-
-**Two things the frozen probe got wrong, recorded because the probe is the
-method being sold here:**
-
-- **The fit column inverted.** Frozen, Swin fit WORSE than ResNet50 (0.79 vs
-  0.90) and that inversion was read as evidence that fit and transfer trade
-  off. Unfrozen, Swin fits BETTER (0.783 vs 0.681). Frozen ImageNet features
-  had simply never seen line drawings; finetuning fixes that for the
-  transformer more than for the CNN. **The probe ranks TRANSFER reliably and
-  its fit column does not survive unfreezing.**
-- **The domain gap is reduced, not eliminated.** Frozen, Swin arms showed
-  unseen->real ~0.000 and item 6a called the gap "a property of the backbone".
-  Unfrozen it is +0.083 against ResNet50's +0.112 -- a 26% reduction, not a
-  disappearance. ResNet50's +0.112 does reproduce the documented ~0.085-0.11
-  a third time, in a third regime. **Generator realism is still a live lever;
-  it is just no longer the only one.**
-
-**6d. Published checkpoints from this session** (the machine is ephemeral):
-
-- `abshetty/floz-refunet-swint-v6d-e8` -- RefSwinUNet/swin_t, HF14 **0.7066**,
-  v6d-only 1,995 plans @2048. The best synthetic-only result on record.
-- `abshetty/floz-refunet-resnet50-v6d-e8` -- the matched ResNet50 control,
-  HF14 0.6359, which reproduces the documented `v6d-only @2048 = 0.6400`.
-
-Verified byte-distinct from each other and from the earlier uploads before
-this entry was written, because `floz-refunet-synth100k-e1` was not.
-`publish_refunet.py` also had a smaller version of that same failure: it
-inferred `model_class` from a two-way crossattn/RefUNet test and stamped a
-Swin checkpoint "RefUNet". Fixed; a card that misnames the architecture is the
-duplicate-weights bug one step earlier.
-
-**Caveats on item 6, before anyone trains on it.** One learning rate (3e-4) for
-every backbone, chosen for the incumbent; ResNet50 carries `IMAGENET1K_V2`
-weights against Swin's V1 recipe; 200 synthetic images at 1024 px; frozen
-throughout, where production finetunes at `backbone_lr_mult 0.1`. The
-consistent 4-seed margin and the fit/transfer inversion are the signal; the
-absolute numbers are not.
-
-**Open, in priority order (revised 2026-09-20):**
-
-1. **Run the vision transformer (`swin_b`) in the real pipeline**, unfrozen,
-   at 2048-2560 on the documented mix. This is the first lever in months with a
-   >5x-sd margin behind it, and `StagedBackbone` already exposes the 4-scale
-   pyramid the decoder wants, so the code cost is small. Unfreezing is the
-   untested half: everything measured so far holds the backbone fixed.
-   Also worth one probe each: a plain ViT / DINOv2 backbone (no hierarchy,
-   much stronger pretraining) and `swin_t` (to separate architecture from the
-   88M-parameter size of `swin_b`).
-2. **Done 2026-09-20: the LR sweep clears item 6** (four LRs per backbone,
-   swin_b ahead at each backbone's own best). What it still needs is the real
-   pipeline, not more probing.
-3. **Attack `false_region` and `missed_inside` directly** -- 46-56% of the
-   error and the thing no lever in this repo has ever targeted. The features
-   separate materials at AUC 0.99, so this is a propagation/objective problem:
-   the model knows what the material looks like and still paints the wrong
-   region.
-4. **Retire train IoU as a target.** It is anti-correlated with transfer, its
-   ceiling is pool-dependent, and the number that motivated it came from a
-   checkpoint that no longer exists.
-5. More labelled real sources -- unchanged, still the structural constraint.
-
-**Do not re-open:** decoder width/depth as a capacity lever (item 4); output
-stride, mask threshold, and boundary methods as HF14 levers (items 2-3);
-`run_capacity_probe.sh` as written.
+**Do not re-open:** decoder width/depth as a capacity lever (w256/w384 fit
+*worse*); output stride, mask threshold, boundary methods; `run_capacity_probe.sh`
+as written.
 
 ## Pick up here (2026-09-18)
 
