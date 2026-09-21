@@ -148,6 +148,24 @@ Verified working stack: Python 3.10.12, torch 2.7.0, torchvision 0.22.0,
 datasets 5.0.1, OpenCV 4.10.0, Pillow 12.3.0, numpy 1.26.4, shapely 2.1.2, on one
 NVIDIA GH200 with 64 CPUs. Minor nondeterminism can change the last decimals.
 
+**Use all 64 vCPUs for every CPU job.** Check with `ps -eo pcpu,args` before
+walking away: a job at 100% is using ONE core, not all of them.
+
+- `generate_synthetic_v6.py` defaults `--workers` to `os.cpu_count() // 2`; pass
+  `--workers 64`. At 64 workers it is 0.01 s/image -- 2,000 plans in 14 s,
+  100,000 in ~12 min -- so pool size is never a reason to compromise a design.
+- `augment_local_dataset.py` has **no workers flag and is a serial loop.** Split
+  the source dir into N chunks, augment them in parallel, and `merge_local_datasets.py`
+  the outputs. On native-resolution Gemini (2,752 px) serial augmentation of 88
+  sources takes ~1 h and the 11-way split takes ~3 min. Chunking changes each
+  chunk's RNG stream, so the result is not byte-identical to a serial run --
+  fine for a new pool, not for rebuilding one a recorded number came from.
+- `--num-workers` on the dataloader is tuned against GPU feed rate (16), not a
+  CPU limit; leave it.
+
+The same applies to anything else single-threaded: parallelism here is free and
+the box is otherwise 98% idle.
+
 **Install `roboflow` together with `requirements.txt`, not separately** (the
 command above already does this). `roboflow` alone pulls numpy 2.x, which
 breaks the system `torch`/`scipy` install (compiled against numpy 1.x) with
@@ -512,6 +530,11 @@ resolution column says otherwise. The sampler column is load-bearing.
 | locally generated synth, `--confusable-prob 1.0` | 1280 | 3 | 0.5787 ± 0.0433 |
 | **`mix5092`+3,200 v6d @2560** (2026-09-18) | **2560** | 1 | **0.7834** val-sel — best recorded, one seed |
 | `mix5092`+3,200 v6d, 29 ep w/ restarts | 2048 | 1 | 0.7453 val-sel / 0.7676 avg — null vs. recorded 1,600-v6d mix |
+| **swin_t**, `v6d1600_rf1548_gen504_gem1440` (194 src) | **2048** | 1 | **0.7403** val-sel (2026-09-21) — below RefUNet's 0.7594 on mix5092 |
+| **swin_t**, v6d-only 1,995 | 2048 | 1 | 0.7066 (`codex_doc.md`) |
+| **swin_t**, v6r-only 1,995 (region scale matched to real) | 2048 | 1 | 0.7090 — **null**, +0.0024 (2026-09-21) |
+| **swin_t**, gemini r23 only (80 src), 20 ep | 1280 | 1 | 0.6025 val-sel; hard train IoU 0.9254 |
+| **swin_t**, gemini r234 only (168 src), 20 ep | 1280 | 1 | **0.7148** val-sel; hard train IoU 0.9257 — **+0.112 on identical fit** |
 | v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |
@@ -626,6 +649,48 @@ is not the constraint; `real86only` fits as well as the winning mix (0.749) and
 scores less than half as well. Regularization and data quality are the levers
 that remain — **with one 2026-09-17 caveat on "longer training push[es] the
 wrong lever": see "16-epoch schedule" under Train, one seed, not yet adopted.**
+
+## 2026-09-21 — swin_t meets real data; realism-by-metric fails
+
+**1. swin_t loses on a real mix and wins on synthetic-only.** 0.7403 against
+RefUNet's 0.7594 ± 0.0191. But real data is worth +0.1235 to RefUNet and only
++0.0337 to swin_t, so the two backbones are not interchangeable and no RefUNet
+result transfers to swin_t without re-measuring. **This was the session's
+repeated error — check the backbone before citing any number.**
+
+**2. Transformers degrade on real plans as synthetic training continues.** 100k
+v6d @1024, HF14 by epoch: RefUNet 0.5993 → **0.6513 ↑**, swin_t 0.7484 →
+**0.6913 ↓**, dinov3_s 0.6895 → **0.6561 ↓**. Synthetic val_loss fell
+monotonically for all three. Fit improves while transfer decays — for the
+transformers only.
+
+**3. Region-scale realism is a null on swin_t.** v6d regions occupy 0.00896 of
+the sheet against real's 0.02411 (2.7x too small) with 11.7 regions/plan against
+3.3. `generate_synthetic_v6.py` gained `--view-count-weights` and
+`--max-label-fams` (defaults reproduce v6d bit-for-bit); `85,15,0` + cap 3 lands
+0.02468 / 5.4, matching real scale to 2.4% while holding labelled area at 0.326
+(vs 0.373 — direct union-matching would have cut it to 0.137, the August
+ink-matching trap). HF14 moved +0.0024. Five metric-targeted realism attempts,
+five nulls. The one synthetic source that ever paid (Gemini, +0.035, p=0.030)
+was never metric-matched.
+
+**4. Gemini r4 is good data that a saturated mix cannot use.** Gemini-only,
+80 → 168 sources: **+0.112** HF14 (0.6025 → 0.7148) on **identical** hard train
+IoU (0.9254 vs 0.9257), which rules out the 2.1x step-budget confound. Yet
+`mix6676_with_r4` (194 → 282 src) was null on RefUNet. Marginal value of a
+Gemini plan collapses with source count.
+
+**5. `scripts/fresh_synth_iou.py` scored zero padding as signal.** `collate_fn`
+pads to a common size (~40-45% of canvas) and backbones answer differently:
+mean P(padding) 0.071 for swin_t, 0.422 for dinov3_s — which alone moved
+dinov3_s from 0.86 to 0.33. Now reports a `pixel_mask`-valid number; quote that.
+Every hard train IoU recorded before this date (0.8022 included) is the old
+full-canvas kind.
+
+**6. The 28-source per-source protocol is underpowered.** Three real 28-draws
+gave 0.4301 / 0.4345 / 0.5356 — **draw-noise sd 0.060**, larger than every
+between-source difference (gemini +0.041, v6d +0.048, genreal −0.009). The best
+single arm was a real draw. Needs ~9 draws/source or ≥56-source arms.
 
 ## Evaluation rules
 

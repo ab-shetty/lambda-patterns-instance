@@ -7,6 +7,39 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-09-21)
+
+Numbers in `startup.md` ("2026-09-21 — swin_t meets real data"). What to know:
+
+**Never cite a number without checking which backbone produced it.** RefUNet and
+swin_t respond to data in opposite directions (real data: +0.1235 vs +0.0337;
+synthetic training raises RefUNet's HF14 and lowers swin_t's). Four separate
+errors this session came from extrapolating RefUNet results onto swin_t — the
+volume curve, the 16-epoch null, the August realism table, and the r4 mix null.
+
+**swin_t is behind on the product metric.** 0.7403 vs RefUNet's 0.7594 ± 0.0191
+at matched schedule and resolution. It wins decisively on synthetic-only
+(+0.0707, p=0.032) and out-fits RefUNet by +0.083, and none of that converts.
+
+**Realism-by-metric is 5-for-5 null.** Region scale was the largest measured gap
+(2.7x) and matching it to 2.4% bought +0.0024. The user's read, which the record
+supports: the only synthetic source that ever paid (Gemini) was made to look
+right, not to match statistics. Next realism attempt should be driven by visual
+inspection, not by matching a measured distribution.
+
+**Open thread — Gemini source count.** 80 → 168 sources is worth +0.112 on
+identical training fit. 194 → 282 was null *on RefUNet*. The swin_t version of
+that test (`ck_swint_v6dmixr4_res2048_seed7` vs the 0.7403 baseline) was running
+at the end of this session — check `data/evaluations/val_swint_v6dmixr4.json`.
+If it is positive, "Gemini is saturated" was never swin_t's conclusion and more
+Gemini labelling is the lever.
+
+**Tooling.** `./watch.sh [-w]` tracks every run with no arguments (finds them via
+live process cmdlines, not log names). `generate_synthetic_v6.py` has
+`--view-count-weights` / `--max-label-fams`. `fresh_synth_iou.py` reports a
+valid-pixel number — quote that one. Use all 64 vCPUs; `augment_local_dataset.py`
+is serial and must be chunked (`startup.md` "Use all 64 vCPUs").
+
 ## Pick up here (2026-09-20)
 
 Five facts and one command. Detail in `synth_progress.md` (2026-09-20);

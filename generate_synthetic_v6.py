@@ -78,6 +78,7 @@ MODE_WEIGHTS = {"elevation": 66, "roof_plan": 16, "freeform": 18}
 LONG_SIDE_PX = (2800, 5200)            # eval median ~4000, Gemini 3168
 COLOUR_PROB = 0.55                     # 16/28 eval images carry colour
 VIEW_COUNT_WEIGHTS = {1: 55, 2: 38, 4: 7}
+MAX_LABEL_FAMS = 0                     # 0 = v6d behaviour (label every family)
 WINDOW_HOLE_PROB = 0.8                 # per image: windows/doors cut as holes
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
@@ -1878,6 +1879,19 @@ def compose(image_id, seed, mode_weights):
         label_fams.add("foundation")
     if "trim" in styles:
         label_fams.add("trim")
+    # Region-scale matching (2026-09-21). v6d labels every family it renders:
+    # ~7.4 regions per drawing against 3.3 per whole plan in the real pool, and
+    # median region/sheet 0.00896 against real's 0.02411. The families dropped
+    # first here are the slivers (trim, chimney, foundation), so one knob both
+    # raises median region size and cuts region count. Order is by painted area,
+    # not random -- dropping "main" would remove the wall the sheet is about.
+    # Only elevation mode sees this: roof_plan and freeform reassign label_fams
+    # below and already sit at 1-2 families.
+    if MAX_LABEL_FAMS and len(label_fams) > MAX_LABEL_FAMS:
+        _pri = ["main", "accent", "accent2", "roof", "foundation", "chimney", "trim"]
+        _ordered = ([f for f in _pri if f in label_fams] +
+                    sorted(f for f in label_fams if f not in _pri))
+        label_fams = set(_ordered[:MAX_LABEL_FAMS])
     hole_mode = rng.random() < WINDOW_HOLE_PROB
 
     # ---- build the drawings in feet
@@ -2149,7 +2163,11 @@ def compose(image_id, seed, mode_weights):
 _CFG = {}
 
 
-def _init(out, seed, mode_weights):
+def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0):
+    global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS
+    if view_counts:
+        VIEW_COUNT_WEIGHTS = view_counts
+    MAX_LABEL_FAMS = max_label_fams
     _CFG.update({"out": out, "seed": seed, "mw": mode_weights})
 
 
@@ -2177,18 +2195,30 @@ def main():
     ap.add_argument("--start", type=int, default=0, help="first image id")
     ap.add_argument("--workers", type=int, default=max(1, os.cpu_count() // 2))
     ap.add_argument("--mode-weights", default=None, help="elevation,roof_plan,freeform e.g. 60,20,20")
+    ap.add_argument("--view-count-weights", default=None,
+                    help="weights for 1,2,4 elevation views per sheet, e.g. 85,15,0. "
+                         "Default (55,38,7) = 1.59 drawings/sheet, which is what makes "
+                         "v6d regions 2.7x smaller relative to the sheet than real plans.")
+    ap.add_argument("--max-label-fams", type=int, default=0,
+                    help="cap labelled families per elevation sheet (0 = v6d, uncapped). "
+                         "Drops slivers first (trim/chimney/foundation).")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
         e, r, f = [float(v) for v in args.mode_weights.split(",")]
         mw = {"elevation": e, "roof_plan": r, "freeform": f}
+    vcw = None
+    if args.view_count_weights:
+        a, b, c = [float(v) for v in args.view_count_weights.split(",")]
+        vcw = {1: a, 2: b, 4: c}
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))
     t0 = time.time()
     ok = 0
     modes = {}
-    with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw)) as pool:
+    with Pool(args.workers, initializer=_init,
+              initargs=(args.out, args.seed, mw, vcw, args.max_label_fams)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
@@ -2198,7 +2228,9 @@ def main():
                 print(f"{i + 1}/{len(ids)} ok={ok} {el:.0f}s ({el / (i + 1):.2f}s/img) {modes}", flush=True)
     with open(os.path.join(args.out, "generation_manifest.json"), "w") as f:
         json.dump({"generator": "generate_synthetic_v6.py", "n": args.n, "seed": args.seed, "start": args.start,
-                   "ok": ok, "modes": modes, "mode_weights": mw}, f, indent=2)
+                   "ok": ok, "modes": modes, "mode_weights": mw,
+                   "view_count_weights": vcw or VIEW_COUNT_WEIGHTS,
+                   "max_label_fams": args.max_label_fams}, f, indent=2)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ from refmask2former import build_datasets, collate_fn, load_local_records, load_
 from refmask2former.ref_unet import RefUNet
 from refmask2former.ref_attn_unet import RefCrossAttnUNet
 from refmask2former.ref_swin_unet import RefSwinUNet
+from refmask2former.ref_dino_unet import BACKBONES as DINO_BACKBONES
+from refmask2former.ref_dino_unet import RefDinoUNet
 from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model
 
 
@@ -37,7 +39,7 @@ def parse_args():
     p.add_argument("--ref-size", type=int, default=224)
     p.add_argument("--width", type=int, default=128)
     p.add_argument("--model", choices=("unet", "crossattn", "swin_t", "swin_s",
-                                       "swin_b"), default="unet",
+                                       "swin_b", *DINO_BACKBONES), default="unet",
                    help="unet = RefUNet (global-average conditioning, default). "
                         "crossattn = RefCrossAttnUNet (multi-head cross-attention "
                         "conditioning at the two coarsest scales; see "
@@ -223,6 +225,12 @@ def main():
     if args.model == "crossattn":
         model = RefCrossAttnUNet(args.width, pretrained=args.init_from is None,
                                  num_heads=args.attn_heads).to(device)
+    elif args.model in DINO_BACKBONES:
+        # Plain self-supervised ViT + simple-FPN adapter. See
+        # ref_dino_unet.py; the decoder is swin_t's, unchanged.
+        model = RefDinoUNet(args.width, pretrained=args.init_from is None,
+                              backbone=args.model,
+                              corr_grid=args.corr_grid).to(device)
     elif args.model.startswith("swin"):
         # Vision-transformer backbone, same decoder. See ref_swin_unet.py.
         model = RefSwinUNet(args.width, pretrained=args.init_from is None,
