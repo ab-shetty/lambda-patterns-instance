@@ -535,6 +535,7 @@ resolution column says otherwise. The sampler column is load-bearing.
 | **swin_t**, v6r-only 1,995 (region scale matched to real) | 2048 | 1 | 0.7090 — **null**, +0.0024 (2026-09-21) |
 | **swin_t**, gemini r23 only (80 src), 20 ep | 1280 | 1 | 0.6025 val-sel; hard train IoU 0.9254 |
 | **swin_t**, gemini r234 only (168 src), 20 ep | 1280 | 1 | **0.7148** val-sel; hard train IoU 0.9257 — **+0.112 on identical fit** |
+| **swin_t**, `v6dmix_plus_r4` (282 src, 6,671 rec) | **2048** | 1 | **0.7887** val-sel (2026-09-21) — **best recorded**, still rising at the final epoch |
 | v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |
@@ -652,11 +653,16 @@ wrong lever": see "16-epoch schedule" under Train, one seed, not yet adopted.**
 
 ## 2026-09-21 — swin_t meets real data; realism-by-metric fails
 
-**1. swin_t loses on a real mix and wins on synthetic-only.** 0.7403 against
-RefUNet's 0.7594 ± 0.0191. But real data is worth +0.1235 to RefUNet and only
-+0.0337 to swin_t, so the two backbones are not interchangeable and no RefUNet
-result transfers to swin_t without re-measuring. **This was the session's
-repeated error — check the backbone before citing any number.**
+**1. swin_t + the right mix is the new best: 0.7887** (282 sources, 2048,
+val-selected, one seed), over the 0.7834 record and +0.029 on the 0.7594 ± 0.0191
+recipe mean. On the 194-source mix it scored only 0.7403 and looked *worse* than
+RefUNet — the mix was the deficit, not the backbone. Val-selection picked the
+final epoch and HF14 was still climbing, so **the 9-epoch schedule stops early
+for this configuration**; warm restart from `epoch_8.pth` is the next run.
+Real data is worth +0.1235 to RefUNet and +0.0337 to swin_t, so the backbones
+are not interchangeable and no RefUNet result transfers without re-measuring.
+**This was the session's repeated error — check the backbone before citing any
+number.**
 
 **2. Transformers degrade on real plans as synthetic training continues.** 100k
 v6d @1024, HF14 by epoch: RefUNet 0.5993 → **0.6513 ↑**, swin_t 0.7484 →
@@ -674,11 +680,16 @@ ink-matching trap). HF14 moved +0.0024. Five metric-targeted realism attempts,
 five nulls. The one synthetic source that ever paid (Gemini, +0.035, p=0.030)
 was never metric-matched.
 
-**4. Gemini r4 is good data that a saturated mix cannot use.** Gemini-only,
-80 → 168 sources: **+0.112** HF14 (0.6025 → 0.7148) on **identical** hard train
-IoU (0.9254 vs 0.9257), which rules out the 2.1x step-budget confound. Yet
-`mix6676_with_r4` (194 → 282 src) was null on RefUNet. Marginal value of a
-Gemini plan collapses with source count.
+**4. Gemini r4 pays, and the "saturated" verdict was a RefUNet artifact.**
+Gemini-only, 80 → 168 sources: **+0.112** HF14 (0.6025 → 0.7148) on **identical**
+hard train IoU (0.9254 vs 0.9257), ruling out the 2.1x step-budget confound. In
+the mix, 194 → 282 sources is **null on RefUNet** (0.7366 vs 0.7594) and
+**+0.048 on swin_t** (0.7403 → 0.7887). Source count on the right backbone is
+now the only lever with positive evidence at every scale tested — against
+realism 0-for-5 and v6d volume saturated (8x for +0.020). Value tracks the
+source *ratio*, not the count, so each further +0.04 costs ~45% more plans:
+282 → ~409 next. `startup.md`'s old "do not re-add r4" warning is void for
+swin_t; r4 is adopted.
 
 **5. `scripts/fresh_synth_iou.py` scored zero padding as signal.** `collate_fn`
 pads to a common size (~40-45% of canvas) and backbones answer differently:

@@ -17,9 +17,11 @@ synthetic training raises RefUNet's HF14 and lowers swin_t's). Four separate
 errors this session came from extrapolating RefUNet results onto swin_t — the
 volume curve, the 16-epoch null, the August realism table, and the r4 mix null.
 
-**swin_t is behind on the product metric.** 0.7403 vs RefUNet's 0.7594 ± 0.0191
-at matched schedule and resolution. It wins decisively on synthetic-only
-(+0.0707, p=0.032) and out-fits RefUNet by +0.083, and none of that converts.
+**New best: swin_t, 282-source mix, 2048 = 0.7887** (`data/mixed/v6dmix_plus_r4`,
+`run_v6r_ab.sh`-style recipe, one seed). Over the 0.7834 record. On the
+194-source mix the same backbone scored 0.7403 and looked worse than RefUNet, so
+the mix was the deficit. **START HERE: val-selection picked the final epoch with
+HF14 still rising — warm restart from `epoch_8.pth`, then a second seed.**
 
 **Realism-by-metric is 5-for-5 null.** Region scale was the largest measured gap
 (2.7x) and matching it to 2.4% bought +0.0024. The user's read, which the record
@@ -27,12 +29,12 @@ supports: the only synthetic source that ever paid (Gemini) was made to look
 right, not to match statistics. Next realism attempt should be driven by visual
 inspection, not by matching a measured distribution.
 
-**Open thread — Gemini source count.** 80 → 168 sources is worth +0.112 on
-identical training fit. 194 → 282 was null *on RefUNet*. The swin_t version of
-that test (`ck_swint_v6dmixr4_res2048_seed7` vs the 0.7403 baseline) was running
-at the end of this session — check `data/evaluations/val_swint_v6dmixr4.json`.
-If it is positive, "Gemini is saturated" was never swin_t's conclusion and more
-Gemini labelling is the lever.
+**Gemini source count is the lever.** 80 → 168 sources: +0.112 on identical
+training fit. 194 → 282 in the mix: null on RefUNet, **+0.048 on swin_t**. It has
+paid at every scale tested on the right backbone. Value tracks the source ratio,
+so the next +0.04 needs ~409 total sources (~127 more plans). Labelling more
+Gemini is the highest-confidence use of hours; the user's plan is to drive the
+next generation round by visual inspection rather than metric-matching.
 
 **Tooling.** `./watch.sh [-w]` tracks every run with no arguments (finds them via
 live process cmdlines, not log names). `generate_synthetic_v6.py` has
