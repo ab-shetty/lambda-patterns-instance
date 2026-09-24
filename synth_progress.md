@@ -1280,3 +1280,14 @@ Two mechanisms worth remembering:
 
 (Older negative-evidence list and the retired-architecture operational rules:
 `synth_progress_archive.md`.)
+
+**Split screen (auto-recorded, `run_split_screen.sh`, seed 7):**
+```
+v6d: val 0.6465  HF14 0.6401
+hsonly: val 0.6253  HF14 0.6600
+subtleonly: val 0.6271  HF14 0.6622
+   paired mean difference +0.0199   se 0.0229   t(51) = +0.87   p = 0.3885
+   hsonly better on 25, worse on 17, tied (|d|<0.01) on 10   sign-test p = 0.28
+   paired mean difference +0.0221   se 0.0245   t(51) = +0.90   p = 0.3701
+   subtleonly better on 22, worse on 27, tied (|d|<0.01) on 3   sign-test p = 0.5682
+```
