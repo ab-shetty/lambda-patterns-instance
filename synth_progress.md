@@ -170,6 +170,18 @@ the masonry ones get light mortar. Tested ALONE: `v6dMO_1600` (seed 6, --mottle
 0.7; labels byte-identical to v6d_1600, only pixels differ),
 `TREAT_DATA=data/mixed/v6dMOmix_plus_r4 TREAT_TAG=v6dMO ./run_synth_ft_ab.sh`.
 
+**Result: indistinguishable from control -- and that indicts the test, not
+only the change.** HF14 paired +0.0003 (t 0.18) with **48 of 52 selections
+tied** (|d| < 0.01); validation @4096 final 0.787 vs 0.791. A gentle fine-tune
+(lr 5e-5, 3 epochs) of a converged model, with synthetic data a quarter of
+the mix, barely changes predictions, so `run_synth_ft_ab.sh` cannot detect a
+pixel-only synthetic change; the hardscape rounds moved only because a larger
+dose shifted other sheets. **Test synthetic changes with a full retrain**
+(`run_nogray_mix.sh`-style, ~80 min on a GH200) or on synth-only at 1024
+(`run_transfer_ratio.sh`-style, ~30 min, three arms concurrently), paired
+over the 52 selections against a same-recipe control. `--mottle` is untested,
+not negative.
+
 ## 2026-09-23 — v7: v6 re-tuned by looking at Gemini, not by matching a metric
 
 **Untrained. No HF14 number yet.** `generate_synthetic_v7.py` wraps v6 (v6d

@@ -48,12 +48,15 @@ this session, and what did not work:
   direction-turning decks), `--mottle`. Tested by `run_synth_ft_ab.sh`
   (gentle fine-tune from restart e13, control vs treatment differing only in
   the synthetic quarter): hardscape+subtle null, ashlar-hardscape dose 1.0
-  -0.013. `--mottle` result: see the last synth_progress entry.
+  -0.013, `--mottle` indistinguishable (48/52 selections tied). **That
+  fine-tune A/B is too weak to detect a synthetic change** -- none of these
+  knobs has had a fair test yet.
 
 **Next:** finish the fill-vocabulary fixes the audit listed (3D lap shadows,
-basketweave/parquet), test each ALONE with `run_synth_ft_ab.sh`, and consider
-a full retrain (not a fine-tune) for any that shows a validation signal -- the
-gentle fine-tune gives synthetic changes a small dose on a converged model.
+basketweave/parquet), and test each ALONE with a FULL retrain against a same-recipe
+control (or synth-only at 1024, three arms concurrently, ~30 min) -- not
+`run_synth_ft_ab.sh`, which barely moves predictions. `--mottle` and
+`ashlar` are the first candidates.
 
 ## Pick up here (2026-09-21)
 
