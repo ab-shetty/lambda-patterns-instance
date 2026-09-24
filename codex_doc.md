@@ -55,8 +55,10 @@ this session, and what did not work:
 **Next:** finish the fill-vocabulary fixes the audit listed (3D lap shadows,
 basketweave/parquet), and test each ALONE with a FULL retrain against a same-recipe
 control (or synth-only at 1024, three arms concurrently, ~30 min) -- not
-`run_synth_ft_ab.sh`, which barely moves predictions. `--mottle` and
-`ashlar` are the first candidates.
+`run_synth_ft_ab.sh`, which barely moves predictions. `./run_synth_only_screen.sh`
+(synth-only, 1024, arms concurrent, ~20 min) is the fast fair screen: first
+run gave mottle null, ashlar-hardscape+subtle HF14 +0.028 but validation
+-0.09 (confounded; split the two knobs next).
 
 ## Pick up here (2026-09-21)
 

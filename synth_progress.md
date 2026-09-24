@@ -182,6 +182,22 @@ dose shifted other sheets. **Test synthetic changes with a full retrain**
 over the 52 selections against a same-recipe control. `--mottle` is untested,
 not negative.
 
+**Fair screen, synth-only (`./run_synth_only_screen.sh 7`, swin_t at 1024,
+three arms concurrently ~20 min, same 1,600 ids/recipe/seed, epoch 8 at 2048
+inference; one seed):**
+
+| arm | validation | HF14 | HF14 paired vs v6d |
+|---|---:|---:|---:|
+| v6d_1600 | 0.6465 | 0.6401 | - |
+| `--mottle 0.7` | 0.6293 | 0.6434 | +0.003 (t 0.21; 17/13/22) |
+| `--hardscape-plan 1.0 --same-fill-subtle 0.5` (ashlar) | **0.5545** | **0.6679** | +0.028 (t 1.23; 25/22/5) |
+
+`--mottle`: null in a test that can move predictions. Hardscape pool: the two
+splits DISAGREE (HF14 +0.028, validation -0.09). Validation has no floor
+plans, and this pool also changes elevations via the subtle band -- confounded.
+Not adopted under the protocol. **Next: separate `--hardscape-plan` from
+`--same-fill-subtle`** (two more arms of this screen), then a second seed.
+
 ## 2026-09-23 — v7: v6 re-tuned by looking at Gemini, not by matching a metric
 
 **Untrained. No HF14 number yet.** `generate_synthetic_v7.py` wraps v6 (v6d
