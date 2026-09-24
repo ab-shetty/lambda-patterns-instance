@@ -53,6 +53,7 @@ consume it unchanged. `mode` is one of elevation / roof_plan / freeform
     python3 generate_synthetic_v6.py --n 4000 --out data/synthetic/v6_4000 --workers 48
 """
 import argparse
+import colorsys
 import json
 import math
 import os
@@ -96,6 +97,44 @@ CLOUD_PROB = 0.04
 SOFT_RASTER_PROB = 0.25
 JPEG_PROB = 0.25
 FLOOR_H = (8.5, 10.0)
+# v6d sizes corner boards from each wall polygon's bbox, so on a gable wall they
+# run up to the apex as free-standing poles. v7 clips them to the wall.
+CORNER_BOARD_CLIP = False
+# 2026-09-24, from looking at val 17: the roof and the base band are drawn with
+# the SAME running-bond course pattern and differ only in colour (grey vs teal),
+# and every model selects the roof for a band reference -- it matches texture
+# and ignores colour. v6d almost never shows two families that share a fill and
+# differ by colour, so nothing teaches that colour can be the boundary. With
+# this probability (colour sheets only) the accent reuses the main wall's fill
+# and the foundation band reuses the roof's fill, each in a clearly different
+# colour, and the band is labelled. 0 = v6d (a separate RNG, so the rest of
+# every sheet is unchanged when it fires). Opposite of v6e's negative
+# SAME_COLOUR_PAIR (same colour, different fill).
+SAME_FILL_NEW_COLOUR = 0.0
+# 2026-09-24, from the val 17 intervention probe: the model DOES use colour
+# (recolour the roof red and it stops selecting it), but the band's desaturated
+# teal and the roof's grey are too close for it. SAME_FILL_NEW_COLOUR used
+# clearly different colours; this makes the band reuse the roof fill with a
+# SMALL hue shift at similar lightness -- the hard case. Colour elevations only.
+SAME_FILL_SUBTLE = 0.0
+# 2026-09-24, from looking at HF14 0 and 12 (the two worst sheets, both floor
+# plans): the answer is exterior hardscape (patio, walk, deck) while the whole
+# interior carries an UNLABELLED floor finish under furniture, text and dashed
+# MEP arcs. No training source has that sheet type. With this probability a
+# floor plan gets one unlabelled finish over every room, a forced MEP overlay,
+# and a labelled hardscape band (rear/L deck, front walk, optional patio).
+HARDSCAPE_PLAN = 0.0
+# 2026-09-24, from a side-by-side of one reference crop per real family (all 28
+# sheets) against every v6 fill: real BIM exports render masonry and roofing as
+# TEXTURED bitmaps -- each brick/stone/shingle its own tone, fine grain (val
+# 17/18/19 teal stone, 18's asphalt, 2/3/5's brick) -- where every v6 fill is
+# flat line-art; and coloured brick has LIGHT mortar where v6 darkens it. With
+# this probability (decided from the style's own seed, so nothing else on the
+# sheet changes) a coloured masonry/roofing fill is mottled per unit, and half
+# of the masonry ones get light mortar.
+MOTTLE = 0.0
+MOTTLE_KINDS = ("brick", "block", "stone", "rubble", "ashlar", "shingle", "asphalt")
+MORTAR_KINDS = ("brick", "block", "stone", "ashlar")
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -386,6 +425,52 @@ def _stones(layer, ox, oy, S, colour, lw, seed, coursed=True, shade=None):
             x_ft += sw
 
 
+def _ashlar(layer, ox, oy, S, unit_ft, colour, lw, seed, M=6):
+    """Random (non-coursed) rectangular ashlar / Versailles-style paving.
+
+    Added 2026-09-24: HF14 0's patio is random ashlar -- mixed-size rectangles
+    with NO continuous course lines -- and every model floods the house's
+    running-bond plank floor for it. v6's `stone` is coursed (continuous rows),
+    i.e. it looks like running bond, so the generator taught the confusion.
+    Stones are packed into MxM-unit blocks (shapes 2x2, 2x1, 1x2, 1x1, 3x2,
+    2x3); alternate block rows are offset by M/2 so no joint runs straight
+    across. Anchored to sheet coordinates like every other fill."""
+    h, w = layer.shape[:2]
+    u = unit_ft * S
+    if u < 3:
+        return
+    shapes0 = [(2, 2), (2, 1), (1, 2), (1, 1), (3, 2), (2, 3)]
+    j0, j1 = int(math.floor(oy / (u * M))) - 1, int(math.ceil((oy + h) / (u * M))) + 1
+    for bj in range(j0, j1):
+        shift = (bj % 2) * (M // 2)
+        i0 = int(math.floor((ox / u - shift) / M)) - 1
+        i1 = int(math.ceil(((ox + w) / u - shift) / M)) + 1
+        for bi in range(i0, i1):
+            rr = random.Random((seed * 1_000_003 + bi * 7_919 + bj * 104_729) & 0xFFFFFFFF)
+            occ = [[False] * M for _ in range(M)]
+            for y in range(M):
+                for x in range(M):
+                    if occ[y][x]:
+                        continue
+                    shapes = shapes0[:]
+                    rr.shuffle(shapes)
+                    sw, sh = 1, 1
+                    for (a, b) in shapes:
+                        if x + a <= M and y + b <= M and all(
+                                not occ[y + yy][x + xx] for xx in range(a) for yy in range(b)):
+                            sw, sh = a, b
+                            break
+                    for xx in range(sw):
+                        for yy in range(sh):
+                            occ[y + yy][x + xx] = True
+                    px0 = (bi * M + shift + x) * u - ox
+                    py0 = (bj * M + y) * u - oy
+                    if px0 > w + 2 or py0 > h + 2 or px0 + sw * u < -2 or py0 + sh * u < -2:
+                        continue
+                    cv_polyline(layer, [(px0, py0), (px0 + sw * u, py0), (px0 + sw * u, py0 + sh * u),
+                                        (px0, py0 + sh * u)], colour, lw, closed=True)
+
+
 def _stipple(layer, ox, oy, S, density_per_sqft, colour, seed, r_px=1):
     """Stucco / carpet dots, cell-seeded so the field is continuous."""
     h, w = layer.shape[:2]
@@ -445,6 +530,20 @@ def _planks(layer, ox, oy, S, plank_w_ft, colour, lw, seed, angle=0):
             x_ft += rr.uniform(3, 8)
 
 
+def _mottle(layer, joint_bgr, strength, seed):
+    """Give every unit between joints its own tone, plus fine grain."""
+    rr = np.random.default_rng(seed & 0xFFFFFFFF)
+    f = layer.astype(np.float32)
+    joint = np.abs(f - np.array(joint_bgr, np.float32)).sum(-1) < 60
+    n, lab = cv2.connectedComponents((~joint).astype(np.uint8), connectivity=4)
+    tone = rr.normal(0.0, 0.10 * strength, n).astype(np.float32)
+    tone[0] = 0.0
+    grain = cv2.GaussianBlur(rr.normal(0.0, 0.05 * strength, lab.shape).astype(np.float32), (0, 0), 1.2)
+    k = (1.0 + tone[lab] + grain)[..., None]
+    out = np.where(joint[..., None], f, f * k)
+    layer[:] = np.clip(out, 0, 255).astype(np.uint8)
+
+
 def draw_fill(canvas, poly_px, style, S, W, H):
     """Paint `style` into the polygon (sheet pixel coords) on canvas."""
     if poly_px.is_empty:
@@ -458,6 +557,14 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     layer = np.empty((h, w, 3), dtype=np.uint8)
     layer[:] = bgr(style.base)
     k, p, c, lw, sd = style.kind, style.params, style.line, style.lw, style.seed
+    mot = 0.0
+    if MOTTLE and k in MOTTLE_KINDS:
+        mr = random.Random(sd * 53 + 1)
+        coloured = max(style.base) - min(style.base) > 12 or max(style.base) < 225
+        if coloured and mr.random() < MOTTLE:
+            mot = mr.uniform(0.5, 1.0)
+            if k in MORTAR_KINDS and mr.random() < 0.5:
+                c = mix(style.base, (236, 236, 232), 0.75)
     if k == "lap":
         _hlines(layer, x0, y0, S, p["sp"], c, lw)
         if p.get("shadow"):
@@ -502,6 +609,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
         _vlines(layer, x0, y0, S, p["sp"], c, lw)
     elif k == "plank":
         _planks(layer, x0, y0, S, p["w"], c, lw, sd, angle=p.get("angle", 0))
+    elif k == "ashlar":
+        _ashlar(layer, x0, y0, S, p.get("unit", 1.2), c, lw, sd)
     elif k == "concrete":
         _stipple(layer, x0, y0, S, p["density"], c, sd, r_px=1)
         _stipple(layer, x0, y0, S, p["density"] * 0.15, c, sd + 1, r_px=2)
@@ -512,6 +621,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
         _dlines(layer, x0, y0, S, p["row"], p["angle"], c, lw)
         if p.get("joints"):
             _dlines(layer, x0, y0, S, p["row"] * 2.2, p["angle"] + 90, mix(style.base, c, 0.5), 1)
+    if mot:
+        _mottle(layer, bgr(c), mot, sd)
     m = poly_mask(affinity.translate(poly_px, -x0, -y0), w, h)
     blend_mask(canvas[y0:y1, x0:x1], layer, m)
 
@@ -539,6 +650,7 @@ CALLOUT = {
     "flat_roof": ["MEMBRANE ROOF", "TPO ROOF"],
     "concrete": ["CONC. FOUNDATION", "CONCRETE SLAB"],
     "grid": ["TILE FLOOR", "CERAMIC TILE", "12x12 TILE"],
+    "ashlar": ["RANDOM ASHLAR PAVERS", "FLAGSTONE PATIO", "STONE PAVERS", "PAVER WALK"],
     "plank": ["WOOD FLOOR", "HARDWOOD", "LVP FLOORING"],
     "stipple": ["CARPET", "STUCCO"],
     "cross": ["HERRINGBONE", "TILE"],
@@ -600,6 +712,8 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
         params = {"sp": rng.choice([1.0, 1.5, 2.0, 0.667])}
     elif kind == "plank":
         params = {"w": rng.choice([0.25, 0.33, 0.42]), "angle": rng.choice([0, 90])}
+    elif kind == "ashlar":
+        params = {"unit": rng.choice([0.9, 1.0, 1.2, 1.5])}
     elif kind == "cross":
         params = {"sp": rng.choice([0.5, 0.75, 1.0])}
     elif kind == "hatch":
@@ -1416,6 +1530,10 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
             x0, y0, x1, y1 = poly.bounds
             for x in (x0, x1):
                 cbp = rect(x - 0.2, y1, x + 0.2, y0 + 0.01)
+                if CORNER_BOARD_CLIP:
+                    cbp = cbp.intersection(poly.buffer(0.25, join_style=2))
+                    if cbp.is_empty or not isinstance(cbp, Polygon):
+                        continue
                 cb = V.geom(cbp)
                 cv_fill(canvas, cb, trim_colour)
                 cv_outline(canvas, cb, app["outline"], lw)
@@ -1667,7 +1785,7 @@ def render_floor_plan(canvas, tq, V, fp, styles, app, rng, S, W, H, plan_cfg):
             g = V.geom(p)
             draw_fill(canvas, g, st, S, W, H)
             if fam in plan_cfg["label"]:
-                out.append((fam, g))
+                out.append((fam.split("@")[0], g))
     # walls
     wg = V.geom(fp["walls"])
     if plan_cfg["poche"]:
@@ -1853,6 +1971,52 @@ def compose(image_id, seed, mode_weights):
                                       base_override=found_base)
     if not app["colour"] and rng.random() < 0.5:
         styles["foundation"].kind = "flat"
+    force_found = False
+    if SAME_FILL_SUBTLE and app["colour"] and styles["roof"].kind not in ("flat", "stipple"):
+        qrng = random.Random(fam_seed * 37 + 29)
+        if qrng.random() < SAME_FILL_SUBTLE:
+            rb = [v / 255 for v in styles["roof"].base]
+            h, l, sat = colorsys.rgb_to_hls(*rb)
+            h = (h + qrng.choice([-1, 1]) * qrng.uniform(25, 60) / 360) % 1.0
+            sat = min(1.0, max(0.12, sat + qrng.uniform(0.05, 0.25)))
+            l = min(0.9, max(0.1, l + qrng.uniform(-0.06, 0.06)))
+            base = tuple(int(round(v * 255)) for v in colorsys.hls_to_rgb(h, l, sat))
+            ro = styles["roof"]
+            lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
+            line = mix(base, (255, 255, 255), 0.4) if lum < 110 else darken(base, 0.65)
+            st = Style(ro.kind, base, line, ro.lw, dict(ro.params), fam_seed + 5, "foundation")
+            st.callout = "STONE VENEER BASE"
+            styles["foundation"] = st
+            force_found = True
+            if house["foundation"] < 1.5:
+                house["foundation"] = qrng.uniform(1.5, 3.5)
+    if SAME_FILL_NEW_COLOUR and app["colour"]:
+        srng = random.Random(fam_seed * 31 + 17)
+
+        def recolour(st, name, seed):
+            far = [c for c in BASE_PALETTE + ROOF_PALETTE
+                   if math.dist(c, st.base) > 110]
+            if not far:
+                return None
+            base = srng.choice(far)
+            lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
+            line = mix(base, (255, 255, 255), 0.4) if lum < 110 else darken(base, 0.65)
+            out = Style(st.kind, base, line, st.lw, dict(st.params), seed, name)
+            out.callout = st.callout
+            return out
+
+        if srng.random() < SAME_FILL_NEW_COLOUR and styles["roof"].kind not in ("flat", "stipple"):
+            st = recolour(styles["roof"], "foundation", fam_seed + 5)
+            if st is not None:
+                styles["foundation"] = st
+                force_found = True
+                if house["foundation"] < 1.5:
+                    house["foundation"] = srng.uniform(1.5, 3.5)
+        if ("accent" in styles and styles["main"].kind not in ("flat", "stipple", "solid")
+                and srng.random() < SAME_FILL_NEW_COLOUR):
+            st = recolour(styles["main"], "accent", fam_seed + 2)
+            if st is not None:
+                styles["accent"] = st
 
     # which families are labelled
     label_fams = {"main"}
@@ -1876,6 +2040,8 @@ def compose(image_id, seed, mode_weights):
     if rng.random() < 0.7:
         label_fams.add("chimney")
     if rng.random() < FOUND_LABEL_PROB and styles["foundation"].kind != "flat":
+        label_fams.add("foundation")
+    if force_found:
         label_fams.add("foundation")
     if "trim" in styles:
         label_fams.add("trim")
@@ -1986,8 +2152,74 @@ def compose(image_id, seed, mode_weights):
                 poche = True
         plan_cfg = {"finishes": finishes, "label": label, "poche": poche, "mep": rng.random() < 0.15,
                     "room_tint": ((rng.randint(222, 240),) * 3 if rng.random() < 0.35 else None)}
+        hard = None
+        if HARDSCAPE_PLAN:
+            hrng = random.Random(fam_seed * 41 + 3)
+            if hrng.random() < HARDSCAPE_PLAN:
+                x0f, y0f, x1f, y1f = fp["footprint"].bounds
+                parts, along_parts = [], []
+                dw = hrng.uniform(4, 10)
+                ext = hrng.uniform(0, 4)
+                rear = rect(x0f - ext, y1f, x1f + ext, y1f + dw)                 # rear band
+                parts.append(rear); along_parts.append(rear)
+                if hrng.random() < 0.6:                                          # L: one side
+                    if hrng.random() < 0.5:
+                        parts.append(rect(x0f - dw, y0f + hrng.uniform(0, 0.5) * (y1f - y0f), x0f, y1f + dw))
+                    else:
+                        parts.append(rect(x1f, y0f + hrng.uniform(0, 0.5) * (y1f - y0f), x1f + dw, y1f + dw))
+                fx = x0f + house["front_door_u"] * (x1f - x0f)                  # front walk
+                ww, wl = hrng.uniform(3, 5), hrng.uniform(6, 16)
+                parts.append(rect(fx - ww / 2, y0f - wl, fx + ww / 2, y0f))
+                if hrng.random() < 0.4:                                          # side patio
+                    pw, pd = hrng.uniform(10, 20), hrng.uniform(8, 14)
+                    pat = rect(x1f + ext, y1f - pd, x1f + ext + pw, y1f + dw)
+                    parts.append(pat); along_parts.append(pat)
+                # rear band + patio run one way; side return + walk the other
+                along = unary_union(along_parts)
+                hard = unary_union(parts)
+                if fp["garage"] is not None:
+                    hard = hard.difference(fp["garage"].buffer(fp["t_ext"]))
+                hard = hard.difference(fp["footprint"])
+                # never over the building: every block and every room
+                hard = hard.difference(unary_union(
+                    [rect(bk.x0, bk.y0, bk.x1, bk.y1) for bk in house["blocks"]] +
+                    list(fp["room_polys"])).buffer(fp["t_ext"], join_style=2))
+                inside = unary_union([rect(bk.x0, bk.y0, bk.x1, bk.y1) for bk in house["blocks"]])
+                # draw_fill paints a polygon's outer ring and ignores holes, so a
+                # hardscape that closes around part of the house would be painted
+                # over it (the label, with its hole, would be right; the image not)
+                if (hard.is_empty or hard.intersection(inside).area > 1e-6
+                        or any(len(q.interiors) for q in polys_of(hard))):
+                    hard = None
+            if hard is not None:
+                hk = hrng.choice(["ashlar", "ashlar", "ashlar", "plank", "plank", "grid", "stone"])
+                ik = hrng.choice([k for k in ["plank", "plank", "grid", "stipple"] if k != hk])
+                styles["hardscape"] = make_style(hrng, hk, app, fam_seed + 21, S_guess, "hardscape")
+                # HF14 12: a deck's boards turn with each piece but stay one family
+                # ("hardscape@v" is labelled as "hardscape")
+                styles["hardscape@v"] = Style(styles["hardscape"].kind, styles["hardscape"].base,
+                                              styles["hardscape"].line, styles["hardscape"].lw,
+                                              dict(styles["hardscape"].params), fam_seed + 21, "hardscape")
+                styles["hardscape@v"].callout = styles["hardscape"].callout
+                if hk == "plank":
+                    styles["hardscape"].params["angle"] = 0
+                    styles["hardscape@v"].params["angle"] = 90
+                styles["floor_all"] = make_style(hrng, ik, app, fam_seed + 22, S_guess, "floor_all")
+                if not app["colour"]:
+                    styles["floor_all"].line = (min(235, app["ink"][0] + 90),) * 3
+                h_along = hard.intersection(along)
+                h_cross = hard.difference(along)
+                finishes = [("floor_all", list(fp["room_polys"])),
+                            ("hardscape", polys_of(h_along)), ("hardscape@v", polys_of(h_cross))]
+                label = {"hardscape", "hardscape@v"}
+                plan_cfg.update(finishes=finishes, label=label, mep=hrng.random() < 0.7,
+                                room_tint=None, poche=hrng.random() < 0.6)
+                fp["patio"] = None
         label_fams = label
         b = fp["footprint"].bounds
+        if hard is not None and not hard.is_empty:
+            hb = hard.bounds
+            b = (min(b[0], hb[0]), min(b[1], hb[1]), max(b[2], hb[2]), max(b[3], hb[3]))
         if fp["patio"] is not None:
             pb = fp["patio"].bounds
             b = (min(b[0], pb[0]), min(b[1], pb[1]), max(b[2], pb[2]), max(b[3], pb[3]))
@@ -2163,8 +2395,13 @@ def compose(image_id, seed, mode_weights):
 _CFG = {}
 
 
-def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0):
-    global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS
+def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0):
+    global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE
+    MOTTLE = mottle
+    SAME_FILL_NEW_COLOUR = same_fill
+    SAME_FILL_SUBTLE = same_fill_subtle
+    HARDSCAPE_PLAN = hardscape_plan
     if view_counts:
         VIEW_COUNT_WEIGHTS = view_counts
     MAX_LABEL_FAMS = max_label_fams
@@ -2202,6 +2439,15 @@ def main():
     ap.add_argument("--max-label-fams", type=int, default=0,
                     help="cap labelled families per elevation sheet (0 = v6d, uncapped). "
                          "Drops slivers first (trim/chimney/foundation).")
+    ap.add_argument("--same-fill-new-colour", type=float, default=0.0,
+                    help="probability that accent/foundation reuse the main/roof fill in a "
+                         "different colour (colour sheets; 0 = v6d)")
+    ap.add_argument("--same-fill-subtle", type=float, default=0.0,
+                    help="probability the foundation band reuses the roof fill with a SMALL hue shift")
+    ap.add_argument("--hardscape-plan", type=float, default=0.0,
+                    help="probability a floor plan becomes unlabelled-interior + labelled exterior hardscape")
+    ap.add_argument("--mottle", type=float, default=0.0,
+                    help="probability a coloured masonry/roofing fill is textured per unit (+ light mortar)")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2218,7 +2464,9 @@ def main():
     ok = 0
     modes = {}
     with Pool(args.workers, initializer=_init,
-              initargs=(args.out, args.seed, mw, vcw, args.max_label_fams)) as pool:
+              initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
+                        args.same_fill_new_colour, args.same_fill_subtle,
+                        args.hardscape_plan, args.mottle)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

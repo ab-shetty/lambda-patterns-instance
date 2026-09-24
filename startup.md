@@ -11,7 +11,29 @@ and is **not comparable** to anything measured afterwards. Always state which
 sampler a number came from. `PROJECT_UNDERSTANDING.md` explains why the fix
 matters; "The reference-box fix" below has the mechanism and its effect.
 
-## Current reproducible result
+## Current best (2026-09-24): HF14 0.8170
+
+swin_t, 282-source mix (`v6dmix_plus_r4`), trained at 2048, **inference at
+4096**: `abshetty/floz-refunet-swint-mixr4-restart-e13` (private Hub; load with
+`scripts/hf_ckpt_to_pth.py`). The 0.7887 checkpoint plus one completed
+fresh-cosine restart (`run_restart_swa.sh`); epoch and inference size both
+chosen on validation (0.808), HF14 read once. One seed.
+
+```bash
+PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-mixr4-restart-e13 \
+  --out data/runs/ck_best/epoch_13.pth
+PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint data/runs/ck_best/epoch_13.pth \
+  --indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 --image-max-size 4096 --ref-size 224 --mask-thresh 0.35
+# mean_iou 0.8170
+```
+
+Inference size is a model-input choice made on validation, not a sweep on
+HF14: `--domain-random` trains on 0.4-1.0x-shrunk sheets, so a 2048 model
+sees ~1430 px on average and thin targets gain from a larger input (validation
+2048 .785 / 3072 .786 / 4096 .801 / 5120 .799 on the 0.7887 model). **Older
+rows below are at 2048 inference; compare like with like.**
+
+## Current reproducible result (RefUNet, the documented recipe)
 
 `RefUNet`, fixed sampler, `mix5092` (1,600 synthetic + 1,548 Roboflow real + 504
 generated-realistic + 1,440 Gemini r2/r3 = 5,092 records), **trained at 2048**:
@@ -536,6 +558,9 @@ resolution column says otherwise. The sampler column is load-bearing.
 | **swin_t**, gemini r23 only (80 src), 20 ep | 1280 | 1 | 0.6025 val-sel; hard train IoU 0.9254 |
 | **swin_t**, gemini r234 only (168 src), 20 ep | 1280 | 1 | **0.7148** val-sel; hard train IoU 0.9257 — **+0.112 on identical fit** |
 | **swin_t**, `v6dmix_plus_r4` (282 src, 6,671 rec) | **2048** | 1 | **0.7887** val-sel (2026-09-21) — **best recorded**, still rising at the final epoch |
+| **swin_t**, `v6dmix_plus_r4` + 1 restart, **inference 4096** | 2048 | 1 | **0.8170** val-sel (2026-09-24) — **best recorded**; same model @2048 inference not read |
+| swin_t, no-gray real aug + `--same-fill-new-colour 0.5` synth, infer 4096 | 2048 | 1 | 0.8153 — but validation prefers the unchanged mix (0.791 vs 0.801); data change not supported |
+| swin_t, v7 synth only (1,991) | 2048 | 1 | 0.6834 vs v6d 0.7066 — null (2026-09-23) |
 | v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |

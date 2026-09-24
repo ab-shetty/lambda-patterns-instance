@@ -255,6 +255,7 @@ class InstanceSegDataset(Dataset):
     def __init__(self, records, indices, image_max_size=1024, ref_size=224,
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
+                 dr_scale_min=0.4, small_ref_prob=0.0,
                  repeat_reference_prob=0.0):
         self.records = records
         self.indices = list(indices)
@@ -266,6 +267,8 @@ class InstanceSegDataset(Dataset):
         self.grayscale = grayscale
         self.realism_aug = realism_aug
         self.domain_random = domain_random
+        self.dr_scale_min = dr_scale_min
+        self.small_ref_prob = small_ref_prob
         self.scale_matched_ref = scale_matched_ref
         self.repeat_reference_prob = repeat_reference_prob
         # When not augmenting (val / real eval), the reference patch is chosen
@@ -318,8 +321,17 @@ class InstanceSegDataset(Dataset):
                 target_cat = _rc.choice(unique_cats)
             cand = [j for j, c in enumerate(cats) if c == target_cat]
             ref_idx = _rc.choice(cand)
-            bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch,
-                                                  self.max_patch, rng=ref_rng)
+            if self.augment and self.small_ref_prob > 0 and random.random() < self.small_ref_prob:
+                # Tiny user rectangles are where real plans fail (2026-09-24):
+                # the upscaled crop is blurry and the model matches it by TONE
+                # (val 17: a thin stone band selects the dark roof) or
+                # under-commits. The default sampler prefers >= 128 px, so tiny
+                # references only occur on thin regions; draw some on purpose.
+                bx, by, bw, bh = sample_reference_box(masks[ref_idx], 16, random.randint(32, 96),
+                                                      rng=ref_rng)
+            else:
+                bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch,
+                                                      self.max_patch, rng=ref_rng)
             ref_patch = image[by:by + bh, bx:bx + bw].copy()
             ref_match = np.array([1.0 if c == target_cat else 0.0 for c in cats], np.float32)
             # WHERE the user drew is real product input and was being discarded:
@@ -405,7 +417,11 @@ class InstanceSegDataset(Dataset):
                 # broad photometric jitter. Forces scale/appearance invariance so the
                 # mask head generalizes to real instead of overfitting synth's fixed
                 # look — the one lever that can raise real_iou WITHOUT lowering synth.
-                s = random.uniform(0.4, 1.0)
+                # 0.4 is the historical floor. Thin targets (bands, columns,
+                # edge-on roofs) score 0.44 vs 0.83 for thick ones on real
+                # plans (2026-09-23), and this shrink makes them thinner still
+                # in training; --dr-scale-min raises the floor.
+                s = random.uniform(self.dr_scale_min, 1.0)
                 if s < 0.99:
                     new_w, new_h = max(1, int(nw * s)), max(1, int(nh * s))
                     image_r = cv2.resize(image_r, (new_w, new_h),
@@ -549,7 +565,8 @@ def load_parquet_records(repo_id="abshetty/floz-synth-v5", cache_dir=None,
 def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
                    domain_random=False, repeat_reference_prob=0.0,
-                   scale_matched_ref=False):
+                   scale_matched_ref=False, dr_scale_min=0.4,
+                   small_ref_prob=0.0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -561,6 +578,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   augment=True, grayscale=grayscale,
                                   realism_aug=realism_aug,
                                   domain_random=domain_random,
+                                  dr_scale_min=dr_scale_min,
+                                  small_ref_prob=small_ref_prob,
                                   scale_matched_ref=scale_matched_ref,
                                   repeat_reference_prob=repeat_reference_prob)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.

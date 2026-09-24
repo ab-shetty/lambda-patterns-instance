@@ -7,6 +7,54 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-09-24)
+
+Detail and every number: `synth_progress.md` (2026-09-23 and 2026-09-24
+entries). The machine is gone; everything below is either on the Hub or
+rebuildable from committed scripts.
+
+**New best: HF14 0.8170**, trained at 2048, validation-selected:
+`abshetty/floz-refunet-swint-mixr4-restart-e13` (published and round-trip
+verified). It is the 0.7887 model (`...-swint-mixr4-e8`) plus one completed
+fresh-cosine restart (`run_restart_swa.sh`), evaluated at **inference 4096**.
+Validation chose both the epoch (e13 of the restart) and the size (4096 is the
+plateau: 2048 .785 / 3072 .786 / 4096 .801 / 5120 .799 on the published e8).
+Most of the +0.028 over 0.7887 is inference size: `--domain-random` shrinks
+training sheets to 0.4-1.0x, so a "2048" model is trained on ~1430 px sheets
+and thin targets need the larger input. **Every HF14 number in this repo is at
+2048 inference unless it says otherwise -- compare like with like.**
+
+**The user's direction: improve real mIoU by changing the synthetic data,
+driven by looking at failures, not by training tricks.** What looking found
+this session, and what did not work:
+- Realistic-looking v7 (`generate_synthetic_v7.py`): null; train->real ratio
+  identical to v6d. The "universal ~0.85 ratio" was a protocol artifact of
+  `fresh_synth_iou.py`; use `scripts/question_difficulty.py` (HF14 protocol on
+  synthetic plans, regression net of difficulty): every source, Gemini
+  included, pays ~-0.15 on real plans.
+- Target thickness predicts failure (thin < 74 px at input: 0.44 vs 0.83).
+- Three hypotheses were built on and then disproved by LOOKING at the actual
+  reference crops / a 2-min intervention probe -- do the probe first: tiny
+  blurry references (they are sharp), colour blindness (the model uses colour;
+  val 17's teal band and grey roof are just close), grayscale augmentation.
+- Fill-vocabulary audit (one crop per real family vs every v6 fill) is the
+  most productive tool found: v6 `stone` looks like running bond (taught HF14
+  0's flood), no fill looked like random ashlar, real masonry/roofing is
+  TEXTURED per unit with light mortar, real lap siding has 3D shadow bands,
+  basketweave/parquet absent.
+- Synthetic knobs added to `generate_synthetic_v6.py`, all default-off (v6d
+  byte-identical, verified after each): `--same-fill-new-colour`,
+  `--same-fill-subtle`, `--hardscape-plan` (with new `ashlar` fill and
+  direction-turning decks), `--mottle`. Tested by `run_synth_ft_ab.sh`
+  (gentle fine-tune from restart e13, control vs treatment differing only in
+  the synthetic quarter): hardscape+subtle null, ashlar-hardscape dose 1.0
+  -0.013. `--mottle` result: see the last synth_progress entry.
+
+**Next:** finish the fill-vocabulary fixes the audit listed (3D lap shadows,
+basketweave/parquet), test each ALONE with `run_synth_ft_ab.sh`, and consider
+a full retrain (not a fine-tune) for any that shows a validation signal -- the
+gentle fine-tune gives synthetic changes a small dose on a converged model.
+
 ## Pick up here (2026-09-21)
 
 Numbers in `startup.md` ("2026-09-21 — swin_t meets real data"). What to know:
@@ -18,7 +66,10 @@ errors this session came from extrapolating RefUNet results onto swin_t — the
 volume curve, the 16-epoch null, the August realism table, and the r4 mix null.
 
 **New best: swin_t, 282-source mix, 2048 = 0.7887** (`data/mixed/v6dmix_plus_r4`,
-`run_v6r_ab.sh`-style recipe, one seed). Over the 0.7834 record. On the
+`run_v6r_ab.sh`-style recipe, one seed). **Published: `abshetty/floz-refunet-swint-mixr4-e8`**
+(`scripts/hf_ckpt_to_pth.py`; reproduces 0.7887 exactly, verified 2026-09-23) --
+check the Hub before rebuilding anything; every `floz-refunet-*` repo is listed by
+`HfApi().list_models(author="abshetty")`. Over the 0.7834 record. On the
 194-source mix the same backbone scored 0.7403 and looked worse than RefUNet, so
 the mix was the deficit. **START HERE: val-selection picked the final epoch with
 HF14 still rising — warm restart from `epoch_8.pth`, then a second seed.**

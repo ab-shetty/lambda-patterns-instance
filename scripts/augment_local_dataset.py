@@ -23,6 +23,8 @@ def main() -> None:
     parser.add_argument("--target-long", type=int, default=0,
                         help="resize augmented sources to this long side; 0 keeps size")
     parser.add_argument("--seed", type=int, default=5858)
+    parser.add_argument("--gray-prob", type=float, default=0.15,
+                        help="--strong only: probability a copy is converted to grayscale")
     parser.add_argument("--strong", action="store_true",
                         help="use geometric and richer photometric augmentation")
     parser.add_argument("--omit-originals", action="store_true",
@@ -44,7 +46,8 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="rf_aug_") as tmp_name:
         tmp = Path(tmp_name)
         n_aug = augment_scenes(scenes, str(tmp), args.aug_per_scene,
-                               args.seed, strong=args.strong)
+                               args.seed, strong=args.strong,
+                               gray_prob=args.gray_prob)
         inputs = [str(tmp)] if args.omit_originals else [str(src), str(tmp)]
         n_total = merge_dirs(inputs, str(out))
 

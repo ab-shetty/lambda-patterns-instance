@@ -125,7 +125,8 @@ def _rotate_img_and_polys(img, anns, deg):
     return rimg, rot
 
 
-def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False):
+def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False,
+                   gray_prob=0.15):
     """Write k_per_scene augmentations of each scene; returns count.
     start_n continues the aug_NNNNNN filename numbering across multiple calls.
     strong=False: the established mild photometric+flip recipe (byte-identical to
@@ -155,7 +156,12 @@ def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False)
                 img = ImageEnhance.Sharpness(img).enhance(0.5 + 1.5 * rng.rand())
                 if rng.rand() < 0.5:
                     img = img.filter(ImageFilter.GaussianBlur(radius=0.3 + 1.2 * rng.rand()))
-                if rng.rand() < 0.15:
+                # 2026-09-24: grayscale copies make colour-only family boundaries
+                # (val 17: teal stone band vs grey roof, same course pattern)
+                # pixel-identical under different labels, which teaches
+                # texture-only matching. The draw is always consumed, so
+                # gray_prob=0 leaves every other augmentation unchanged.
+                if rng.rand() < gray_prob:
                     img = img.convert("L").convert("RGB")
                 if rng.rand() < 0.5:
                     img = img.transpose(Image.FLIP_LEFT_RIGHT)

@@ -1,5 +1,376 @@
 # Synthetic Dataset Progress
 
+## 2026-09-24 — goal: 0.85 HF14 at training resolution <= 2048
+
+Baseline: `abshetty/floz-refunet-swint-mixr4-e8` (swin_t, 282 sources, 2048),
+HF14 0.7887, validation 0.7854. Everything below is chosen on VALIDATION;
+`scripts/val_failures.py` reports the thin/mid/thick buckets and the flagged
+validation sheets for any metrics file.
+
+**Where the best model still fails on validation.** 63% of its remaining
+validation loss is ONE sheet, val 17 (a four-unit townhouse, 27 of 77
+selections): its thin base band (pattern1, 9 selections, mean 0.314) and its
+siding (pattern2, 18 selections, 0.763). The real-data mix had already fixed
+most of what the v6d-only model failed on (thin bucket 0.353 -> 0.645, val
+10/9 0.48 -> 0.85, val 13 0.63 -> 0.81).
+
+**Looking at the actual reference crops disproved the "tiny blurry reference"
+story.** The band's references are sharp teal stone-brick courses (41-67 px
+native on a 2219 px sheet). The roof is drawn with the SAME running-bond course
+pattern in grey. The model gets the band and ALSO selects the roof and porch
+roofs: it matches texture and ignores colour, the only cue separating them.
+v6d almost never contains two families that share a fill and differ only by
+colour, so nothing teaches that colour can be the boundary.
+
+**Tried and dropped on the way (validation):**
+- `--dr-scale-min 0.8` (new flag; `--domain-random` shrink floor, historical
+  0.4), full-LR restart from the published e8: epochs 8-10 at 0.771 / 0.748 /
+  0.758, thin bucket not improving; a 2e-4 restart knocks the converged model
+  back. Stopped.
+- Two-pass inference (`scripts/eval_refine.py`, re-reference from the model's
+  confident region): bigbox +0.005 (fires on 15/77, never on val 17), mosaic
+  -0.03. Not the lever.
+- `--small-ref-prob 0.5` (new flag; deliberately tiny training references),
+  gentle fine-tune lr 5e-5: epoch 8 0.776, val 17 and thin WORSE. Its premise
+  was disproved by the crops; stopped after one epoch.
+
+**Now testing:** `generate_synthetic_v6.py --same-fill-new-colour 0.5` (new,
+default 0 = v6d byte-identical): in colour sheets the accent reuses the main
+wall's fill and the foundation band the roof's fill, each in a clearly
+different colour, band labelled -- val 17's structure. Pool
+`v6dsf05_1600` (seed 6, ids as v6d_1600) swapped for `v6d_1600` in the mix
+(`data/mixed/v6dsf05mix_plus_r4`, 6,676 records); gentle fine-tune from the
+published e8, lr 5e-5, 4 epochs.
+
+Result: epoch 8 made the band WORSE (0.314 -> 0.099; the small-ref fine-tune
+too, 0.103) -- the fine-tuned model now selects the ENTIRE roof confidently.
+Any further training on this mix pushes toward texture-only matching.
+
+**Cause: the offline `--strong` augmentation grayscales 15% of every real and
+Gemini copy** (`scripts/build_mix.py`, ~760 records in the mix). In those copies
+a colour-only family boundary is pixel-identical under different labels, so
+the model is trained to ignore colour. `--gray-prob` (new, default 0.15 =
+unchanged pools; the draw is always consumed, so 0 changes nothing else)
+rebuilds them without it: `*-strong18nogray`, and
+`data/mixed/v6dsf05mix_plus_r4_nogray` (6,676 records = v6dsf05_1600 + the
+three no-gray pools). `./run_nogray_mix.sh 7` trains the full recipe from
+ImageNet weights on it (the published model learned the invariance over all 9
+epochs; fine-tuning it did not undo it), then selects epoch and inference size
+on validation and reads HF14 once.
+
+**The colour story was then disproved by a direct intervention** (should have
+come first; 2 min, no training): on val 17, keep the roof's texture and
+recolour it red, then ask with the band references. Roof selected / band IoU:
+
+| model | original colours | roof recoloured red |
+|---|---|---|
+| published mixr4 e8 | 0.21 / 0.316 | 0.00 / 0.589 |
+| no-gray + same-fill, epoch 4 | 0.92 / 0.096 | 0.00 / 0.518 |
+
+Both models USE colour. The band's desaturated teal and the roof's grey are
+simply close, so with the same course pattern the model calls them one
+material. Grayscale augmentation is not what blinds it, and the no-gray run is
+worse on this sheet mid-training. Val 17's band is a subtle-hue question on
+one sheet; chasing it further is tuning to validation.
+
+**No-gray + same-fill mix, full recipe (`./run_nogray_mix.sh 7`) -- HF14
+0.8153, but the data change is NOT supported.** Val-selected epoch 8 (the
+final one); inference size chosen on validation: 2048 -> val 0.768, 4096 ->
+val 0.791; HF14 read once at 4096: **0.8153**, paired vs the published 0.7887
++0.027 (t 1.52; sign 28/9, p 0.003). Its own HF14 at 2048 is 0.7809, so the
+gain is inference size. And on validation the PUBLISHED model at 4096 scores
+0.8014, above this model's 0.791 -- validation prefers the old data. Report
+the data change as unsupported; the inference-size lever is real and much
+larger on the real-data mix than on v6d-only (+0.009 there).
+`run_restart_swa.sh` chooses among the published e8, a completed restart of it
+and SWA windows, each at 2048 and 4096, on validation, and reads HF14 once.
+
+**Completed restart -> HF14 0.8170 (new best, validation-supported).**
+`./run_restart_swa.sh`: one fresh cosine from the published e8 on its own mix.
+Validation @2048/@4096 per restart epoch: e8 .751/.788, e9 .757/.780, e10
+.707/.748, e11 .749/.789, e12 .761/.798, **e13 .793/.808**, e14 .778/.786, e15
+.791/.795; SWA 12-15 .789/.805, 13-15 .789/.801, 14-15 .780/.794; published e8
+.785/.801. Chosen: restart e13 @4096. HF14 read once: **0.8170**, paired vs
+0.7887 +0.028 (t 1.48; sign 29/14, p 0.03). Inference size sweep on validation
+(published e8): 2048 .785, 3072 .786, 4096 .801, 5120 .799 -- 4096 is the
+plateau. TTA x4 at 4096: +0.0015, dropped.
+
+**Back to synthetic data (user direction): two generator changes from the
+visual audit**, both default-off in `generate_synthetic_v6.py` (v6d verified
+byte-identical after each), each on its own RNG so the rest of a sheet is
+unchanged when it fires:
+
+- `--hardscape-plan P` (HF14 0 and 12): a floor plan gets ONE unlabelled
+  finish over every room, a forced MEP dashed-arc overlay (70%), and a LABELLED
+  exterior hardscape -- rear/L deck band, front walk from the door, optional
+  side patio -- as random ashlar, deck planks or pavers. Sheets whose hardscape
+  would touch the building or close around it fall back to a normal plan.
+  (Debugging note: a translucent orange box over a house in the contact sheet
+  was the existing 7% highlighter markup on the L-shape's bounding box --
+  intended, like HF14 24/25/27 -- not a fill bug.)
+- `--same-fill-subtle P` (val 17): the foundation band reuses the roof's fill
+  with a SMALL hue shift (25-60 deg) at similar lightness, labelled -- the
+  close-colour case the probe showed the model failing, unlike
+  `--same-fill-new-colour`'s large colour differences.
+
+Pool `v6dHS_1600` (seed 6, v6d_1600's ids; both knobs 0.5: 126 hardscape
+plans, 323 colour sheets with a labelled band), mix `v6dHSmix_plus_r4`.
+`./run_synth_ft_ab.sh`: from restart e13, identical lr 5e-5 x3 fine-tunes,
+control (v6d_1600) vs treatment, validation @4096 per epoch, and a
+PRE-DECLARED HF14 comparison of the two final checkpoints with images 0/12
+as the hardscape change's target (validation has no floor plans).
+
+**Result: null.** HF14 paired treatment - control **-0.0000** (t 0.00; 12
+better / 8 worse / 32 tied); the pre-declared targets got slightly WORSE
+(image 12 -0.034, image 0 -0.032). Validation @4096 final epoch 0.798 vs
+0.791, val 17 0.592 vs 0.577 -- noise. The control fine-tune itself drifts
+down (0.808 -> 0.791).
+
+**Why, from looking at the reference crops and the fills side by side:**
+- HF14 0's patio is RANDOM (non-coursed) ashlar -- mixed rectangles, no
+  continuous course lines -- and the house interior is running-bond planks.
+  v6's `stone` fill is COURSED ashlar, i.e. visually running bond: the
+  generator taught "stone ~ running bond", exactly the confusion. The
+  hardscape pool drew hardscape mostly as `stone`, so it reinforced it (the
+  treatment floods image 0's interior MORE than control). No v6 fill looked
+  like random ashlar (`rubble` is jittered trapezoids).
+- HF14 12's deck boards run horizontally on one side and vertically on
+  another, one family; v6 draws each family in one direction.
+
+Fixes: new `ashlar` fill (`_ashlar`: 6x6-unit blocks packed with 2x2/2x1/
+1x2/1x1/3x2/2x3 stones, alternate block rows offset so no joint runs
+through; checked side by side against HF14 0's crop), hardscape kinds now
+ashlar 3/7, plank 2/7 (rear band + patio one direction, side return + walk
+perpendicular, labelled as one family via `hardscape@v`), grid, stone. Dose
+raised: `--hardscape-plan 1.0` -> 279 hardscape plans in `v6dHS2_1600`
+(subtle band 0.5). Treatment-only rerun (`TREAT_DATA=data/mixed/
+v6dHS2mix_plus_r4 TREAT_TAG=v6dHS2 ./run_synth_ft_ab.sh`), reusing the
+control arm (same base, recipe, seed).
+
+**Result: worse.** Validation @4096 final 0.768 vs control 0.791 (val 13
+0.921 -> 0.773); HF14 paired -0.013 (t -1.23; 11/14/27). The targets moved a
+little (image 12 +0.046, image 0 +0.007) and the dose cost elsewhere. Two
+targeted synthetic rounds on the best model: null, then slightly negative.
+
+**Fill-vocabulary audit** (one reference crop per labelled family across all
+28 real sheets, next to a swatch of every v6 fill). Real materials v6 cannot
+draw:
+1. TEXTURED masonry/roofing: BIM exports render each brick/stone/shingle with
+   its own tone plus grain (val 17/18/19's teal stone -- the val 17 failure
+   family -- 18's asphalt, 2/3/5's brick). Every v6 fill is flat line-art.
+2. LIGHT mortar on coloured brick (2, 3, 4, 5); v6 darkens joints.
+3. 3D-shadowed lap siding: bold grey band under each board (25:3, 27:4).
+4. Basketweave / parquet (1:1, 8:1).
+(0:1 random ashlar is now covered by `ashlar`.)
+
+`--mottle P` (new, default 0 = v6d byte-identical; decided from the style's
+own seed): coloured brick/block/stone/rubble/ashlar/shingle/asphalt fills get
+a tone per unit (connected components between joints) plus fine grain; half
+the masonry ones get light mortar. Tested ALONE: `v6dMO_1600` (seed 6, --mottle
+0.7; labels byte-identical to v6d_1600, only pixels differ),
+`TREAT_DATA=data/mixed/v6dMOmix_plus_r4 TREAT_TAG=v6dMO ./run_synth_ft_ab.sh`.
+
+## 2026-09-23 — v7: v6 re-tuned by looking at Gemini, not by matching a metric
+
+**Untrained. No HF14 number yet.** `generate_synthetic_v7.py` wraps v6 (v6d
+stays bit-for-bit: verified by regenerating 48 v6d draws and diffing). Every
+change came from looking at 27 Gemini r2-r4 sheets next to v6d contact sheets,
+label overlays included:
+
+| seen in Gemini, missing in v6d | v7 change |
+|---|---|
+| drawing fills the frame; v6d is a small house on ~70% empty sheet | crop to ink bbox + 1.5-5% pad, resample to 2400-3600 long side |
+| cross-gable front projections, set-back upper volumes, dormers, porches | 0-2 front projections, pop-up upper volume, higher dormer/porch/chimney rates |
+| material changes by volume (B&B gable / shingle / brick base) | accent almost always, second accent 35% |
+| muted olive/tan/beige/grey, brick-red or charcoal roofs, white trim | muted palette; no teal/purple/royal blue or coloured trim |
+| readable callouts and level marks | lettering x1.6 |
+| crisp dark mono linework | 70% of light/faint ink re-drawn at normal |
+| no free-standing poles | v6 bug: corner boards sized from the gable's bbox ran to the apex; `CORNER_BOARD_CLIP` (off in v6) |
+| **annotators label wall materials only** -- roof, trim, chimney, foundation unlabelled in elevations | those families are still drawn but labelled at 5-25% |
+| windows/doors always cut out | hole prob 0.8 -> 0.97 |
+
+The labelling row was found by looking at label overlays of Gemini, not by
+measuring. Realism-by-metric is 5-for-5 null (2026-09-21), so the statistics
+below are a **post-hoc sanity check, not the design target** -- nothing was
+tuned to move them. They happened to land on Gemini (300 draws each):
+
+| | Gemini r2 / r3 / r4 | v6d | v7 |
+|---|---|---|---|
+| aspect | 2.38 / 2.44 / 2.36 | 1.75 | 2.04 |
+| regions / img | 6.4 / 5.6 / 7.0 | 10.7 | 8.6 |
+| families / img | 1.75 / 1.52 / 1.86 | 2.59 | 2.17 |
+| labelled fraction | 0.313 / 0.277 / 0.312 | 0.295 | 0.310 |
+| median region / sheet | 0.037 / 0.049 / 0.031 | 0.021 | 0.030 |
+
+Still unlike Gemini: roof plans are one concentric-course block where Gemini's
+are L-shaped multi-hip plans with valleys and mixed membrane/gravel families;
+no photographed-paper sheets; floor plans lack Gemini's furniture density.
+
+**Test:** `./run_v7_ab.sh 7` -- swin_t, v7-only (1,991: 9 of 2,000 draws had
+no labels left after the wall-only filter) against the published v6d arm
+(`abshetty/floz-refunet-swint-v6d-e8`, 0.7066), identical recipe, paired over
+the 52 selections. Remember v6r (region
+scale matched) was null on swin_t; v7 differs by also changing what is
+labelled and how the sheet looks.
+
+**Result (one seed): null, leaning negative.** v7 **0.6834** val-selected
+(epoch 7; epoch-8 0.6886) against v6d **0.7066** (the published checkpoint
+re-evaluated here reproduces 0.7066 exactly). Paired over the 52 selections:
+**-0.0232, t(51) = -0.96, p = 0.34**, 20 better / 20 worse / 12 tied. It moves
+*which* questions are answered, not how many: v7 gains on image 14 (+0.096
+over 9 selections, the largest deficit image), 2 (+0.206) and 0 (+0.160), and
+loses on 16 (-0.493, a roof plan), 25 (-0.252) and 27 (-0.170, both
+highlighter-markup sheets). One candidate story, unconfirmed and subject to
+`PROJECT_UNDERSTANDING.md`'s per-image caution: v7 leaves elevation roofs
+unlabelled, which may teach "roof courses are background" and hurt the roof
+plan. First visually-driven realism round; still no synthetic change on
+record that beats v6d on swin_t.
+
+**Train -> real gap: unchanged.** `fresh_synth_iou.py`, valid-pixel, 400
+plans each, fresh = ids 100000+ (never generated before):
+
+| | v6d model (e8) | v7 model (e7) |
+|---|---:|---:|
+| train (seen) | 0.7875 | 0.7989 |
+| fresh, own generator | 0.8351 | 0.8069 |
+| fresh, other generator | 0.7793 (v7) | 0.7627 (v6d) |
+| HF14 | 0.7066 | 0.6834 |
+| own-fresh -> HF14 gap | 0.129 | 0.124 |
+| HF14 / own-fresh | 0.846 | 0.847 |
+
+v7 is a *harder* pool (its model reaches 0.807 on fresh v7, v6d's reaches
+0.835 on fresh v6d) and the transfer ratio is identical to three decimals, so
+the lower HF14 is the lower synthetic fit carried through, not worse transfer
+-- and the visual realism bought no transfer either. Train < fresh on v6d
+(0.788 vs 0.835) is sample mix at n=400, not a finding. Open: whether v7
+closes on v6d given the steps to fit it (the pool is harder at a matched
+budget), and the roof-label ablation (`./run_v7_ab.sh 7 v7roof`).
+
+**Roof-label ablation: null.** `./run_v7_ab.sh 7 v7roof` -- v7 with elevation
+roofs labelled as v6d does, every other label identical (same draw order).
+HF14 **0.6894** val-selected (epoch 6). Paired: **+0.006 vs v7** (t = +0.30),
+**-0.017 vs v6d** (t = -0.67). It does recover roof-plan image 16 (+0.30 over
+v7) but gives back image 14 (-0.054 over 9 selections), so the roof story
+explains one image and not the mean. Train-to-real, on its own labels:
+
+| | v6d | v7 | v7roof |
+|---|---:|---:|---:|
+| fresh, own generator | 0.8351 | 0.8069 | 0.8077 |
+| HF14 | 0.7066 | 0.6834 | 0.6894 |
+| HF14 / own-fresh | 0.846 | 0.847 | 0.854 |
+
+Three arms inside one seed's noise on transfer. v7 is not adopted; v6d stays
+the synthetic source. The generator and both arms stay reproducible for a
+second seed or a longer-budget test.
+
+**Does generated data transfer better than procedural at matched size? No.**
+`./run_transfer_ratio.sh 7` (~30 min: 1024 px, three arms concurrently, data
+prep on 64 chunks). swin_t, 148 sources x18 each, epoch 8, no selection:
+
+| arm | fresh / held-out | HF14 | HF14 / fresh |
+|---|---:|---:|---:|
+| Gemini, 20 held-out sources (fold A) | 0.7640 | 0.6767 | 0.886 |
+| Gemini, fold B | 0.7792 | 0.6397 | 0.821 |
+| v6d, 400 fresh plans | 0.7477 | 0.6448 | 0.862 |
+
+Gemini 0.853 mean vs v6d 0.862. The ~0.85 ratio now holds across source
+(v6d / v7 / v7roof / Gemini), size (148 to 100k), backbone (RefUNet, swin_t)
+and resolution. A gap that ignores the training source is probably not domain
+transfer but **question difficulty**: HF14 asks harder questions than a typical
+unseen plan of any source (77% of its deficit is four multi-material images).
+At matched 148 sources Gemini and v6d also tie on HF14 (0.658 vs 0.645); the
+two folds alone differ by 0.037, so the earlier "a generated plan is worth
+~1.65x" (measured against the 640px scraped pool) does not extend to "worth
+more than a procedural plan". Caveats: one seed, 20 held-out Gemini
+selections per fold.
+
+Tooling trap found: `fresh_synth_iou.py` decides "seen" by FILENAME, and
+every merged pool is renamed `item_XXXXXX`, so a held-out merged pool against
+a merged training pool matches every name and scores n=0 (reported as 0.0000).
+Pass an empty `--trained-pool` when the split is known disjoint.
+
+**Question difficulty does NOT explain the gap, and the ~0.85 ratio was
+partly a protocol artifact.** `scripts/question_difficulty.py` scores unseen
+plans with the exact HF14 protocol (every labelled instance a question) and
+gives every question source-agnostic features (families on the sheet, target
+regions, target area, and `lookalike` = texture-descriptor similarity of the
+target to the nearest other family); `question_difficulty_report.py`
+summarises:
+
+| model | synthetic (HF14 protocol) | HF14 | HF14/syn | is_real net of difficulty |
+|---|---:|---:|---:|---:|
+| swin_t v6d 1,995 @2048 | 0.6489 | 0.7066 | 1.089 | -0.173 (t -4.4) |
+| swin_t v6d 148 @1024 | 0.5335 | 0.6448 | 1.209 | -0.172 (t -4.3) |
+| swin_t Gemini fold A @1024 | 0.7666 | 0.6767 | 0.883 | -0.138 (t -2.3) |
+| swin_t Gemini fold B @1024 | 0.7346 | 0.6397 | 0.871 | -0.172 (t -2.4) |
+| swin_t v7 1,991 @2048 | 0.7193 | 0.6834 | 0.950 | -0.142 (t -2.5) |
+
+(OLS, SE clustered by sheet; HF14 has only 14 sheets.)
+
+1. Under the HF14 protocol v6d's questions are HARDER than HF14's (97%
+   multi-family, 8 target regions vs 2), so the "universal ~0.85" came from
+   `fresh_synth_iou.py`'s one-question-per-plan training sampler, which asks a
+   different question mix. Do not compare fresh_synth_iou numbers with HF14
+   as a transfer ratio again; use this script.
+2. Net of difficulty, every model -- Gemini included -- pays the same
+   **~-0.14 to -0.17 on real plans**. A real-plan penalty exists and generated
+   data does not escape it, so it is not the procedural fill vocabulary.
+3. Where it shows: synthetic single-family questions are the easiest (0.88 to
+   0.94); HF14's single-family questions score 0.61 to 0.67, mostly image 12
+   (4 selections at ~0.44, thin wall poche) and image 0. HF14's high-lookalike
+   questions score the same as synthetic ones (0.548 vs 0.538 on v6d). One
+   blind spot: the features count only LABELLED families, so unlabelled ink on
+   a real sheet is invisible to them.
+
+**Looking at where the real-plan penalty lives** (`visualize_refunet_selection.py`
+for swin_t v6d-148 / Gemini-A-148 @1024 and v6d-1,995 @2048, all 14 HF14
+sheets sorted by score, plus native-resolution crops). The two worst sheets
+are both **detailed floor plans whose target is exterior hardscape**: image 12
+(0.44, a faint deck of fine planks) and image 0 (0.53, random-ashlar patio and
+walk). Every model, Gemini-trained included, misses parts of the hardscape and
+floods the interior, which on image 0 is an UNLABELLED running-bond plank
+floor finish under drop shadows, furniture, room names and dimension strings,
+and on image 12 is dashed electrical/ceiling arcs, grey furniture outlines and
+notes. No training source contains that sheet type: v6d floor plans are sparse
+rooms with a few hatched floors, and Gemini produced ~2 floor plans in the 27
+sheets inspected. Other weak sheets have other causes: 14 (0.54, 9 selections)
+is two elevations drawn tiny across a wide strip (resolution), 27 has
+highlighter markup. Roof plans (16, 1) and most elevations are fine.
+
+Two sheets and six selections, so confirm on the validation split's floor
+plans before building anything. If it holds, the next generator should make
+floor plans with a full unlabelled interior finish, furniture, shadows, text
+and MEP overlays, with the target on exterior paving/decking.
+
+**Validation has no detailed floor plans**, so the floor-plan story cannot be
+confirmed there (`scripts/sheet_scores_contact.py` renders any split sorted by
+score). Its weak sheets fail differently -- val 13 is HF14 14's type (two tiny
+elevations on a 5:1 strip), val 10/9 pick unlabelled lap-siding walls for a
+mono shingle roof, val 17 matches a thin dark foundation band to the dark roof
+by tone. Aspect ratio does NOT explain scores (Spearman -0.11 over 28 sheets).
+
+**What does: target thickness at input resolution.** Over all 129 real
+selections (HF14 + val, swin_t v6d-1,995 @2048), Spearman(IoU, thickness) =
++0.58: thin (< 74 px at the 2048 input) 0.437, mid 0.716, thick 0.825. The
+thin third is ~half of all missing IoU -- bands, columns, edge-on roofs, thin
+decks. (So v7's Gemini-style unlabelling of trim/chimney/foundation removed
+exactly the question type the eval set asks most badly.)
+
+**`--domain-random` shrinks training sheets 0.4-1.0x** (`dataset.py` ~408), so
+a "2048" model mostly sees 820-2048 px sheets and is evaluated at the top of
+that range. Inference size, chosen on VALIDATION:
+
+| model (trained at) | 1024 | 2048 | 2560 | 3072 | 4096 |
+|---|---:|---:|---:|---:|---:|
+| swin_t v6d-1,995 (2048), val | - | 0.670 | 0.691 | 0.708 | 0.718 |
+| ... thin bucket | - | 0.353 | 0.405 | 0.452 | - |
+| swin_t Gemini-A-148 (1024), val | 0.660 | 0.713 | - | 0.707 | - |
+
+Confirmed once on HF14, paired: v6d-1,995 2048 -> 4096 **+0.009** (t 0.88;
+sign test 29/14, p 0.03); Gemini-A 1024 -> 2048 **+0.056** (t 3.29, p 0.002).
+Real but small at 2048; large when the nominal size is too small. The
+training-side version (less downscale, or larger nominal size) is untested.
+
 ## 2026-09-20 — Cheap architecture screening, and what it retired
 
 Method session on a fresh GH200, rebuilt from a clean clone. Full narrative and

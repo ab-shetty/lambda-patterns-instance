@@ -102,6 +102,10 @@ def parse_args():
     p.add_argument("--bce-weight", type=float, default=1.0)
     p.add_argument("--dice-weight", type=float, default=2.0)
     p.add_argument("--domain-random", action="store_true")
+    p.add_argument("--dr-scale-min", type=float, default=0.4,
+                   help="floor of --domain-random's random downscale (historical 0.4)")
+    p.add_argument("--small-ref-prob", type=float, default=0.0,
+                   help="probability a training reference is a deliberately tiny box (16-96 px)")
     p.add_argument("--early-stop-patience", type=int, default=0,
                    help="stop when the monitored metric has not improved for N "
                         "epochs (0 = off). Saves the tail of a long schedule "
@@ -209,7 +213,8 @@ def main():
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
         train_split=args.train_split, seed=args.seed,
         domain_random=args.domain_random, realism_aug=args.realism_aug,
-        scale_matched_ref=args.scale_matched_ref)
+        scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
+        small_ref_prob=args.small_ref_prob)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,
