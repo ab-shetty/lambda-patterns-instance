@@ -135,6 +135,12 @@ HARDSCAPE_PLAN = 0.0
 MOTTLE = 0.0
 MOTTLE_KINDS = ("brick", "block", "stone", "rubble", "ashlar", "shingle", "asphalt")
 MORTAR_KINDS = ("brick", "block", "stone", "ashlar")
+# 2026-09-24, the rest of the fill-vocabulary audit: real lap siding is often
+# drawn with a bold grey SHADOW band under every board (HF14 25/27), and real
+# floors include basketweave / parquet (1, 8), neither of which v6 can draw.
+# With this probability (from the style's own seed) a lap fill gets 3D shadow
+# bands and a grid fill becomes basketweave.
+VOCAB2 = 0.0
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -530,6 +536,26 @@ def _planks(layer, ox, oy, S, plank_w_ft, colour, lw, seed, angle=0):
             x_ft += rr.uniform(3, 8)
 
 
+def _basketweave(layer, ox, oy, S, cell_ft, colour, lw, n=3):
+    """Cells alternating n horizontal / n vertical boards, cell grid outlined."""
+    h, w = layer.shape[:2]
+    u = cell_ft * S
+    if u < 4:
+        return
+    i0, i1 = int(math.floor(ox / u)) - 1, int(math.ceil((ox + w) / u)) + 1
+    j0, j1 = int(math.floor(oy / u)) - 1, int(math.ceil((oy + h) / u)) + 1
+    for j in range(j0, j1):
+        for i in range(i0, i1):
+            x0, y0 = i * u - ox, j * u - oy
+            cv_polyline(layer, [(x0, y0), (x0 + u, y0), (x0 + u, y0 + u), (x0, y0 + u)], colour, lw, closed=True)
+            for k in range(1, n):
+                t = k * u / n
+                if (i + j) % 2 == 0:
+                    cv_line(layer, (x0, y0 + t), (x0 + u, y0 + t), colour, max(1.0, lw * 0.7))
+                else:
+                    cv_line(layer, (x0 + t, y0), (x0 + t, y0 + u), colour, max(1.0, lw * 0.7))
+
+
 def _mottle(layer, joint_bgr, strength, seed):
     """Give every unit between joints its own tone, plus fine grain."""
     rr = np.random.default_rng(seed & 0xFFFFFFFF)
@@ -557,6 +583,9 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     layer = np.empty((h, w, 3), dtype=np.uint8)
     layer[:] = bgr(style.base)
     k, p, c, lw, sd = style.kind, style.params, style.line, style.lw, style.seed
+    v2 = False
+    if VOCAB2 and k in ("lap", "grid"):
+        v2 = random.Random(sd * 59 + 3).random() < VOCAB2
     mot = 0.0
     if MOTTLE and k in MOTTLE_KINDS:
         mr = random.Random(sd * 53 + 1)
@@ -565,7 +594,12 @@ def draw_fill(canvas, poly_px, style, S, W, H):
             mot = mr.uniform(0.5, 1.0)
             if k in MORTAR_KINDS and mr.random() < 0.5:
                 c = mix(style.base, (236, 236, 232), 0.75)
-    if k == "lap":
+    if k == "lap" and v2:
+        # 3D lap: a shadow band under every board joint, then the joint line
+        shade = mix(style.base, c, 0.45)
+        _hlines(layer, x0, y0, S, p["sp"], shade, max(1.0, p["sp"] * S * 0.22), phase_ft=p["sp"] * 0.12)
+        _hlines(layer, x0, y0, S, p["sp"], c, lw)
+    elif k == "lap":
         _hlines(layer, x0, y0, S, p["sp"], c, lw)
         if p.get("shadow"):
             _hlines(layer, x0, y0, S, p["sp"], mix(style.base, c, 0.35), 1, phase_ft=0.06)
@@ -604,6 +638,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     elif k == "cross":
         _dlines(layer, x0, y0, S, p["sp"], 45, c, lw)
         _dlines(layer, x0, y0, S, p["sp"], -45, c, lw)
+    elif k == "grid" and v2:
+        _basketweave(layer, x0, y0, S, p["sp"], c, lw)
     elif k == "grid":
         _hlines(layer, x0, y0, S, p["sp"], c, lw)
         _vlines(layer, x0, y0, S, p["sp"], c, lw)
@@ -2396,9 +2432,10 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0):
-    global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0):
+    global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     MOTTLE = mottle
+    VOCAB2 = vocab2
     SAME_FILL_NEW_COLOUR = same_fill
     SAME_FILL_SUBTLE = same_fill_subtle
     HARDSCAPE_PLAN = hardscape_plan
@@ -2448,6 +2485,8 @@ def main():
                     help="probability a floor plan becomes unlabelled-interior + labelled exterior hardscape")
     ap.add_argument("--mottle", type=float, default=0.0,
                     help="probability a coloured masonry/roofing fill is textured per unit (+ light mortar)")
+    ap.add_argument("--vocab2", type=float, default=0.0,
+                    help="probability a lap fill gets 3D shadow bands / a grid fill becomes basketweave")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2466,7 +2505,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

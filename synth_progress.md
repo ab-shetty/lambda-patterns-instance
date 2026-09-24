@@ -1326,3 +1326,9 @@ Both null on HF14. The v6d control alone spans 0.640-0.694 on HF14 across
 seeds, so synth-only single-seed deltas under ~0.05 mean nothing here. Neither
 knob is adopted; the subtle band's validation mean (+0.031) is the only
 residue, and it rests on one seed's +0.088.
+
+`--vocab2 P` (new, default 0 = v6d byte-identical): 3D shadow bands on lap
+siding and basketweave for grid fills, from the fill-vocabulary audit. Pool
+recipe: `generate_synthetic_v6.py --n 2000 --seed 6 --start 0 --vocab2 0.7`,
+first 1,600. **Untested** -- `run_vocab2_screen.sh` (three seeds against the
+existing v6d arms) was stopped at launch when the session ended.
