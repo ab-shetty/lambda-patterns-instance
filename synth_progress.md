@@ -1302,3 +1302,14 @@ subtleonly: val 0.7050  HF14 0.6981
    paired mean difference +0.0040   se 0.0153   t(51) = +0.26   p = 0.7929
    subtleonly better on 18, worse on 22, tied (|d|<0.01) on 12   sign-test p = 0.6358
 ```
+
+**Split screen (auto-recorded, `run_split_screen.sh`, seed 99):**
+```
+v6d: val 0.6330  HF14 0.6845
+hsonly: val 0.5974  HF14 0.6690
+subtleonly: val 0.6566  HF14 0.6669
+   paired mean difference -0.0155   se 0.0220   t(51) = -0.70   p = 0.485
+   hsonly better on 19, worse on 21, tied (|d|<0.01) on 12   sign-test p = 0.8746
+   paired mean difference -0.0176   se 0.0158   t(51) = -1.11   p = 0.2725
+   subtleonly better on 21, worse on 21, tied (|d|<0.01) on 10   sign-test p = 1
+```
