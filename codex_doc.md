@@ -56,9 +56,10 @@ this session, and what did not work:
 basketweave/parquet), and test each ALONE with a FULL retrain against a same-recipe
 control (or synth-only at 1024, three arms concurrently, ~30 min) -- not
 `run_synth_ft_ab.sh`, which barely moves predictions. `./run_synth_only_screen.sh`
-(synth-only, 1024, arms concurrent, ~20 min) is the fast fair screen: first
-run gave mottle null, ashlar-hardscape+subtle HF14 +0.028 but validation
--0.09 (confounded; split the two knobs next).
+(synth-only, 1024, arms concurrent, ~20 min) is the fast fair screen: results:
+mottle null; hardscape-only and subtle-band-only both null on HF14 over three
+seeds (-0.003 / +0.003 mean). Synth-only seed noise is ~0.05 on HF14 -- screen
+with >= 3 seeds or not at all.
 
 ## Pick up here (2026-09-21)
 

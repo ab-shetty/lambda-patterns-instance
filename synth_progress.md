@@ -1313,3 +1313,16 @@ subtleonly: val 0.6566  HF14 0.6669
    paired mean difference -0.0176   se 0.0158   t(51) = -1.11   p = 0.2725
    subtleonly better on 21, worse on 21, tied (|d|<0.01) on 10   sign-test p = 1
 ```
+
+**Split screen, three seeds (7 / 31 / 99), synth-only swin_t @1024, epoch 8 @2048
+inference, deltas vs the same-seed v6d arm:**
+
+| arm | HF14 delta | mean | validation delta | mean |
+|---|---|---:|---|---:|
+| `--hardscape-plan 1.0` | +0.020 / -0.015 / -0.015 | **-0.003** | -0.021 / +0.044 / -0.036 | -0.004 |
+| `--same-fill-subtle 0.5` | +0.022 / +0.004 / -0.018 | **+0.003** | -0.020 / +0.088 / +0.024 | +0.031 |
+
+Both null on HF14. The v6d control alone spans 0.640-0.694 on HF14 across
+seeds, so synth-only single-seed deltas under ~0.05 mean nothing here. Neither
+knob is adopted; the subtle band's validation mean (+0.031) is the only
+residue, and it rests on one seed's +0.088.
