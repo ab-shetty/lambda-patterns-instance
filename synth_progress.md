@@ -198,6 +198,11 @@ plans, and this pool also changes elevations via the subtle band -- confounded.
 Not adopted under the protocol. **Next: separate `--hardscape-plan` from
 `--same-fill-subtle`** (two more arms of this screen), then a second seed.
 
+**Multi-scale inference** (`scripts/eval_multiscale.py`, restart e13,
+probabilities averaged at native size): validation preferred 2048+3072+4096
+(0.8165 vs 0.8100 for 4096 alone in the same code); HF14 read once: **0.8123**,
+below 0.8170. Not adopted; 0.8170 @4096 stays the best.
+
 ## 2026-09-23 — v7: v6 re-tuned by looking at Gemini, not by matching a metric
 
 **Untrained. No HF14 number yet.** `generate_synthetic_v7.py` wraps v6 (v6d
