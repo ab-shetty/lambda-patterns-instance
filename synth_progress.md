@@ -1482,3 +1482,15 @@ show wing roofs), but the giveaway crops are unchanged in kind -- floor plan
 fragments, large flat colour planes, clean vector hatching. The probe sees
 local rendering, not global 3D consistency; the whole roof planes FreeCAD
 exposes add more of the flat-plane crops. Not adopted.
+
+**Revit-style renderer (`--revit`, `scripts/revit_render.py`)** on the same
+FreeCAD houses: cast shadows projected from the 3D solids along a sun
+direction, heavy profile / heavier ground / thin edges / faint patterns,
+hidden-line (60%) or consistent-colour views, Revit level datums and view
+titles, no trees or neighbours. Looks like a Revit set; probe AUC **0.960**
+(runs 0.957, 0.951, 0.971; elevation 0.967) vs r8 0.909 and FreeCAD+v6
+0.954. The val crops the probe finds most typical are coarse hand-drafted
+shingle pattern, colour markup (magenta/cyan trim outlines, pink dots, purple
+walls) and a few BIM brick renders -- val 14 is not Revit-like, consistent with
+the Boise Revit sheets scoring 0.998. Looking like Revit and looking like the
+eval set are different targets.
