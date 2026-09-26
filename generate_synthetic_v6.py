@@ -154,8 +154,9 @@ GEMINI_BASE_PALETTE = [
     (150, 148, 110), (140, 142, 104), (120, 128, 96), (168, 160, 120),   # olive / sage
     (196, 176, 140), (210, 190, 160), (188, 170, 140), (222, 206, 176),  # tan / beige
     (232, 222, 200), (240, 232, 214), (245, 238, 224),                   # cream
-    (200, 150, 90), (212, 168, 110), (186, 140, 96),                     # ochre / wood
+    (110, 72, 62), (124, 84, 70), (150, 118, 112), (164, 132, 126),      # brick brown / mauve (val 4-6)
     (170, 110, 90), (160, 100, 84), (180, 128, 108),                     # brick
+    (176, 172, 206), (196, 192, 222), (116, 146, 146), (96, 128, 130),   # lavender / teal-grey (val 17, 19)
     (160, 160, 156), (180, 180, 176), (200, 200, 196), (136, 138, 140),  # warm grey
     (150, 160, 170), (170, 180, 188), (120, 132, 144),                   # slate blue-grey
     (190, 178, 160), (160, 150, 136), (128, 116, 100),                   # taupe / stone
@@ -167,6 +168,21 @@ GEMINI_ROOF_PALETTE = [
     (120, 128, 140), (140, 150, 160), (100, 110, 124),                   # slate / metal
     (120, 96, 80), (140, 110, 90),                                       # brown
 ]
+# Realism probe vs the validation 14 (AUC 0.973 on --gemini-colour): sparse
+# random stipple on white is the top giveaway (val has none), and val masonry
+# is dark brown / mauve brick with LIGHT mortar. When on (own RNG per style):
+# stipple fills draw as flat, coloured brick takes a brick base, coloured
+# masonry gets light mortar. Labels are unchanged.
+VAL_FILLS = False
+# Fill period at 3168 px: val 14 median 10 px, HF14 13.5, v6 ~21-23 (whole sheet
+# or ink-cropped alike) -- v6 hatches repeat ~2x too coarsely for the sheet, as
+# BIM drafting patterns are sized on paper, not in feet. When set, each style's
+# pattern is drawn at S * U(FILL_SCALE_RANGE) (own RNG), never finer than ~2.5
+# line widths per repeat. Geometry and labels are unchanged.
+FILL_SCALE = False
+FILL_SCALE_RANGE = (0.35, 0.6)
+VAL_BRICK_PALETTE = [(110, 72, 62), (124, 84, 70), (98, 66, 58), (150, 118, 112), (164, 132, 126),
+                     (140, 86, 72), (170, 110, 90)]
 GEMINI_TRIM_PALETTE = [(255, 255, 255)] * 6 + [(240, 238, 232), (230, 222, 206), (90, 90, 90)]
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -610,6 +626,12 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     layer = np.empty((h, w, 3), dtype=np.uint8)
     layer[:] = bgr(style.base)
     k, p, c, lw, sd = style.kind, style.params, style.line, style.lw, style.seed
+    if FILL_SCALE:
+        f = random.Random(sd * 71 + 3).uniform(*FILL_SCALE_RANGE)
+        spacing = [v for key, v in p.items() if key in ("sp", "row", "unit", "w") and v]
+        if spacing:
+            f = max(f, min(1.0, (2.5 * lw + 1.5) / (min(spacing) * S)))
+        S = S * f
     v2 = False
     if VOCAB2 and k in ("lap", "grid"):
         v2 = random.Random(sd * 59 + 3).random() < VOCAB2
@@ -646,6 +668,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
         _stones(layer, x0, y0, S, c, lw, sd, coursed=True, shade=p.get("shade"))
     elif k == "rubble":
         _stones(layer, x0, y0, S, c, lw, sd, coursed=False, shade=p.get("shade"))
+    elif k == "stipple" and VAL_FILLS:
+        pass
     elif k == "stipple":
         _stipple(layer, x0, y0, S, p["density"], c, sd, r_px=p.get("r", 1))
     elif k == "flat":
@@ -797,6 +821,14 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
     elif kind == "solid":
         base = appearance["ink"] if not appearance["colour"] else darken(appearance["ink"], 1.0)
         line = base
+    if VAL_FILLS and appearance["colour"] and k in MORTAR_KINDS and base_override is None:
+        vr = random.Random(seed * 61 + 7)
+        if k == "brick":
+            base = vr.choice(VAL_BRICK_PALETTE)
+            if params.get("shade"):
+                params["shade"] = mix(base, line, 0.35)
+        if vr.random() < 0.7:
+            line = mix(base, (238, 236, 230), vr.uniform(0.6, 0.8))
     st = Style(k, base, line, lw, params, seed, label_name)
     st.callout = rng.choice(CALLOUT.get(kind, CALLOUT.get(k, ["FINISH"])))
     return st
@@ -2470,10 +2502,12 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
-    global GEMINI_COLOUR
+    global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE
     GEMINI_COLOUR = gemini_colour
+    VAL_FILLS = val_fills
+    FILL_SCALE = fill_scale
     MOTTLE = mottle
     VOCAB2 = vocab2
     SAME_FILL_NEW_COLOUR = same_fill
@@ -2530,6 +2564,10 @@ def main():
     ap.add_argument("--gemini-colour", action="store_true",
                     help="colour as real/Gemini sheets have it: ~40%% of elevations, ~25%% of roof plans, "
                          "no floor plans; muted palettes; dark ink fill lines over colour")
+    ap.add_argument("--val-fills", action="store_true",
+                    help="stipple fills draw flat; coloured brick takes a brick base; coloured masonry light mortar")
+    ap.add_argument("--fill-scale", action="store_true",
+                    help="draw hatch patterns 0.35-0.6x their physical spacing (val fills repeat ~2x finer)")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2548,7 +2586,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

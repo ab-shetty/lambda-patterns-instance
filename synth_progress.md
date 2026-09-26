@@ -1380,3 +1380,20 @@ Boise pre-approved ADU sets (public domain per the city's page; 6 bid sets, 34
 sheets, `data/reference/boise_adu/`): Revit hairline look, but little material
 hatching and a "NOT FOR CONSTRUCTION" watermark on every sheet -- a
 conventions reference at most.
+
+**Probe loop vs val 14 (crop AUC; synth pools = 320 sheets, seed 6, ids 200000+):**
+
+| pool | AUC | what the top crops still show |
+|---|---:|---|
+| `--gemini-colour` | 0.973 | sparse stipple on white, ochre walls, dark-joint masonry |
+| + `--val-fills` (new) | 0.972 | coarse fills: big units, few widely spaced lines |
+| + `--mottle 0.7 --vocab2 0.7` | 0.964 | same |
+| + `--fill-scale` (new) | 0.969 | concrete speckle + floor-plan crops (val is mostly elevations), grey mottled masonry, irregular vertical siding |
+
+`--val-fills`: stipple fills draw flat, coloured brick takes a brick-brown/mauve
+base, coloured masonry light mortar; ochre dropped from `--gemini-colour`'s
+palette for val's brick/lavender/teal. `--fill-scale`: hatch patterns at
+0.35-0.6x physical spacing (floor ~2.5 line widths); fill period at 3168 px
+went 23 -> 14 px (val 10, HF14 13.5). Both default off, v6d byte-identical,
+labels unchanged. The AUC barely moves because each fix exposes the next cue;
+none of this is tested on HF14 yet.
