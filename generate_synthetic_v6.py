@@ -209,6 +209,12 @@ MUTED_PALETTE = False
 # vivid share -- while v6 and the muted palette sit at mid chroma (8-25, 27% of
 # crops vs 6%). Low-chroma BIM material colours; a 10% vivid tail.
 NEUTRAL_PALETTE = False
+# Label like real annotators (ported from v7's gemini_labelling): in
+# elevations they label wall materials and mostly leave roof trim, chimney and
+# foundation unlabelled; v6 labels every family it paints (3.0 families / 14.4
+# regions per image vs Gemini's 1.7 / 6.4). Unlabelled families stay drawn.
+REAL_LABELLING = False
+REAL_LABEL_KEEP = {"trim": 0.05, "chimney": 0.15, "foundation": 0.25, "roof": 0.6}
 NEUTRAL_WALL = [(242, 236, 222), (234, 226, 208), (226, 226, 222), (246, 242, 232), (216, 208, 196),
                 (202, 197, 187), (218, 222, 208), (208, 206, 220), (212, 218, 224), (236, 232, 226),
                 (196, 188, 178), (182, 176, 170)]
@@ -747,6 +753,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
         _planks(layer, x0, y0, S, p["w"], c, lw, sd, angle=p.get("angle", 0))
     elif k == "ashlar":
         _ashlar(layer, x0, y0, S, p.get("unit", 1.2), c, lw, sd)
+    elif k == "concrete" and VAL_FILLS:
+        pass
     elif k == "concrete":
         _stipple(layer, x0, y0, S, p["density"], c, sd, r_px=1)
         _stipple(layer, x0, y0, S, p["density"] * 0.15, c, sd + 1, r_px=2)
@@ -1796,7 +1804,7 @@ def _val_annotations(canvas, tq, V, elev, house, app, S, view_name):
             ext = unary_union(walls).bounds
             pts = [ext[0], ext[2]] + [v for (a, b, _) in row for v in (a, b)]
             draw_dim_string(canvas, tq, V, sorted(set(round(v, 2) for v in pts)), min(y0 for *_, y0 in row) - 0.6,
-                            app, S, above=True, size=size * r.uniform(1.3, 2.0))
+                            app, S, above=True, size=size * r.uniform(0.8, 1.2))
     if wins and r.random() < vd["p_tags"]:
         code = r.choice(["SH", "CS", "SL", "FX", "DH"])
         egress = r.random() < 0.4
@@ -1806,7 +1814,7 @@ def _val_annotations(canvas, tq, V, elev, house, app, S, view_name):
                 continue
             t = f"{code}{int(round((x1 - x0) * 10)):02d}{int(round((y1 - y0) * 10)):02d}" + (" EGRESS" if egress else "")
             p = V.px((x0 + x1) / 2 - 0.2, y1 - 0.4)
-            tq.add(p, t, size * 1.25, ink, angle=90)
+            tq.add(p, t, size * 0.8, ink, angle=90)
     roofs = [pp for (f, pp, _, _) in elev["surfaces"] if f == "roof" and pp.area > 20]
     if roofs and r.random() < vd["p_slope"]:
         rp = max(roofs, key=lambda q: q.area)
@@ -1817,11 +1825,11 @@ def _val_annotations(canvas, tq, V, elev, house, app, S, view_name):
         dy = math.tan(math.radians(ang)) * (b[0] - a[0])
         cv_line(canvas, (a[0], a[1] + dy / 2), (b[0], b[1] - dy / 2), ink, 1.2)
         cv2.circle(canvas, _pt((b[0], b[1] - dy / 2)), int(0.12 * S * SCALE), bgr(ink), -1, lineType=cv2.LINE_AA, shift=SHIFT)
-        tq.add((a[0], a[1] - 0.3 * S), f"{int(round(pitch * 12))}\" / 1'-0\"", size * r.uniform(1.0, 1.5), ink, angle=int(ang))
+        tq.add((a[0], a[1] - 0.3 * S), f"{int(round(pitch * 12))}\" / 1'-0\"", size * r.uniform(0.8, 1.2), ink, angle=int(ang))
     walls = [pp for (f, pp, _, _) in elev["surfaces"] if f == "main" and pp.area > 40]
     if walls and r.random() < vd["p_note"]:
         pt = r.choice(walls).representative_point()
-        tq.add(V.px(pt.x - 2.0, pt.y), r.choice(WALL_NOTES), size * r.uniform(1.0, 1.6), ink)
+        tq.add(V.px(pt.x - 2.0, pt.y), r.choice(WALL_NOTES), size * r.uniform(0.8, 1.2), ink)
 
 
 def draw_opening(canvas, V, o, house, app, S, rng, trim_colour=None):
@@ -2223,7 +2231,7 @@ def compose(image_id, seed, mode_weights):
         glass = dr.choices([(172, 178, 184), (140, 148, 156), (78, 86, 94), app["paper"], (225, 236, 246)],
                            weights=[30, 20, 15, 20, 15] if colour else [0, 10, 5, 75, 10])[0]
         app["vd"] = {"glass": glass,
-                     "frame": dr.choice([None, None, (60, 60, 64), (40, 40, 40)]) if colour else None,
+                     "frame": dr.choice([None, None, None, None, (60, 60, 64)]) if colour else None,
                      "panes": dr.choice([(2, 2), (2, 3), (3, 3), (2, 4), (3, 2), (1, 2)]),
                      "head": dr.random() < 0.5, "swing": dr.random() < 0.3, "tags": dr.random() < 0.35,
                      "seed": dr.randrange(1 << 30), "p_dims": dr.choice([0.0, 0.5, 0.9]),
@@ -2234,9 +2242,9 @@ def compose(image_id, seed, mode_weights):
         # val ink is black (2% of crop pixels < 80 grey vs ~0 in v6): dark ink,
         # line weights that survive resizing to inference size
         ink = dr.randint(0, 45)
-        app.update(level="normal", ink=(ink,) * 3, outline=(ink,) * 3,
-                   ink_fill=(min(170, ink + dr.randint(20, 110)),) * 3)
-        app["outline_lw"] = dr.uniform(2.0, 3.5)
+        # outlines / text dark; hatching light grey, as val's fine siding lines are
+        app.update(level="normal", ink=(ink,) * 3, outline=(ink,) * 3, ink_fill=(dr.randint(130, 205),) * 3)
+        app["outline_lw"] = dr.uniform(1.4, 2.4)
         global SHEET_FONT
         SHEET_FONT = dr.choices(VAL_FONTS, weights=[5, 3, 2])[0]
     if (MUTED_PALETTE or NEUTRAL_PALETTE) and not GEMINI_COLOUR and mode == "freeform":
@@ -2705,10 +2713,11 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING
+    REAL_LABELLING = real_labelling
     MUTED_PALETTE = muted_palette
     NEUTRAL_PALETTE = neutral_palette
     MATERIAL_MIX = material_mix
@@ -2770,6 +2779,15 @@ def _job(image_id):
         canvas, ann = compose(image_id, _CFG["seed"], _CFG["mw"])
         if TIGHT_CROP:
             canvas, ann = tight_crop(canvas, ann, random.Random(_CFG["seed"] * 1_000_003 + image_id * 97 + 13))
+        if REAL_LABELLING and ann["mode"] == "elevation":
+            lr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 73 + 31)
+            keep = {f: lr.random() < p for f, p in REAL_LABEL_KEEP.items()}
+            anns = [a for a in ann["annotations"] if keep.get(a["family"], True)]
+            ids = {}
+            for a in anns:
+                ids.setdefault(a["family"], len(ids) + 1)
+            ann = dict(ann, annotations=[dict(a, id=i + 1, category_id=ids[a["family"]],
+                                              category_name=f"pattern{ids[a['family']]}") for i, a in enumerate(anns)])
         if RES_DEGRADE:
             rr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 89 + 29)
             if rr.random() < RES_DEGRADE:
@@ -2835,6 +2853,8 @@ def main():
                     help="muted palettes + dark-ink fill lines at v6's colour share; no colour on floor plans")
     ap.add_argument("--neutral-palette", action="store_true",
                     help="low-chroma BIM material colours (tinted whites, brown-grey roofs), 10%% vivid; no colour on floor plans")
+    ap.add_argument("--real-labelling", action="store_true",
+                    help="elevations: label walls, mostly not trim/chimney/foundation (real annotator practice)")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2853,7 +2873,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
