@@ -185,6 +185,24 @@ FILL_SCALE = False
 # cropped to its ink box + a 1.5-5% pad (own RNG); no resampling, so pixel
 # scale is kept. Labels are translated and clipped.
 TIGHT_CROP = False
+# Elevation details, from val-vs-synth windows at 3168 px: val glass is grey or
+# dark (or white with dashed operation lines), with multi-pane grids, head trim
+# and dark frames; synth glass is always pale blue in white frames. Val text is
+# ~1.6x larger relative to the drawing and building outlines are heavier. When
+# on: a per-sheet detail style from its own RNG (glass, frame, panes, head
+# trim, operation dashes, door tags), heavier outline weight, larger text.
+VAL_DETAILS = False
+# Some eval excerpts are low-resolution rasters (val 20-22 are visibly soft at
+# inference size). With this probability (own RNG) a sheet is downsampled to
+# 0.25-0.6x and back, so its lines are soft; size and labels are unchanged.
+RES_DEGRADE = 0.0
+# Material mix typical of US residential elevations (siding and stucco walls,
+# asphalt roofs), in place of v6's near-uniform draw where brick, stone, block
+# and shingle take ~half the walls. Weights are a prior, not fitted to val.
+MATERIAL_MIX = False
+MIX_WALL_KINDS = ["lap"] * 10 + ["stucco"] * 6 + ["bb"] * 4 + ["vertical"] * 2 + ["shingle"] * 2 + \
+    ["brick"] * 2 + ["stone", "block", "seam"]
+MIX_ROOF_KINDS = ["asphalt"] * 10 + ["seam"] * 2 + ["shingle"] * 2 + ["tile_roof", "flat_roof"]
 FILL_SCALE_RANGE = (0.35, 0.6)
 VAL_BRICK_PALETTE = [(110, 72, 62), (124, 84, 70), (98, 66, 58), (150, 118, 112), (164, 132, 126),
                      (140, 86, 72), (170, 110, 90)]
@@ -197,6 +215,8 @@ _FONTS = {}
 
 
 def font(size, bold=False):
+    if VAL_DETAILS:
+        size = int(size * 1.6)
     key = (size, bold)
     if key not in _FONTS:
         try:
@@ -1654,6 +1674,8 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
             x0, y0, x1, y1 = o["poly"].bounds
             casing = rect(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1 + (0.3 if o["type"] == "window" else 0)).difference(o["poly"])
             trim_polys.append(casing)
+    if app.get("vd"):
+        _val_annotations(canvas, tq, V, elev, house, app, S, view_name)
     if "trim" in label_fams:
         for p in polys_of(unary_union(trim_polys)):
             if p.area > 0.3:
@@ -1703,12 +1725,123 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
     return out
 
 
+def _dashed(canvas, a, b, colour, w, dash_px=10.0):
+    a, b = np.array(a, float), np.array(b, float)
+    n = max(1, int(np.linalg.norm(b - a) / dash_px))
+    for i in range(0, n, 2):
+        cv_line(canvas, a + (b - a) * i / n, a + (b - a) * min(n, i + 1) / n, colour, w)
+
+
+WALL_NOTES = ["BLANK WALL", "(E) SIDING TO REMAIN", "NEW WINDOW", "EGRESS", "(N) SIDING TO MATCH (E)",
+              "PAINT TO MATCH", "LINE OF (E) GRADE", "NO OPENINGS", "(E) TO REMAIN", "SEE DETAIL 3/A5.1"]
+
+
+def _val_annotations(canvas, tq, V, elev, house, app, S, view_name):
+    """Eval-style annotation ON the building: dimension chains through the
+    windows, sideways window tags, roof slope markers, short wall notes."""
+    vd = app["vd"]
+    r = random.Random(vd["seed"] * 7 + sum(map(ord, view_name)))
+    ink, size = app["ink"], app["text_px"]
+    wins = [o for o in elev["openings"] if o["type"] == "window"]
+    if wins and r.random() < vd["p_dims"]:
+        rows = {}
+        for o in wins:
+            x0, y0, x1, y1 = o["poly"].bounds
+            rows.setdefault(round(y0), []).append((x0, x1, y0))
+        for _, row in list(rows.items())[:2]:
+            walls = [pp for (f, pp, _, _) in elev["surfaces"] if f in ("main", "accent")]
+            if not walls:
+                break
+            ext = unary_union(walls).bounds
+            pts = [ext[0], ext[2]] + [v for (a, b, _) in row for v in (a, b)]
+            draw_dim_string(canvas, tq, V, sorted(set(round(v, 2) for v in pts)), min(y0 for *_, y0 in row) - 0.6,
+                            app, S, above=True, size=size * r.uniform(1.3, 2.0))
+    if wins and r.random() < vd["p_tags"]:
+        code = r.choice(["SH", "CS", "SL", "FX", "DH"])
+        egress = r.random() < 0.4
+        for o in wins:
+            x0, y0, x1, y1 = o["poly"].bounds
+            if (y1 - y0) < 2.5:
+                continue
+            t = f"{code}{int(round((x1 - x0) * 10)):02d}{int(round((y1 - y0) * 10)):02d}" + (" EGRESS" if egress else "")
+            p = V.px((x0 + x1) / 2 - 0.2, y1 - 0.4)
+            tq.add(p, t, size * 1.25, ink, angle=90)
+    roofs = [pp for (f, pp, _, _) in elev["surfaces"] if f == "roof" and pp.area > 20]
+    if roofs and r.random() < vd["p_slope"]:
+        rp = max(roofs, key=lambda q: q.area)
+        pt = rp.representative_point()
+        pitch = house["blocks"][0].pitch
+        ang = math.degrees(math.atan(pitch)) * r.choice([1, -1])
+        a = V.px(pt.x - 1.5, pt.y); b = V.px(pt.x + 1.5, pt.y)
+        dy = math.tan(math.radians(ang)) * (b[0] - a[0])
+        cv_line(canvas, (a[0], a[1] + dy / 2), (b[0], b[1] - dy / 2), ink, 1.2)
+        cv2.circle(canvas, _pt((b[0], b[1] - dy / 2)), int(0.12 * S * SCALE), bgr(ink), -1, lineType=cv2.LINE_AA, shift=SHIFT)
+        tq.add((a[0], a[1] - 0.3 * S), f"{int(round(pitch * 12))}\" / 1'-0\"", size * r.uniform(1.0, 1.5), ink, angle=int(ang))
+    walls = [pp for (f, pp, _, _) in elev["surfaces"] if f == "main" and pp.area > 40]
+    if walls and r.random() < vd["p_note"]:
+        pt = r.choice(walls).representative_point()
+        tq.add(V.px(pt.x - 2.0, pt.y), r.choice(WALL_NOTES), size * r.uniform(1.0, 1.6), ink)
+
+
 def draw_opening(canvas, V, o, house, app, S, rng, trim_colour=None):
     ink, lw = app["ink"], app["outline_lw"]
     trim_c = trim_colour if trim_colour is not None else app["trim"]
     p = o["poly"]
     x0, y0, x1, y1 = p.bounds
     glass = (225, 236, 246) if app["colour"] else app["paper"]
+    vd = app.get("vd")
+    if vd and o["type"] == "window":
+        glass = vd["glass"]
+        if vd["frame"] is not None:
+            trim_c = vd["frame"]
+        trim = V.geom(rect(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1 + 0.3))
+        cv_fill(canvas, trim, trim_c)
+        cv_outline(canvas, trim, ink, lw)
+        if vd["head"]:
+            head = V.geom(rect(x0 - 0.55, y0 - 0.75, x1 + 0.55, y0 - 0.3))
+            cv_fill(canvas, head, trim_c)
+            cv_outline(canvas, head, ink, lw)
+        g = V.geom(p)
+        cv_fill(canvas, g, glass)
+        cv_outline(canvas, g, ink, lw)
+        cols, rows = vd["panes"]
+        cols = max(1, min(cols, int((x1 - x0) / 0.9)))
+        for c in range(1, cols):
+            x = x0 + (x1 - x0) * c / cols
+            cv_line(canvas, V.px(x, y0), V.px(x, y1), ink, lw)
+        for r in range(1, rows):
+            y = y0 + (y1 - y0) * r / rows
+            cv_line(canvas, V.px(x0, y), V.px(x1, y), ink, max(1.0, lw * (1.6 if r == rows // 2 and rows > 2 else 1.0)))
+        if vd["swing"]:
+            _dashed(canvas, V.px(x0, y0), V.px(x1, (y0 + y1) / 2), ink, max(1.0, lw * 0.8), 0.25 * S)
+            _dashed(canvas, V.px(x0, y1), V.px(x1, (y0 + y1) / 2), ink, max(1.0, lw * 0.8), 0.25 * S)
+        sill = V.geom(rect(x0 - 0.45, y1, x1 + 0.45, y1 + 0.25))
+        cv_fill(canvas, sill, trim_c)
+        cv_outline(canvas, sill, ink, lw)
+        return
+    if vd and o["type"] == "door":
+        trim = V.geom(rect(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1))
+        cv_fill(canvas, trim, vd["frame"] if vd["frame"] is not None else trim_c)
+        cv_outline(canvas, trim, ink, lw)
+        g = V.geom(p)
+        cv_fill(canvas, g, vd["door"])
+        cv_outline(canvas, g, ink, lw)
+        n = 2 if (x1 - x0) > 4 else 1
+        for i in range(n):
+            px0, px1 = x0 + (x1 - x0) * i / n, x0 + (x1 - x0) * (i + 1) / n
+            for (a, b, c, d) in [(px0 + 0.4, y0 + 0.5, (px0 + px1) / 2 - 0.15, y0 + 2.6),
+                                 ((px0 + px1) / 2 + 0.15, y0 + 0.5, px1 - 0.4, y0 + 2.6),
+                                 (px0 + 0.4, y0 + 3.1, (px0 + px1) / 2 - 0.15, y1 - 0.5),
+                                 ((px0 + px1) / 2 + 0.15, y0 + 3.1, px1 - 0.4, y1 - 0.5)]:
+                cv_outline(canvas, V.geom(rect(a, b, c, d)), ink, lw)
+        if vd["swing"]:
+            _dashed(canvas, V.px(x0, y1), V.px(x1, (y0 + y1) / 2), ink, max(1.0, lw * 0.8), 0.25 * S)
+            _dashed(canvas, V.px(x0, y0), V.px(x1, (y0 + y1) / 2), ink, max(1.0, lw * 0.8), 0.25 * S)
+        if vd["tags"]:
+            c = V.px((x0 + x1) / 2, y0 + 1.8)
+            r = int(0.55 * S * SCALE)
+            cv2.circle(canvas, _pt(c), r, bgr(ink), max(1, int(lw)), lineType=cv2.LINE_AA, shift=SHIFT)
+        return
     if o["type"] == "window":
         trim = V.geom(rect(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1 + 0.3))
         cv_fill(canvas, trim, trim_c)
@@ -2043,6 +2176,26 @@ def compose(image_id, seed, mode_weights):
     rng = random.Random(seed * 1_000_003 + image_id)
     mode = rng.choices(list(mode_weights.keys()), weights=list(mode_weights.values()))[0]
     app = make_appearance(rng)
+    if VAL_DETAILS:
+        dr = random.Random(seed * 1_000_003 + image_id * 131 + 17)
+        colour = app["colour"]
+        glass = dr.choices([(172, 178, 184), (140, 148, 156), (78, 86, 94), app["paper"], (225, 236, 246)],
+                           weights=[30, 20, 15, 20, 15] if colour else [0, 10, 5, 75, 10])[0]
+        app["vd"] = {"glass": glass,
+                     "frame": dr.choice([None, None, (60, 60, 64), (40, 40, 40)]) if colour else None,
+                     "panes": dr.choice([(2, 2), (2, 3), (3, 3), (2, 4), (3, 2), (1, 2)]),
+                     "head": dr.random() < 0.5, "swing": dr.random() < 0.3, "tags": dr.random() < 0.35,
+                     "seed": dr.randrange(1 << 30), "p_dims": dr.choice([0.0, 0.5, 0.9]),
+                     "p_tags": dr.choice([0.0, 0.4, 0.8]), "p_slope": dr.choice([0.0, 0.5, 0.9]),
+                     "p_note": dr.choice([0.0, 0.3, 0.6]),
+                     "door": dr.choice([(200, 205, 210), (230, 230, 228), (90, 70, 60), (60, 60, 64)]) if colour
+                     else mix(app["paper"], app["ink"], dr.choice([0.0, 0.08]))}
+        # val ink is black (2% of crop pixels < 80 grey vs ~0 in v6): dark ink,
+        # line weights that survive resizing to inference size
+        ink = dr.randint(0, 45)
+        app.update(level="normal", ink=(ink,) * 3, outline=(ink,) * 3,
+                   ink_fill=(min(170, ink + dr.randint(20, 110)),) * 3)
+        app["outline_lw"] = dr.uniform(2.0, 3.5)
     if GEMINI_COLOUR:
         app["colour"] = random.Random(seed * 1_000_003 + image_id * 67 + 5).random() < GEMINI_COLOUR_PROB[mode]
     house = make_house(rng)
@@ -2507,9 +2660,15 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
-    global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP
+    global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
+    global WALL_KINDS, ROOF_KINDS
+    MATERIAL_MIX = material_mix
+    if material_mix:
+        WALL_KINDS, ROOF_KINDS = MIX_WALL_KINDS, MIX_ROOF_KINDS
+    VAL_DETAILS = val_details
+    RES_DEGRADE = res_degrade
     GEMINI_COLOUR = gemini_colour
     VAL_FILLS = val_fills
     FILL_SCALE = fill_scale
@@ -2564,6 +2723,13 @@ def _job(image_id):
         canvas, ann = compose(image_id, _CFG["seed"], _CFG["mw"])
         if TIGHT_CROP:
             canvas, ann = tight_crop(canvas, ann, random.Random(_CFG["seed"] * 1_000_003 + image_id * 97 + 13))
+        if RES_DEGRADE:
+            rr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 89 + 29)
+            if rr.random() < RES_DEGRADE:
+                f = rr.uniform(0.25, 0.6)
+                h, w = canvas.shape[:2]
+                small = cv2.resize(canvas, (max(8, int(w * f)), max(8, int(h * f))), interpolation=cv2.INTER_AREA)
+                canvas = cv2.resize(small, (w, h), interpolation=rr.choice([cv2.INTER_LINEAR, cv2.INTER_CUBIC]))
     except Exception as exc:          # a bad draw must not kill the batch
         import traceback
         traceback.print_exc()
@@ -2612,6 +2778,12 @@ def main():
                     help="draw hatch patterns 0.35-0.6x their physical spacing (val fills repeat ~2x finer)")
     ap.add_argument("--tight-crop", action="store_true",
                     help="crop each sheet to its ink box + 1.5-5%% pad, labels translated (val excerpts are tight)")
+    ap.add_argument("--val-details", action="store_true",
+                    help="grey/dark glass, frames, pane grids, head trim, operation dashes, door tags, heavier outlines, 1.6x text")
+    ap.add_argument("--res-degrade", type=float, default=0.0,
+                    help="probability a sheet is downsampled 0.25-0.6x and back (soft low-res rasters)")
+    ap.add_argument("--material-mix", action="store_true",
+                    help="residential material prior: mostly lap siding / stucco walls, asphalt roofs")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2630,7 +2802,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

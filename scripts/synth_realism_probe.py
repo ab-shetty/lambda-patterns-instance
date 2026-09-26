@@ -104,6 +104,9 @@ def load_eval(indices, parquet=EVAL_PARQUET):
         yield f"ref:eval{i:02d}", img, [m for m in masks if m.any()]
 
 
+SYNTH_META = {}   # name -> (mode, appearance, [family per mask])
+
+
 def load_synth(d, limit):
     """v6-format sheets, cropped to ink, resized to LONG, JPEG q75 round-tripped."""
     for f in sorted(glob.glob(os.path.join(d, "annotations", "*.json")))[:limit]:
@@ -122,12 +125,14 @@ def load_synth(d, limit):
         img = img[y0:y1, x0:x1]
         s = LONG / max(img.shape[:2])
         img = _jpeg(cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC))
-        masks = []
+        masks, fams = [], []
         for a in ann["annotations"]:
             m = _poly_mask(a["segmentation"], img.shape[:2], s, off=(x0, y0))
             if m.any():
-                masks.append(m)
-        yield f"syn:{os.path.basename(f)[:-5]}", img, masks
+                masks.append(m); fams.append(a.get("family", "?"))
+        name = f"syn:{os.path.basename(f)[:-5]}"
+        SYNTH_META[name] = (ann.get("mode", "?"), ann.get("appearance", "?"), fams)
+        yield name, img, masks
 
 
 def sample_crops(img, masks, k, rng, side_frac=(0.08, 0.24)):
@@ -139,7 +144,8 @@ def sample_crops(img, masks, k, rng, side_frac=(0.08, 0.24)):
     for _ in range(k * 3):
         if len(out) >= k or not masks:
             break
-        m = masks[rng.randrange(len(masks))]
+        mi = rng.randrange(len(masks))
+        m = masks[mi]
         ys, xs = np.nonzero(m[::4, ::4])
         if not len(xs):
             continue
@@ -151,7 +157,7 @@ def sample_crops(img, masks, k, rng, side_frac=(0.08, 0.24)):
         if m[y0:y0 + sd, x0:x0 + sd].mean() < 0.35:     # mostly the region, not its surround
             continue
         c = cv2.resize(img[y0:y0 + sd, x0:x0 + sd], (OUT_PX, OUT_PX), interpolation=cv2.INTER_AREA)
-        out.append((c, (x0, y0, sd)))
+        out.append((c, (x0, y0, sd), mi))
     return out
 
 
@@ -191,63 +197,85 @@ def main():
                     help="Roboflow COCO export dir(s) instead of the validation 14")
     ap.add_argument("--long-side", type=int, default=LONG, help="every image is resized to this")
     ap.add_argument("--synth", required=True, help="v6-format dir (images/, annotations/)")
-    ap.add_argument("--synth-limit", type=int, default=300)
-    ap.add_argument("--crops-ref", type=int, default=0, help="crops per reference image (0: 60 for val 14, else 24)")
-    ap.add_argument("--crops-synth", type=int, default=8, help="crops per synth sheet")
+    ap.add_argument("--synth-limit", type=int, default=320)
+    ap.add_argument("--seeds", type=int, default=3, help="AUC is the mean over this many subsample/fold seeds")
     ap.add_argument("--top", type=int, default=48)
-    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     LONG = args.long_side
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
-    from sklearn.model_selection import GroupKFold
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import make_pipeline
-
     os.makedirs(args.out, exist_ok=True)
-    rng = random.Random(args.seed)
-    crops, y, groups, where = [], [], [], []
-    ref = load_coco(args.reference) if args.reference else load_eval(VAL14)
-    k_ref = args.crops_ref or (24 if args.reference else 60)
-    for lab, src, k in ((0, ref, k_ref),
-                        (1, load_synth(args.synth, args.synth_limit), args.crops_synth)):
-        for name, img, masks in src:
-            for c, box in sample_crops(img, masks, k, rng):
-                crops.append(c); y.append(lab); groups.append(name); where.append(box)
-    y = np.array(y)
-    print(f"crops: reference {int((y == 0).sum())} from {len({g for g, t in zip(groups, y) if t == 0})} images, "
-          f"synth {int(y.sum())} from {len({g for g, t in zip(groups, y) if t == 1})} sheets", flush=True)
-    X = embed(crops)
-    oof = np.zeros(len(y))
-    for tr, te in GroupKFold(5).split(X, y, groups):
-        clf = make_pipeline(StandardScaler(), LogisticRegression(C=0.05, max_iter=3000, class_weight="balanced"))
-        clf.fit(X[tr], y[tr])
-        oof[te] = clf.predict_proba(X[te])[:, 1]
-    auc = roc_auc_score(y, oof)
-    acc = float(((oof > 0.5) == y).mean())
-    # per-image: mean crop score, AUC over images
-    imgs = sorted(set(groups))
-    g_score = {g: float(np.mean(oof[[i for i, gg in enumerate(groups) if gg == g]])) for g in imgs}
-    img_auc = roc_auc_score([g.startswith("syn") for g in imgs], [g_score[g] for g in imgs])
-    print(f"held-out crop AUC {auc:.3f}  acc {acc:.3f}  |  image AUC {img_auc:.3f}")
 
-    syn = np.nonzero(y == 1)[0]
-    gem = np.nonzero(y == 0)[0]
-    lab = lambda i: f"{groups[i].split(':')[1][-14:]} p={oof[i]:.2f}"
-    top_syn = syn[np.argsort(-oof[syn])][:args.top]
-    passing = syn[np.argsort(oof[syn])][:args.top]
-    gem_synthlike = gem[np.argsort(-oof[gem])][:args.top // 2]
-    gem_typical = gem[np.argsort(oof[gem])][:args.top // 2]
-    contact([crops[i] for i in top_syn], [lab(i) for i in top_syn], f"{args.out}/synth_most_obvious.jpg")
-    contact([crops[i] for i in passing], [lab(i) for i in passing], f"{args.out}/synth_most_reference_like.jpg")
-    contact([crops[i] for i in gem_typical], [lab(i) for i in gem_typical], f"{args.out}/reference_most_typical.jpg")
-    contact([crops[i] for i in gem_synthlike], [lab(i) for i in gem_synthlike], f"{args.out}/reference_most_synth_like.jpg")
-    json.dump({"synth": args.synth, "reference": args.reference or "val14", "long_side": LONG, "crop_auc": auc, "crop_acc": acc, "image_auc": img_auc,
-               "n_reference_crops": int(len(gem)), "n_synth_crops": int(len(syn)),
-               "synth_frac_p_below_0.5": float((oof[syn] < 0.5).mean()),
-               "per_image": g_score,
-               "crops": [{"src": groups[i], "box": where[i], "p_synth": float(oof[i])} for i in range(len(y))]},
+    # Fixed protocol (do not tune to lower the AUC): embed a pool of crops once --
+    # 150 per reference image (cached), 12 per synth sheet -- then for each seed
+    # subsample 60 per reference image and 8 per sheet, assign whole images to
+    # 5 random folds, and score held-out crops. With val 14 fixed, one run's sd
+    # is ~0.01 and a between-pool difference needs >~0.02 (mean of 3 seeds).
+    key = "val14" if not args.reference else "_".join(os.path.basename(r.rstrip("/")) for r in args.reference)
+    cache = f"data/probes/_refcache_{key}_{LONG}.npz"
+    if os.path.exists(cache):
+        z = np.load(cache, allow_pickle=True)
+        rX, rg, rcrops = z["X"], z["g"], list(z["crops"])
+    else:
+        rng = random.Random(0); rcrops, rg = [], []
+        for name, img, masks in (load_coco(args.reference) if args.reference else load_eval(VAL14)):
+            for c, _, _ in sample_crops(img, masks, 150, rng):
+                rcrops.append(c); rg.append(name)
+        rX, rg = embed(rcrops), np.array(rg)
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        np.savez_compressed(cache, X=rX, g=rg, crops=np.stack(rcrops))
+    rng = random.Random(0); scrops, sg, smeta = [], [], []
+    for name, img, masks in load_synth(args.synth, args.synth_limit):
+        mode, appearance, fams = SYNTH_META[name]
+        for c, _, mi in sample_crops(img, masks, 12, rng):
+            scrops.append(c); sg.append(name); smeta.append((mode, appearance, fams[mi]))
+    print(f"crop pools: reference {len(rg)} from {len(set(rg))} images, synth {len(sg)} from {len(set(sg))} sheets", flush=True)
+    sX, sg = embed(scrops), np.array(sg)
+    X = np.concatenate([rX, sX]); g = np.concatenate([rg, sg]); y = np.r_[np.zeros(len(rg)), np.ones(len(sg))]
+    meta = [("ref", "ref", "ref")] * len(rg) + smeta
+    crops_all = rcrops + scrops
+
+    aucs, by_mode, by_fam, first = [], {}, {}, None
+    for seed in range(args.seeds):
+        r = np.random.default_rng(seed)
+        idx = np.concatenate([r.choice(np.nonzero(g == gg)[0], min(n, int((g == gg).sum())), replace=False)
+                              for gg, n in [(gg, 60) for gg in np.unique(rg)] + [(gg, 8) for gg in np.unique(sg)]])
+        ug = np.unique(g[idx]); fold = dict(zip(ug, r.integers(0, 5, len(ug)))); f = np.array([fold[x] for x in g[idx]])
+        oof = np.zeros(len(idx))
+        for k in range(5):
+            tr, te = f != k, f == k
+            clf = make_pipeline(StandardScaler(), LogisticRegression(C=0.05, max_iter=3000, class_weight="balanced"))
+            clf.fit(X[idx][tr], y[idx][tr]); oof[te] = clf.predict_proba(X[idx][te])[:, 1]
+        yy = y[idx]; aucs.append(roc_auc_score(yy, oof))
+        for key_i, store in ((0, by_mode), (2, by_fam)):
+            vals = np.array([meta[i][key_i] for i in idx])
+            for v in set(vals[yy == 1]):
+                sel = (yy == 0) | (vals == v)
+                if (vals == v).sum() >= 20:
+                    store.setdefault(v, []).append((roc_auc_score(yy[sel], oof[sel]), int((vals == v).sum())))
+        if first is None:
+            first = (idx, oof)
+    auc = float(np.mean(aucs))
+    print(f"crop AUC mean of {args.seeds} seeds: {auc:.3f}  (runs {', '.join(f'{a:.3f}' for a in aucs)})")
+    for name, store in (("sheet type", by_mode), ("family", by_fam)):
+        print(f"  by {name}: " + ", ".join(f"{k} {np.mean([a for a, _ in v]):.3f} (n~{v[0][1]})"
+                                         for k, v in sorted(store.items(), key=lambda kv: -np.mean([a for a, _ in kv[1]]))))
+
+    idx, oof = first
+    yy = y[idx]; syn = np.nonzero(yy == 1)[0]; ref = np.nonzero(yy == 0)[0]
+    lab = lambda j: f"{g[idx[j]].split(':')[-1][-12:]} {meta[idx[j]][2]} p={oof[j]:.2f}"
+    for fname, sel in (("synth_most_obvious", syn[np.argsort(-oof[syn])][:args.top]),
+                       ("synth_most_reference_like", syn[np.argsort(oof[syn])][:args.top]),
+                       ("reference_most_typical", ref[np.argsort(oof[ref])][:args.top // 2]),
+                       ("reference_most_synth_like", ref[np.argsort(-oof[ref])][:args.top // 2])):
+        contact([crops_all[idx[j]] for j in sel], [lab(j) for j in sel], f"{args.out}/{fname}.jpg")
+    json.dump({"synth": args.synth, "reference": args.reference or "val14", "long_side": LONG,
+               "crop_auc_mean": auc, "crop_auc_runs": aucs,
+               "by_sheet_type": {k: float(np.mean([a for a, _ in v])) for k, v in by_mode.items()},
+               "by_family": {k: float(np.mean([a for a, _ in v])) for k, v in by_fam.items()}},
               open(f"{args.out}/summary.json", "w"), indent=1)
     print(f"wrote {args.out}/")
 
