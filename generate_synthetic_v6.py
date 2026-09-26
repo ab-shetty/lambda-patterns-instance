@@ -141,6 +141,33 @@ MORTAR_KINDS = ("brick", "block", "stone", "ashlar")
 # With this probability (from the style's own seed) a lap fill gets 3D shadow
 # bands and a grid fill becomes basketweave.
 VOCAB2 = 0.0
+# Synth-vs-Gemini probe (scripts/synth_vs_gemini_probe.py, AUC 0.999): the most
+# obviously synthetic crops were flat saturated colour fields -- purple floor
+# plans, teal siding, pink stucco -- with faint same-hue fill lines. Real eval
+# colour sheets are 11/28 (3 of them only markup), median saturation 55; v6d is
+# 53% colour at saturation 90. When on: colour on ~40% of elevations, ~25% of
+# roof plans and no floor plans (decided on its own RNG), muted palettes, and
+# fill lines in dark ink over the colour.
+GEMINI_COLOUR = False
+GEMINI_COLOUR_PROB = {"elevation": 0.40, "roof_plan": 0.25, "freeform": 0.0}
+GEMINI_BASE_PALETTE = [
+    (150, 148, 110), (140, 142, 104), (120, 128, 96), (168, 160, 120),   # olive / sage
+    (196, 176, 140), (210, 190, 160), (188, 170, 140), (222, 206, 176),  # tan / beige
+    (232, 222, 200), (240, 232, 214), (245, 238, 224),                   # cream
+    (200, 150, 90), (212, 168, 110), (186, 140, 96),                     # ochre / wood
+    (170, 110, 90), (160, 100, 84), (180, 128, 108),                     # brick
+    (160, 160, 156), (180, 180, 176), (200, 200, 196), (136, 138, 140),  # warm grey
+    (150, 160, 170), (170, 180, 188), (120, 132, 144),                   # slate blue-grey
+    (190, 178, 160), (160, 150, 136), (128, 116, 100),                   # taupe / stone
+    (214, 214, 206), (226, 226, 220),
+]
+GEMINI_ROOF_PALETTE = [
+    (150, 80, 70), (160, 90, 80), (140, 70, 60), (170, 100, 88),         # brick-red
+    (80, 80, 84), (96, 96, 100), (110, 110, 112), (70, 72, 76),          # charcoal
+    (120, 128, 140), (140, 150, 160), (100, 110, 124),                   # slate / metal
+    (120, 96, 80), (140, 110, 90),                                       # brown
+]
+GEMINI_TRIM_PALETTE = [(255, 255, 255)] * 6 + [(240, 238, 232), (230, 222, 206), (90, 90, 90)]
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -701,13 +728,22 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
         if base_override is not None:
             base = base_override
         else:
-            base = rng.choice(ROOF_PALETTE if roof else BASE_PALETTE)
+            base = rng.choice(ROOF_PALETTE if roof else BASE_PALETTE) if not GEMINI_COLOUR else \
+                rng.choice(GEMINI_ROOF_PALETTE if roof else GEMINI_BASE_PALETTE)
         lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
-        if lum < 110:
+        if GEMINI_COLOUR:
+            # dark ink linework over the colour, as Gemini and BIM exports draw it
+            if lum < 95:
+                line = mix(base, (255, 255, 255), rng.uniform(0.2, 0.35))
+            elif rng.random() < 0.4:
+                line = appearance["ink"]
+            else:
+                line = mix(base, appearance["ink"], rng.uniform(0.55, 0.8))
+        elif lum < 110:
             line = mix(base, (255, 255, 255), rng.uniform(0.25, 0.5))
         else:
             line = darken(base, rng.uniform(0.55, 0.8))
-        if rng.random() < 0.15:
+        if not GEMINI_COLOUR and rng.random() < 0.15:
             line = appearance["ink"]
     else:
         base = appearance["paper"]
@@ -1495,7 +1531,7 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
         fw, fhh = rng.uniform(4, 10), rng.uniform(2.5, 5)
         fpoly = rect(fx0, 0, fx0 + fw, -fhh)
         fst = Style(rng.choice(["vertical", "hatch", "grid", "block"]), app["paper"] if not app["colour"] else
-                    rng.choice(BASE_PALETTE), app["ink_fill"] if not app["colour"] else app["ink"],
+                    rng.choice(GEMINI_BASE_PALETTE if GEMINI_COLOUR else BASE_PALETTE), app["ink_fill"] if not app["colour"] else app["ink"],
                     app["outline_lw"] * 0.6, {"sp": rng.choice([0.33, 0.5, 1.0]), "angle": 45}, rng.randrange(1 << 20), "fence")
         draw_fill(canvas, V.geom(fpoly), fst, S, W, H)
         cv_outline(canvas, V.geom(fpoly), ink, lw)
@@ -1970,6 +2006,8 @@ def compose(image_id, seed, mode_weights):
     rng = random.Random(seed * 1_000_003 + image_id)
     mode = rng.choices(list(mode_weights.keys()), weights=list(mode_weights.values()))[0]
     app = make_appearance(rng)
+    if GEMINI_COLOUR:
+        app["colour"] = random.Random(seed * 1_000_003 + image_id * 67 + 5).random() < GEMINI_COLOUR_PROB[mode]
     house = make_house(rng)
     fam_seed = rng.randrange(1 << 30)
 
@@ -1990,7 +2028,7 @@ def compose(image_id, seed, mode_weights):
         styles["accent2"] = make_style(rng, rng.choice([k for k in WALL_KINDS if k not in used]), app,
                                        fam_seed + 12, S_guess, "accent2")
     if house.get("label_trim"):
-        tc = rng.choice(TRIM_PALETTE) if app["colour"] else app["trim"]
+        tc = rng.choice(GEMINI_TRIM_PALETTE if GEMINI_COLOUR else TRIM_PALETTE) if app["colour"] else app["trim"]
         styles["trim"] = Style("flat", tc, tc, 1.0, {}, fam_seed + 13, "trim")
         styles["trim"].callout = rng.choice(["TRIM", "PAINTED TRIM", "1x4 TRIM", "TRIM BOARD"])
     roof_kind = rng.choice(ROOF_KINDS)
@@ -2432,8 +2470,10 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
+    global GEMINI_COLOUR
+    GEMINI_COLOUR = gemini_colour
     MOTTLE = mottle
     VOCAB2 = vocab2
     SAME_FILL_NEW_COLOUR = same_fill
@@ -2487,6 +2527,9 @@ def main():
                     help="probability a coloured masonry/roofing fill is textured per unit (+ light mortar)")
     ap.add_argument("--vocab2", type=float, default=0.0,
                     help="probability a lap fill gets 3D shadow bands / a grid fill becomes basketweave")
+    ap.add_argument("--gemini-colour", action="store_true",
+                    help="colour as real/Gemini sheets have it: ~40%% of elevations, ~25%% of roof plans, "
+                         "no floor plans; muted palettes; dark ink fill lines over colour")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2505,7 +2548,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

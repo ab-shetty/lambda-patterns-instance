@@ -1332,3 +1332,19 @@ siding and basketweave for grid fills, from the fill-vocabulary audit. Pool
 recipe: `generate_synthetic_v6.py --n 2000 --seed 6 --start 0 --vocab2 0.7`,
 first 1,600. **Untested** -- `run_vocab2_screen.sh` (three seeds against the
 existing v6d arms) was stopped at launch when the session ended.
+
+## 2026-09-26 — Synth-vs-Gemini probe; `--gemini-colour`
+
+`scripts/synth_vs_gemini_probe.py`: frozen DINOv2 + logistic regression, crops
+inside labelled regions, framing/scale/JPEG q75 equalised, grouped 5-fold.
+v6d vs Gemini r2-r4: crop AUC **0.999**. Its most obvious synth crops were flat
+saturated colour (purple plans, teal siding). Real eval: 11/28 colour sheets
+(3 only markup), median sat 55; Gemini 15%, 54; v6d 53%, 90.
+
+`--gemini-colour` (default off, v6d byte-identical): colour on 40% of
+elevations / 25% of roof plans / no floor plans (own RNG), muted palettes,
+dark ink lines over colour. Pool: 24% colour sheets. Probe AUC **0.998** -- the
+saturated fields are gone from the top crops; what now gives synth away is
+flat, near-textureless fills (charcoal roofs with faint lines, plain brown
+planes), sparse random stipple on white, and solid black poché. Untested on
+HF14.
