@@ -1422,3 +1422,38 @@ val images are in the draw. The single-run drops recorded above (0.973 ->
 0.964/0.969) are noise. With 14 reference images the AUC resolves only
 changes of ~0.1; the crop sheets, not the AUC, carry the signal until the
 reference set is larger.
+
+## 2026-09-26 (cont.) — Goal "probe AUC < 0.7 vs val 14": not reachable honestly
+
+Probe protocol (fixed, `scripts/synth_realism_probe.py`): 150 crops per val
+image cached, 12 per synth sheet, 3 seeds each subsampling 60 / 8 and random
+grouped folds; AUC is the mean. v6d with three different id ranges: 0.932,
+0.956, 0.955 (0.948 +- 0.013) -- the between-sample noise single ablations
+never exceeded.
+
+| pool (all vs val 14) | AUC |
+|---|---:|
+| v6d (3 samples) | 0.948 |
+| r2 `--val-details` (dark ink) `--material-mix` | 0.919 |
+| r4 r2 + `--val-fills --mode-weights 86,7,7 --res-degrade 0.3` | 0.932 |
+| r6 r4 + `--neutral-palette` (+ roof gradients, fonts) | 0.964 |
+| r7 toned-down details, `--fill-scale`, `--res-degrade 0.15` | 0.945 |
+| **r8 r7 + `--real-labelling`** | **0.909** |
+| Boise public-domain Revit elevation sheets (REAL) | **0.998** |
+| scraped real pool 86 (@640) / Gemini | 0.965 / 0.997 |
+
+Diagnostics: blurring every crop to 28 px only takes r4 from 0.93 to 0.86 (the
+gap is coarse content, not rendering); val-crop coverage by nearest synth crop
+pointed at BIM-shaded brown roofs (val 5/6) and hand-drawn shingle roofs
+(val 21/22).
+
+**Conclusion.** Real, professionally drafted elevations from another source
+score 0.998 against val 14 -- worse than any synth pool. With 14 reference
+images from ~12 documents the probe measures "is it one of these documents"
+(firm drafting standards, fonts, render settings, markup), not "is it a real
+drawing". AUC < 0.7 would mean imitating those documents' quirks, i.e.
+overfitting the generator to the evaluation set. The probe stays useful for
+reading crop sheets and for ranking changes at >~0.04, not as an absolute
+target. A meaningful absolute bar needs a reference of many documents in the
+eval style (e.g. dozens of unlabelled permit sets), or the HF14 GPU screen.
+r8's flags are the candidate set for that screen.
