@@ -1348,3 +1348,22 @@ saturated fields are gone from the top crops; what now gives synth away is
 flat, near-textureless fills (charcoal roofs with faint lines, plain brown
 planes), sparse random stipple on white, and solid black poché. Untested on
 HF14.
+
+**Which reference? All three candidates are far apart** (probe AUC, held-out,
+image-grouped; chance p95 0.53-0.62 by sample size):
+
+| pair | @640 (real-pool native) | @3168 |
+|---|---:|---:|
+| eval 28 vs real pool 86 | 0.965 | 0.996 (86 upsampled) |
+| Gemini vs 86 | 0.984 | |
+| v6d / `--gemini-colour` vs 86 | 0.996 / 0.995 | |
+| eval 28 vs Gemini | | 0.954 |
+| `--gemini-colour` vs eval 28 | | 0.926 |
+| Gemini r2+r3 vs r4 (same generator) | | 0.490 |
+
+Resolution is a small part of 86-vs-28 (0.965 matched). The 86 are scraped
+stock-plan drawings (heavy black linework, hand-drafted textures, title
+blocks); the 28 are modern CAD/BIM exports (grey hairlines, white space, BIM
+colour, markup). Neither Gemini nor the 86 is the eval look.
+`scripts/synth_vs_gemini_probe.py` is now `scripts/synth_realism_probe.py`
+(`--reference` any COCO export, `--long-side`, default 640).

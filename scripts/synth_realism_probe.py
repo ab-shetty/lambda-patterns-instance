@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Can a classifier tell synthetic crops from Gemini crops?  If yes, the synth
-does not look like Gemini yet -- and its most confidently "synthetic" crops
-show where it gives itself away.
+"""Can a classifier tell synthetic crops from reference crops?  If yes, the
+synth does not look like the reference yet -- and its most confidently
+"synthetic" crops show where it gives itself away.
+
+Reference: the 86 scraped real plans (`floz-real-pool` v2, training data) at
+their native 640 px -- NOT Gemini (real-vs-Gemini AUC 0.954, so Gemini is a
+third look) and NOT the 28 eval plans (tuning on them leaks the test set).
+Chance level at this sample size: AUC <= ~0.53 (image-level permutation p95).
 
 The bar is visual, not a statistic the generator is tuned to: fix what the top
 crops show, regenerate, re-run, repeat until held-out AUC nears 0.5.
 
 Cheap cues are equalised so the probe has to judge content:
-  * framing/scale -- synth sheets are cropped to their ink bounding box and
-    resized to Gemini's 3168 px long side (Gemini drawings fill the frame);
-  * compression   -- synth sheets are JPEG-encoded at quality 75, which is what
-    Roboflow's export gives Gemini (luma quant-table mean 29.0 == PIL q75);
+  * framing/scale -- synth sheets are cropped to their ink bounding box; every
+    image is resized to --long-side (640 = the real pool's native size);
+  * compression   -- anything resized is re-encoded at JPEG quality 75, which
+    is what Roboflow exports (luma quant-table mean 29.0 == PIL q75);
   * location      -- crops are centred inside labelled regions (materials),
-    not on blank paper, at the same side range (px at 3168) for both sources.
+    not on blank paper, at the same fraction of the long side for all sources.
 
 Features: frozen DINOv2 ViT-S/14 (CLS + mean patch), logistic regression,
 5-fold cross-validation grouped by IMAGE so no sheet is in train and test.
 CPU is fine: ~4k crops embed in a few minutes.
 
-    python3 scripts/synth_vs_gemini_probe.py \
-      --gemini data/roboflow/floz-gen-gemini-r2-raw data/roboflow/floz-gen-gemini-r3-raw \
-               data/roboflow/floz-gen-gemini-r4-raw \
-      --synth data/synthetic/v6d_probe300 --out data/probes/synth_vs_gemini_v6d
+    python3 scripts/synth_realism_probe.py --reference data/roboflow/floz-real-pool-v2-raw \
+      --synth data/synthetic/v6d_probe300 --out data/probes/synth_vs_real86_v6d
 """
 import argparse
 import glob
@@ -34,7 +37,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-LONG = 3168
+LONG = 640
 JPEG_Q = 75
 OUT_PX = 224
 
@@ -49,8 +52,14 @@ def _poly_mask(segs, shape, scale=1.0, off=(0, 0)):
     return m
 
 
-def load_gemini(dirs):
-    """(image, [region masks]) per labelled Gemini image; remove polygons cut out."""
+def _jpeg(img):
+    buf = io.BytesIO()
+    Image.fromarray(img[..., ::-1]).save(buf, "JPEG", quality=JPEG_Q)
+    return np.array(Image.open(buf))[..., ::-1].copy()
+
+
+def load_coco(dirs):
+    """(image, [region masks]) per labelled image of Roboflow COCO exports; remove polygons cut out."""
     for d in dirs:
         for coco in sorted(glob.glob(os.path.join(d, "*", "_annotations.coco.json"))):
             js = json.load(open(coco))
@@ -64,7 +73,8 @@ def load_gemini(dirs):
                     continue
                 s = LONG / max(img.shape[:2])
                 if abs(s - 1) > 1e-3:
-                    img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+                    img = _jpeg(cv2.resize(img, None, fx=s, fy=s,
+                                           interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC))
                 anns = by_img.get(im["id"], [])
                 hole = np.zeros(img.shape[:2], np.uint8)
                 for a in anns:
@@ -72,7 +82,7 @@ def load_gemini(dirs):
                         hole |= _poly_mask(a["segmentation"], img.shape[:2], s)
                 masks = [_poly_mask(a["segmentation"], img.shape[:2], s) & (1 - hole)
                          for a in anns if cats[a["category_id"]] not in ("remove", "pattern")]
-                yield f"gem:{os.path.basename(d)}/{im['file_name'][:24]}", img, [m for m in masks if m.any()]
+                yield f"ref:{os.path.basename(d)}/{im['file_name'][:24]}", img, [m for m in masks if m.any()]
 
 
 def load_synth(d, limit):
@@ -92,10 +102,7 @@ def load_synth(d, limit):
         x1, y1 = min(img.shape[1], xs.max() + pad), min(img.shape[0], ys.max() + pad)
         img = img[y0:y1, x0:x1]
         s = LONG / max(img.shape[:2])
-        img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
-        buf = io.BytesIO()
-        Image.fromarray(img[..., ::-1]).save(buf, "JPEG", quality=JPEG_Q)
-        img = np.array(Image.open(buf))[..., ::-1].copy()
+        img = _jpeg(cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC))
         masks = []
         for a in ann["annotations"]:
             m = _poly_mask(a["segmentation"], img.shape[:2], s, off=(x0, y0))
@@ -104,10 +111,12 @@ def load_synth(d, limit):
         yield f"syn:{os.path.basename(f)[:-5]}", img, masks
 
 
-def sample_crops(img, masks, k, rng, side=(256, 768)):
-    """k crops centred on labelled pixels (regions drawn uniformly), resized to OUT_PX."""
+def sample_crops(img, masks, k, rng, side_frac=(0.08, 0.24)):
+    """k crops centred on labelled pixels (regions drawn uniformly), side a fraction
+    of the image's long side (0.08-0.24 = 256-768 px at 3168), resized to OUT_PX."""
     out = []
     H, W = img.shape[:2]
+    side = (max(24, int(side_frac[0] * max(H, W))), int(side_frac[1] * max(H, W)))
     for _ in range(k * 3):
         if len(out) >= k or not masks:
             break
@@ -116,7 +125,7 @@ def sample_crops(img, masks, k, rng, side=(256, 768)):
         if not len(xs):
             continue
         i = rng.randrange(len(xs))
-        cy, cx = ys[i] * 4, xs[i] * 4
+        cy, cx = ys[i] * 4 + 2, xs[i] * 4 + 2
         sd = min(rng.randint(*side), H, W)
         x0 = int(np.clip(cx - sd // 2, 0, W - sd))
         y0 = int(np.clip(cy - sd // 2, 0, H - sd))
@@ -158,15 +167,18 @@ def contact(crops, labels, path, ncol=8):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--gemini", nargs="+", required=True)
+    ap.add_argument("--reference", nargs="+", required=True, help="Roboflow COCO export dir(s)")
+    ap.add_argument("--long-side", type=int, default=640, help="every image is resized to this (640 = real pool native)")
     ap.add_argument("--synth", required=True, help="v6-format dir (images/, annotations/)")
     ap.add_argument("--synth-limit", type=int, default=300)
-    ap.add_argument("--crops-gemini", type=int, default=14, help="crops per Gemini image")
+    ap.add_argument("--crops-ref", type=int, default=24, help="crops per reference image")
     ap.add_argument("--crops-synth", type=int, default=8, help="crops per synth sheet")
     ap.add_argument("--top", type=int, default=48)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    global LONG
+    LONG = args.long_side
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
     from sklearn.model_selection import GroupKFold
@@ -176,13 +188,13 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     rng = random.Random(args.seed)
     crops, y, groups, where = [], [], [], []
-    for lab, src, k in ((0, load_gemini(args.gemini), args.crops_gemini),
+    for lab, src, k in ((0, load_coco(args.reference), args.crops_ref),
                         (1, load_synth(args.synth, args.synth_limit), args.crops_synth)):
         for name, img, masks in src:
             for c, box in sample_crops(img, masks, k, rng):
                 crops.append(c); y.append(lab); groups.append(name); where.append(box)
     y = np.array(y)
-    print(f"crops: gemini {int((y == 0).sum())} from {len({g for g, t in zip(groups, y) if t == 0})} images, "
+    print(f"crops: reference {int((y == 0).sum())} from {len({g for g, t in zip(groups, y) if t == 0})} images, "
           f"synth {int(y.sum())} from {len({g for g, t in zip(groups, y) if t == 1})} sheets", flush=True)
     X = embed(crops)
     oof = np.zeros(len(y))
@@ -206,11 +218,11 @@ def main():
     gem_synthlike = gem[np.argsort(-oof[gem])][:args.top // 2]
     gem_typical = gem[np.argsort(oof[gem])][:args.top // 2]
     contact([crops[i] for i in top_syn], [lab(i) for i in top_syn], f"{args.out}/synth_most_obvious.jpg")
-    contact([crops[i] for i in passing], [lab(i) for i in passing], f"{args.out}/synth_most_gemini_like.jpg")
-    contact([crops[i] for i in gem_typical], [lab(i) for i in gem_typical], f"{args.out}/gemini_most_typical.jpg")
-    contact([crops[i] for i in gem_synthlike], [lab(i) for i in gem_synthlike], f"{args.out}/gemini_most_synth_like.jpg")
-    json.dump({"synth": args.synth, "crop_auc": auc, "crop_acc": acc, "image_auc": img_auc,
-               "n_gemini_crops": int(len(gem)), "n_synth_crops": int(len(syn)),
+    contact([crops[i] for i in passing], [lab(i) for i in passing], f"{args.out}/synth_most_reference_like.jpg")
+    contact([crops[i] for i in gem_typical], [lab(i) for i in gem_typical], f"{args.out}/reference_most_typical.jpg")
+    contact([crops[i] for i in gem_synthlike], [lab(i) for i in gem_synthlike], f"{args.out}/reference_most_synth_like.jpg")
+    json.dump({"synth": args.synth, "reference": args.reference, "long_side": LONG, "crop_auc": auc, "crop_acc": acc, "image_auc": img_auc,
+               "n_reference_crops": int(len(gem)), "n_synth_crops": int(len(syn)),
                "synth_frac_p_below_0.5": float((oof[syn] < 0.5).mean()),
                "per_image": g_score,
                "crops": [{"src": groups[i], "box": where[i], "p_synth": float(oof[i])} for i in range(len(y))]},
