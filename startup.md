@@ -3,6 +3,8 @@
 Read `PROJECT_UNDERSTANDING.md` first — it defines the task, the metric, and what
 does not count as evidence. This file owns the numbers and the commands.
 
+Gemini image generation always uses the Batch API (`scripts/generate_images_gemini.py --batch submit|status|fetch`), even for a few images.
+
 ## Read this before quoting any number
 
 Every number measured before 2026-08-06 (`0.6127`, `0.5506`, `0.4646`, `0.3494`,
