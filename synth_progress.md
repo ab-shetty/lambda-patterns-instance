@@ -1439,7 +1439,7 @@ never exceeded.
 | r6 r4 + `--neutral-palette` (+ roof gradients, fonts) | 0.964 |
 | r7 toned-down details, `--fill-scale`, `--res-degrade 0.15` | 0.945 |
 | **r8 r7 + `--real-labelling`** | **0.909** |
-| Boise public-domain Revit elevation sheets (REAL) | **0.998** |
+| Boise public-domain A201 sheets (REAL; elevations + sections + level markers, see caveat) | **0.998** |
 | scraped real pool 86 (@640) / Gemini | 0.965 / 0.997 |
 
 Diagnostics: blurring every crop to 28 px only takes r4 from 0.93 to 0.86 (the
@@ -1447,8 +1447,14 @@ gap is coarse content, not rendering); val-crop coverage by nearest synth crop
 pointed at BIM-shaded brown roofs (val 5/6) and hand-drawn shingle roofs
 (val 21/22).
 
-**Conclusion.** Real, professionally drafted elevations from another source
-score 0.998 against val 14 -- worse than any synth pool. With 14 reference
+**Conclusion.** Real, professionally drafted sheets from another source
+score 0.998 against val 14 -- worse than any synth pool. Caveat (checked
+after the fact): the Boise crops come from the six A201 "Exterior Elevations
++ Sections" sheets -- one per set, one firm, one near-identical template --
+and include building/wall sections, level-marker columns and unshaded
+Revit elevations with no material hatching, so it is a weak like-for-like
+test; it shows another real document family is trivially separable, not
+that real elevations in general are. With 14 reference
 images from ~12 documents the probe measures "is it one of these documents"
 (firm drafting standards, fonts, render settings, markup), not "is it a real
 drawing". AUC < 0.7 would mean imitating those documents' quirks, i.e.
