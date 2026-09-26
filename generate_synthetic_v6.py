@@ -200,6 +200,22 @@ RES_DEGRADE = 0.0
 # asphalt roofs), in place of v6's near-uniform draw where brick, stone, block
 # and shingle take ~half the walls. Weights are a prior, not fitted to val.
 MATERIAL_MIX = False
+# --gemini-colour's muted palettes and dark-ink fill lines WITHOUT its lower
+# colour share (which left val-like crops too grey): colour stays at v6's rate
+# except on floor plans (own RNG), which real sets rarely colour.
+MUTED_PALETTE = False
+# Crop colour vs val (Lab, crop means): val colour is near-neutral -- tinted
+# whites / creams on walls, brown-grey and charcoal roofs (chroma 3-8), a small
+# vivid share -- while v6 and the muted palette sit at mid chroma (8-25, 27% of
+# crops vs 6%). Low-chroma BIM material colours; a 10% vivid tail.
+NEUTRAL_PALETTE = False
+NEUTRAL_WALL = [(242, 236, 222), (234, 226, 208), (226, 226, 222), (246, 242, 232), (216, 208, 196),
+                (202, 197, 187), (218, 222, 208), (208, 206, 220), (212, 218, 224), (236, 232, 226),
+                (196, 188, 178), (182, 176, 170)]
+NEUTRAL_ROOF = [(126, 112, 102), (102, 88, 80), (142, 124, 112), (82, 82, 84), (120, 120, 120),
+                (152, 142, 134), (96, 92, 90), (132, 118, 104)]
+NEUTRAL_BRICK = [(142, 104, 94), (122, 92, 84), (158, 124, 112), (112, 86, 80)]
+NEUTRAL_VIVID = [(172, 166, 210), (122, 180, 112), (206, 150, 130), (140, 170, 200), (210, 196, 120)]
 MIX_WALL_KINDS = ["lap"] * 10 + ["stucco"] * 6 + ["bb"] * 4 + ["vertical"] * 2 + ["shingle"] * 2 + \
     ["brick"] * 2 + ["stone", "block", "seam"]
 MIX_ROOF_KINDS = ["asphalt"] * 10 + ["seam"] * 2 + ["shingle"] * 2 + ["tile_roof", "flat_roof"]
@@ -214,13 +230,21 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _FONTS = {}
 
 
+SHEET_FONT = None   # (regular, bold) paths chosen per sheet under --val-details
+VAL_FONTS = [("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+             ("/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+             (FONT_PATH, FONT_BOLD)]
+
+
 def font(size, bold=False):
     if VAL_DETAILS:
         size = int(size * 1.6)
-    key = (size, bold)
+    fp = SHEET_FONT or (FONT_PATH, FONT_BOLD)
+    key = (size, bold, fp)
     if key not in _FONTS:
         try:
-            _FONTS[key] = ImageFont.truetype(FONT_BOLD if bold else FONT_PATH, size)
+            _FONTS[key] = ImageFont.truetype(fp[1] if bold else fp[0], size)
         except Exception:
             _FONTS[key] = ImageFont.load_default()
     return _FONTS[key]
@@ -735,6 +759,10 @@ def draw_fill(canvas, poly_px, style, S, W, H):
             _dlines(layer, x0, y0, S, p["row"] * 2.2, p["angle"] + 90, mix(style.base, c, 0.5), 1)
     if mot:
         _mottle(layer, bgr(c), mot, sd)
+    if p.get("grad"):
+        g_s, g_dir = p["grad"]
+        ramp = np.linspace(-1.0, 1.0, h, dtype=np.float32)[:, None, None] * g_dir
+        layer[:] = np.clip(layer.astype(np.float32) * (1.0 - g_s * 0.5 * (ramp + 1.0)), 0, 255).astype(np.uint8)
     m = poly_mask(affinity.translate(poly_px, -x0, -y0), w, h)
     blend_mask(canvas[y0:y1, x0:x1], layer, m)
 
@@ -777,10 +805,18 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
         if base_override is not None:
             base = base_override
         else:
-            base = rng.choice(ROOF_PALETTE if roof else BASE_PALETTE) if not GEMINI_COLOUR else \
+            base = rng.choice(ROOF_PALETTE if roof else BASE_PALETTE) if not (GEMINI_COLOUR or MUTED_PALETTE) else \
                 rng.choice(GEMINI_ROOF_PALETTE if roof else GEMINI_BASE_PALETTE)
+        if NEUTRAL_PALETTE:
+            nr = random.Random(seed * 67 + 5)
+            if nr.random() < 0.1:
+                base = nr.choice(NEUTRAL_VIVID)
+            elif kind == "brick":
+                base = nr.choice(NEUTRAL_BRICK)
+            else:
+                base = nr.choice(NEUTRAL_ROOF if roof else NEUTRAL_WALL)
         lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
-        if GEMINI_COLOUR:
+        if GEMINI_COLOUR or MUTED_PALETTE or NEUTRAL_PALETTE:
             # dark ink linework over the colour, as Gemini and BIM exports draw it
             if lum < 95:
                 line = mix(base, (255, 255, 255), rng.uniform(0.2, 0.35))
@@ -792,7 +828,7 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
             line = mix(base, (255, 255, 255), rng.uniform(0.25, 0.5))
         else:
             line = darken(base, rng.uniform(0.55, 0.8))
-        if not GEMINI_COLOUR and rng.random() < 0.15:
+        if not (GEMINI_COLOUR or MUTED_PALETTE or NEUTRAL_PALETTE) and rng.random() < 0.15:
             line = appearance["ink"]
     else:
         base = appearance["paper"]
@@ -854,6 +890,11 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
                 params["shade"] = mix(base, line, 0.35)
         if vr.random() < 0.7:
             line = mix(base, (238, 236, 230), vr.uniform(0.6, 0.8))
+    if appearance.get("vd") and appearance["colour"] and roof:
+        gr = random.Random(seed * 83 + 11)
+        if gr.random() < 0.6:
+            # BIM "realistic" render: a smooth tonal gradient down the roof plane
+            params["grad"] = (gr.uniform(0.12, 0.35), gr.choice([1, -1]))
     st = Style(k, base, line, lw, params, seed, label_name)
     st.callout = rng.choice(CALLOUT.get(kind, CALLOUT.get(k, ["FINISH"])))
     return st
@@ -1588,7 +1629,7 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
         fw, fhh = rng.uniform(4, 10), rng.uniform(2.5, 5)
         fpoly = rect(fx0, 0, fx0 + fw, -fhh)
         fst = Style(rng.choice(["vertical", "hatch", "grid", "block"]), app["paper"] if not app["colour"] else
-                    rng.choice(GEMINI_BASE_PALETTE if GEMINI_COLOUR else BASE_PALETTE), app["ink_fill"] if not app["colour"] else app["ink"],
+                    rng.choice(GEMINI_BASE_PALETTE if (GEMINI_COLOUR or MUTED_PALETTE) else BASE_PALETTE), app["ink_fill"] if not app["colour"] else app["ink"],
                     app["outline_lw"] * 0.6, {"sp": rng.choice([0.33, 0.5, 1.0]), "angle": 45}, rng.randrange(1 << 20), "fence")
         draw_fill(canvas, V.geom(fpoly), fst, S, W, H)
         cv_outline(canvas, V.geom(fpoly), ink, lw)
@@ -2196,6 +2237,10 @@ def compose(image_id, seed, mode_weights):
         app.update(level="normal", ink=(ink,) * 3, outline=(ink,) * 3,
                    ink_fill=(min(170, ink + dr.randint(20, 110)),) * 3)
         app["outline_lw"] = dr.uniform(2.0, 3.5)
+        global SHEET_FONT
+        SHEET_FONT = dr.choices(VAL_FONTS, weights=[5, 3, 2])[0]
+    if (MUTED_PALETTE or NEUTRAL_PALETTE) and not GEMINI_COLOUR and mode == "freeform":
+        app["colour"] = False
     if GEMINI_COLOUR:
         app["colour"] = random.Random(seed * 1_000_003 + image_id * 67 + 5).random() < GEMINI_COLOUR_PROB[mode]
     house = make_house(rng)
@@ -2218,7 +2263,7 @@ def compose(image_id, seed, mode_weights):
         styles["accent2"] = make_style(rng, rng.choice([k for k in WALL_KINDS if k not in used]), app,
                                        fam_seed + 12, S_guess, "accent2")
     if house.get("label_trim"):
-        tc = rng.choice(GEMINI_TRIM_PALETTE if GEMINI_COLOUR else TRIM_PALETTE) if app["colour"] else app["trim"]
+        tc = rng.choice(GEMINI_TRIM_PALETTE if (GEMINI_COLOUR or MUTED_PALETTE or NEUTRAL_PALETTE) else TRIM_PALETTE) if app["colour"] else app["trim"]
         styles["trim"] = Style("flat", tc, tc, 1.0, {}, fam_seed + 13, "trim")
         styles["trim"].callout = rng.choice(["TRIM", "PAINTED TRIM", "1x4 TRIM", "TRIM BOARD"])
     roof_kind = rng.choice(ROOF_KINDS)
@@ -2660,10 +2705,12 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE
+    MUTED_PALETTE = muted_palette
+    NEUTRAL_PALETTE = neutral_palette
     MATERIAL_MIX = material_mix
     if material_mix:
         WALL_KINDS, ROOF_KINDS = MIX_WALL_KINDS, MIX_ROOF_KINDS
@@ -2784,6 +2831,10 @@ def main():
                     help="probability a sheet is downsampled 0.25-0.6x and back (soft low-res rasters)")
     ap.add_argument("--material-mix", action="store_true",
                     help="residential material prior: mostly lap siding / stucco walls, asphalt roofs")
+    ap.add_argument("--muted-palette", action="store_true",
+                    help="muted palettes + dark-ink fill lines at v6's colour share; no colour on floor plans")
+    ap.add_argument("--neutral-palette", action="store_true",
+                    help="low-chroma BIM material colours (tinted whites, brown-grey roofs), 10%% vivid; no colour on floor plans")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2802,7 +2853,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
