@@ -3,10 +3,11 @@
 synth does not look like the reference yet -- and its most confidently
 "synthetic" crops show where it gives itself away.
 
-Reference: the 86 scraped real plans (`floz-real-pool` v2, training data) at
-their native 640 px -- NOT Gemini (real-vs-Gemini AUC 0.954, so Gemini is a
-third look) and NOT the 28 eval plans (tuning on them leaks the test set).
-Chance level at this sample size: AUC <= ~0.53 (image-level permutation p95).
+Reference: the 14 VALIDATION plans (default). Val 14 vs HF14 is 0.423 on this
+probe (chance p95 0.71), so val stands in for the test look without touching
+HF14. Gemini (0.95-0.997 vs eval) and the scraped real pool (0.965 vs eval,
+resolution matched) are both a different look. Chance level with 14 reference
+images is high (~0.7): read the crops, not the AUC, until the AUC is low.
 
 The bar is visual, not a statistic the generator is tuned to: fix what the top
 crops show, regenerate, re-run, repeat until held-out AUC nears 0.5.
@@ -23,8 +24,9 @@ Features: frozen DINOv2 ViT-S/14 (CLS + mean patch), logistic regression,
 5-fold cross-validation grouped by IMAGE so no sheet is in train and test.
 CPU is fine: ~4k crops embed in a few minutes.
 
-    python3 scripts/synth_realism_probe.py --reference data/roboflow/floz-real-pool-v2-raw \
-      --synth data/synthetic/v6d_probe300 --out data/probes/synth_vs_real86_v6d
+    python3 scripts/synth_realism_probe.py --synth data/synthetic/v6d_probe300 \
+      --out data/probes/realism_v6d            # reference: val 14 at 3168 px
+    # or any Roboflow COCO export:  --reference <dir> --long-side 640
 """
 import argparse
 import glob
@@ -37,7 +39,9 @@ import cv2
 import numpy as np
 from PIL import Image
 
-LONG = 640
+LONG = 3168
+VAL14 = [4, 5, 6, 8, 9, 10, 13, 15, 17, 19, 20, 21, 22, 26]
+EVAL_PARQUET = "data/hf_eval/real-world-test/test-00000.parquet"
 JPEG_Q = 75
 OUT_PX = 224
 
@@ -83,6 +87,21 @@ def load_coco(dirs):
                 masks = [_poly_mask(a["segmentation"], img.shape[:2], s) & (1 - hole)
                          for a in anns if cats[a["category_id"]] not in ("remove", "pattern")]
                 yield f"ref:{os.path.basename(d)}/{im['file_name'][:24]}", img, [m for m in masks if m.any()]
+
+
+def load_eval(indices, parquet=EVAL_PARQUET):
+    """The HF real-world-test images at `indices` (validation only -- never HF14)."""
+    import pyarrow.parquet as pq
+    rows = pq.read_table(parquet, columns=["image", "annotations"]).to_pylist()
+    for i in indices:
+        r = rows[i]
+        b = r["image"]["bytes"] if isinstance(r["image"], dict) else r["image"]
+        img = np.array(Image.open(io.BytesIO(b)).convert("RGB"))[..., ::-1]
+        s = LONG / max(img.shape[:2])
+        img = _jpeg(cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC))
+        masks = [_poly_mask(a["segmentation"], img.shape[:2], s) for a in json.loads(r["annotations"])
+                 if a.get("role") != "remove"]
+        yield f"ref:eval{i:02d}", img, [m for m in masks if m.any()]
 
 
 def load_synth(d, limit):
@@ -166,18 +185,19 @@ def contact(crops, labels, path, ncol=8):
 
 
 def main():
+    global LONG
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--reference", nargs="+", required=True, help="Roboflow COCO export dir(s)")
-    ap.add_argument("--long-side", type=int, default=640, help="every image is resized to this (640 = real pool native)")
+    ap.add_argument("--reference", nargs="+", default=None,
+                    help="Roboflow COCO export dir(s) instead of the validation 14")
+    ap.add_argument("--long-side", type=int, default=LONG, help="every image is resized to this")
     ap.add_argument("--synth", required=True, help="v6-format dir (images/, annotations/)")
     ap.add_argument("--synth-limit", type=int, default=300)
-    ap.add_argument("--crops-ref", type=int, default=24, help="crops per reference image")
+    ap.add_argument("--crops-ref", type=int, default=0, help="crops per reference image (0: 60 for val 14, else 24)")
     ap.add_argument("--crops-synth", type=int, default=8, help="crops per synth sheet")
     ap.add_argument("--top", type=int, default=48)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
-    global LONG
     LONG = args.long_side
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
@@ -188,7 +208,9 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     rng = random.Random(args.seed)
     crops, y, groups, where = [], [], [], []
-    for lab, src, k in ((0, load_coco(args.reference), args.crops_ref),
+    ref = load_coco(args.reference) if args.reference else load_eval(VAL14)
+    k_ref = args.crops_ref or (24 if args.reference else 60)
+    for lab, src, k in ((0, ref, k_ref),
                         (1, load_synth(args.synth, args.synth_limit), args.crops_synth)):
         for name, img, masks in src:
             for c, box in sample_crops(img, masks, k, rng):
@@ -221,7 +243,7 @@ def main():
     contact([crops[i] for i in passing], [lab(i) for i in passing], f"{args.out}/synth_most_reference_like.jpg")
     contact([crops[i] for i in gem_typical], [lab(i) for i in gem_typical], f"{args.out}/reference_most_typical.jpg")
     contact([crops[i] for i in gem_synthlike], [lab(i) for i in gem_synthlike], f"{args.out}/reference_most_synth_like.jpg")
-    json.dump({"synth": args.synth, "reference": args.reference, "long_side": LONG, "crop_auc": auc, "crop_acc": acc, "image_auc": img_auc,
+    json.dump({"synth": args.synth, "reference": args.reference or "val14", "long_side": LONG, "crop_auc": auc, "crop_acc": acc, "image_auc": img_auc,
                "n_reference_crops": int(len(gem)), "n_synth_crops": int(len(syn)),
                "synth_frac_p_below_0.5": float((oof[syn] < 0.5).mean()),
                "per_image": g_score,

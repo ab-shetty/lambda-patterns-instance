@@ -1367,3 +1367,16 @@ blocks); the 28 are modern CAD/BIM exports (grey hairlines, white space, BIM
 colour, markup). Neither Gemini nor the 86 is the eval look.
 `scripts/synth_vs_gemini_probe.py` is now `scripts/synth_realism_probe.py`
 (`--reference` any COCO export, `--long-side`, default 640).
+
+**Val 14 vs HF14: indistinguishable** (probe AUC 0.423; 40 image-level shuffles
+p95 0.713) -- the probe's default reference is now the validation 14 at 3168
+px, which stands in for HF14's look without touching it. The 28 eval images
+are excerpts of ~12 plan sets, and val and HF14 share sets (e.g. Las Huertas
+0-6). `--gemini-colour` vs val 14: crop AUC 0.973 (vs HF14 0.962). Top giveaways:
+sparse random stipple on white (val has none), ochre/orange walls, masonry
+with dark joints and big units (val brick: dark brown, light mortar, small).
+
+Boise pre-approved ADU sets (public domain per the city's page; 6 bid sets, 34
+sheets, `data/reference/boise_adu/`): Revit hairline look, but little material
+hatching and a "NOT FOR CONSTRUCTION" watermark on every sheet -- a
+conventions reference at most.
