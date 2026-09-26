@@ -1463,3 +1463,22 @@ reading crop sheets and for ranking changes at >~0.04, not as an absolute
 target. A meaningful absolute bar needs a reference of many documents in the
 eval style (e.g. dozens of unlabelled permit sets), or the HF14 GPU screen.
 r8's flags are the candidate set for that screen.
+
+## 2026-09-26 (cont.) — FreeCAD 3D geometry pilot: no realism gain
+
+`scripts/generate_synthetic_fc.py` + `scripts/fc_massing.py`: each v6 house
+(same blocks, pitches, overhangs; chimney) is built as 3D solids in FreeCAD
+(wall boxes + gable infill, roof slabs whose edges are the rakes/fascia, hip
+solids), fused, and each elevation is the set of faces visible from that side
+(planar depth test between overlapping faces). v6 then does zones, openings,
+materials/patterning, colour, annotation and labels with the r8 flags; roof and
+floor plans are v6's own. Install (container-local, ~5 min): micromamba from
+conda.anaconda.org, then `micromamba create -p /opt/fc -c conda-forge freecad`.
+
+Same houses as r8 (seed 6, ids 200000+, 310 sheets): probe AUC **0.954** (runs
+0.956, 0.943, 0.962; elevation 0.960, roof 0.929) vs r8 0.909 (elevation
+0.915). Geometry is correct (wings meet the main roof, hip ends, side views
+show wing roofs), but the giveaway crops are unchanged in kind -- floor plan
+fragments, large flat colour planes, clean vector hatching. The probe sees
+local rendering, not global 3D consistency; the whole roof planes FreeCAD
+exposes add more of the flat-plane crops. Not adopted.
