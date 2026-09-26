@@ -180,6 +180,11 @@ VAL_FILLS = False
 # pattern is drawn at S * U(FILL_SCALE_RANGE) (own RNG), never finer than ~2.5
 # line widths per repeat. Geometry and labels are unchanged.
 FILL_SCALE = False
+# Framing: val 14 are tight excerpts (drawing box 92% of the image, aspect
+# 2.67); v6 sheets carry empty paper (63%, aspect 1.63). When on, the sheet is
+# cropped to its ink box + a 1.5-5% pad (own RNG); no resampling, so pixel
+# scale is kept. Labels are translated and clipped.
+TIGHT_CROP = False
 FILL_SCALE_RANGE = (0.35, 0.6)
 VAL_BRICK_PALETTE = [(110, 72, 62), (124, 84, 70), (98, 66, 58), (150, 118, 112), (164, 132, 126),
                      (140, 86, 72), (170, 110, 90)]
@@ -2502,12 +2507,13 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
-    global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE
+    global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP
     GEMINI_COLOUR = gemini_colour
     VAL_FILLS = val_fills
     FILL_SCALE = fill_scale
+    TIGHT_CROP = tight_crop_
     MOTTLE = mottle
     VOCAB2 = vocab2
     SAME_FILL_NEW_COLOUR = same_fill
@@ -2519,9 +2525,45 @@ def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill
     _CFG.update({"out": out, "seed": seed, "mw": mode_weights})
 
 
+def tight_crop(canvas, ann, rng):
+    paper = np.median(np.concatenate([canvas[0], canvas[-1], canvas[:, 0], canvas[:, -1]]), axis=0)
+    diff = np.abs(canvas.astype(np.int16) - paper.astype(np.int16)).max(axis=2) > 45
+    rows, cols = np.where(diff.sum(axis=1) >= 3)[0], np.where(diff.sum(axis=0) >= 3)[0]
+    if len(rows) == 0 or len(cols) == 0:
+        return canvas, ann
+    H, W = canvas.shape[:2]
+    y0, y1, x0, x1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    pad = int(rng.uniform(0.015, 0.05) * max(x1 - x0, y1 - y0))
+    x0, y0, x1, y1 = max(0, x0 - pad), max(0, y0 - pad), min(W, x1 + pad), min(H, y1 + pad)
+    canvas = np.ascontiguousarray(canvas[y0:y1, x0:x1])
+    clip = Polygon([(0, 0), (x1 - x0, 0), (x1 - x0, y1 - y0), (0, y1 - y0)])
+    anns = []
+    for a in ann["annotations"]:
+        rings = [list(zip(sg[0::2], sg[1::2])) for sg in a["segmentation"]]
+        try:
+            q0 = affinity.translate(Polygon(rings[0], rings[1:]).buffer(0), -x0, -y0).intersection(clip)
+        except Exception:
+            continue
+        for q in polys_of(q0):
+            if q.area < 400:
+                continue
+            outer = [round(v, 2) for c in q.exterior.coords[:-1] for v in c]
+            holes = [[round(v, 2) for c in r.coords[:-1] for v in c] for r in q.interiors]
+            holes = [hh for hh in holes if len(hh) >= 6]
+            bx0, by0, bx1, by1 = q.bounds
+            anns.append(dict(a, id=len(anns) + 1, segmentation=[outer] + holes, num_holes=len(holes),
+                             bbox=[round(bx0, 1), round(by0, 1), round(bx1 - bx0, 1), round(by1 - by0, 1)],
+                             area=round(q.area, 1)))
+    ann = dict(ann, annotations=anns)
+    ann["image"] = dict(ann["image"], width=int(x1 - x0), height=int(y1 - y0))
+    return canvas, ann
+
+
 def _job(image_id):
     try:
         canvas, ann = compose(image_id, _CFG["seed"], _CFG["mw"])
+        if TIGHT_CROP:
+            canvas, ann = tight_crop(canvas, ann, random.Random(_CFG["seed"] * 1_000_003 + image_id * 97 + 13))
     except Exception as exc:          # a bad draw must not kill the batch
         import traceback
         traceback.print_exc()
@@ -2568,6 +2610,8 @@ def main():
                     help="stipple fills draw flat; coloured brick takes a brick base; coloured masonry light mortar")
     ap.add_argument("--fill-scale", action="store_true",
                     help="draw hatch patterns 0.35-0.6x their physical spacing (val fills repeat ~2x finer)")
+    ap.add_argument("--tight-crop", action="store_true",
+                    help="crop each sheet to its ink box + 1.5-5%% pad, labels translated (val excerpts are tight)")
     args = ap.parse_args()
     mw = dict(MODE_WEIGHTS)
     if args.mode_weights:
@@ -2586,7 +2630,7 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

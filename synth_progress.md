@@ -1397,3 +1397,11 @@ palette for val's brick/lavender/teal. `--fill-scale`: hatch patterns at
 went 23 -> 14 px (val 10, HF14 13.5). Both default off, v6d byte-identical,
 labels unchanged. The AUC barely moves because each fix exposes the next cue;
 none of this is tested on HF14 yet.
+
+**Framing (user caught it from a sample sheet; the probe crops synth to ink,
+so it could not):** val 14 drawing box covers 92% of the image, aspect 2.67;
+v6 sheets 62%, 1.66. `--tight-crop` (new, default off, v6d byte-identical):
+crop to the ink box + 1.5-5% pad, no resampling, labels translated/clipped
+(label areas verified equal). Pool with every flag: 83%, aspect 1.89,
+labelled share 40% (val 27% -- real excerpts carry more unlabelled drawing).
+The remaining aspect gap is layout: stacked 2x2 view grids stay tall.
