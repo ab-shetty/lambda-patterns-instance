@@ -1405,3 +1405,20 @@ crop to the ink box + 1.5-5% pad, no resampling, labels translated/clipped
 (label areas verified equal). Pool with every flag: 83%, aspect 1.89,
 labelled share 40% (val 27% -- real excerpts carry more unlabelled drawing).
 The remaining aspect gap is layout: stacked 2x2 view grids stay tall.
+
+**Probe noise (vs val 14):** 30 resamples per pool -- 12 of the 14 val
+images, 60 crops each, bootstrap of synth sheets, 8 crops each, random grouped
+folds -- the same draws for every pool (paired):
+
+| pool | AUC mean | sd | paired delta vs `--gemini-colour` (sd) |
+|---|---:|---:|---:|
+| `--gemini-colour` | 0.952 | 0.042 | - |
+| + `--val-fills` | 0.949 | 0.022 | -0.003 (0.046) |
+| + `--mottle` `--vocab2` | 0.934 | 0.038 | -0.018 (0.055) |
+| + `--fill-scale` | 0.948 | 0.025 | -0.004 (0.047) |
+
+Run-to-run sd is ~0.02-0.04 and a paired difference ~0.05, mostly from which
+val images are in the draw. The single-run drops recorded above (0.973 ->
+0.964/0.969) are noise. With 14 reference images the AUC resolves only
+changes of ~0.1; the crop sheets, not the AUC, carry the signal until the
+reference set is larger.
