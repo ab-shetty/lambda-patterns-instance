@@ -31,6 +31,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .attn_condition import CrossAttnCondition
 from .ref_unet import ConditionBlock
 
 # Stage output channels after blocks 1/3/5/7 of torchvision's `features`.
@@ -43,7 +44,7 @@ class RefSwinUNet(nn.Module):
     """Swin backbone + the unchanged reference-conditioned FPN decoder."""
 
     def __init__(self, width=128, pretrained=True, backbone="swin_b",
-                 corr_grid=0):
+                 corr_grid=0, decoder="baseline"):
         super().__init__()
         import torchvision.models as tvm
         if backbone not in SWIN_CHANNELS:
@@ -56,8 +57,18 @@ class RefSwinUNet(nn.Module):
         self._taps = (1, 3, 5, 7)
         channels = SWIN_CHANNELS[backbone]
         self.corr_grid = corr_grid
+        # decoder="selfattn" (2026-09-27): the two coarsest scales (1/16, 1/32)
+        # condition by cross-attention to the reference's spatial tokens, then
+        # self-attention over the image, so regions can be compared with each
+        # other. Ranked first by the frozen-backbone screen (2026-09-20) and
+        # never run unfrozen. "baseline" is the historical decoder.
+        if decoder not in ("baseline", "selfattn"):
+            raise ValueError(f"unknown decoder {decoder!r}")
+        self.decoder = decoder
+        attn = (2, 3) if decoder == "selfattn" else ()
         self.condition = nn.ModuleList(
-            ConditionBlock(c, c, width, corr_grid=(0 if i == 0 else corr_grid))
+            CrossAttnCondition(c, c, width, num_heads=4, self_attn=True) if i in attn
+            else ConditionBlock(c, c, width, corr_grid=(0 if i == 0 else corr_grid))
             for i, c in enumerate(channels))
         self.smooth = nn.ModuleList(
             nn.Sequential(nn.Conv2d(width, width, 3, padding=1, bias=False),
@@ -103,6 +114,18 @@ class RefSwinUNet(nn.Module):
         if return_aux:
             return out, None
         return out
+
+    def forward_multi(self, image, references, k):
+        """K questions per image (`--refs-per-image`): `references` is
+        [B*K, 3, R, R], plan-major. The image runs through the backbone ONCE;
+        only the conditioning and decoder repeat per question."""
+        image_size = image.shape[-2:]
+        image_features = [f.repeat_interleave(k, 0) for f in self.features(image)]
+        reference_features = self.features(references)
+        prototypes = [f.mean((-2, -1)) for f in reference_features]
+        logits = self.decode(image_features, prototypes, reference_features)
+        return F.interpolate(logits, size=image_size, mode="bilinear",
+                             align_corners=False)
 
     def parameter_groups(self, lr, backbone_lr_mult=0.1):
         backbone_ids = {id(p) for p in self.stages.parameters()}

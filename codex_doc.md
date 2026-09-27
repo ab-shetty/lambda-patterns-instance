@@ -7,6 +7,28 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-09-27)
+
+Detail: `synth_progress.md` ("Current state", "Generator flags", Log
+2026-09-27). The VM is gone; pools rebuild from committed scripts (FreeCAD:
+see the 2026-09-26 log entry for the install).
+
+1. **Revit-style synthetic is the first generator change to beat v6d** on
+   swin_t: 2k synth-only @2048, HF14 0.7564 vs 0.7066, val 0.7568 vs 0.6702
+   (`abshetty/floz-refunet-swint-revit2k-e8`). It is the renderer, not the
+   FreeCAD geometry. One seed, and at 4096 inference the lead is only +0.016.
+   **Next: swap it into the real + Gemini mix** -- the user deferred this.
+2. **Screen synthetic changes at 2048, not 1024.** The 1024 screen flipped the
+   sign of r8 on validation. `run_revit_2k.sh` is the recipe.
+3. **r8 and `--real-labelling` hurt.** r8 -0.076 HF14; `--real-labelling`
+   unlabels the foundation band val 17 asks about (-0.187 val). The realism
+   probe ranked r8 best and Revit worst -- it does not predict training value.
+4. **swin_t underfits grouping at ~0.74** (own training plans, HF14 protocol,
+   ceiling 0.904); v6d volume flattens toward ~0.77. `--refs-per-image 6`
+   reaches the 16k level with 2k plans but not past the wall. The step-budget
+   test and `--swin-decoder selfattn` are the queued next steps
+   (`run_multiref.sh`).
+
 ## Pick up here (2026-09-24)
 
 Detail and every number: `synth_progress.md` (2026-09-23 and 2026-09-24

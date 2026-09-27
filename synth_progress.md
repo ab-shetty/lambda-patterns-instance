@@ -12,25 +12,37 @@ below "Log".
   validation; 4096-5120 is the plateau): **HF14 0.8170**, vs 0.7887 for the
   published e8 at 2048. TTA x4 (+0.0015) and multi-scale inference (0.8123) not
   adopted.
-- **Synthetic source: v6d** (`generate_synthetic_v6.py`, build seed 6,
-  deterministic per `(seed, image_id)`). No generator change has beaten it on
-  HF14: v6e look-alike pairs (negative), v7 Gemini-style retune (-0.023, one
-  seed), `--hardscape-plan` / `--same-fill-subtle` (null, 3 seeds),
-  `--mottle` (null, one seed), v5 confusable pairs (-0.104).
-- **Best synthetic-only:** v6d 100k single pass, RefUNet at 2048, HF14 0.7130;
-  swin_t on v6d 1,995: 0.7066 (`abshetty/floz-refunet-swint-v6d-e8`).
-- **Realism probe** (vs val 14): best pool r8 0.909 against v6d 0.948 +- 0.013.
-  FreeCAD geometry 0.954, Revit-style 0.960. None of these pools has been
-  trained on.
+- **Synthetic source: Revit-style FreeCAD sheets beat v6d** (2026-09-27, one
+  seed, synth-only, 2k @2048): `scripts/generate_synthetic_fc.py --revit
+  --mode-weights 66,16,18` gives **HF14 0.7564 / val 0.7568** against v6d's
+  0.7066 / 0.6702 (`abshetty/floz-refunet-swint-revit2k-e8`, round-trip
+  verified). The gain is the Revit RENDERER, not the 3D geometry (FreeCAD
+  geometry drawn by v6: 0.7126 / 0.6248). At 4096 inference the lead shrinks
+  to +0.016 on both splits. Not yet tested in the real mix. Every v6 generator
+  change before it lost or tied: v6e look-alike pairs (negative), v7 (-0.023),
+  `--hardscape-plan` / `--same-fill-subtle` (null, 3 seeds), `--mottle`
+  (null), v5 confusable pairs (-0.104), **r8 (-0.076 HF14, 2026-09-27)**.
+- **Best synthetic-only:** Revit 2k, swin_t @2048, **HF14 0.7564** (one
+  seed). Previous: v6d 100k single pass on RefUNet 0.7130; swin_t v6d 1,995
+  0.7066 (`abshetty/floz-refunet-swint-v6d-e8`).
+- **Realism probe** (vs val 14): r8 0.909 < v6d 0.948 < FreeCAD 0.954 <
+  Revit 0.960 -- and on HF14 the order is REVERSED (Revit best, r8 worst).
+  The probe does not predict training value; don't use it to pick pools.
 
 ## How to test a synthetic change
 
-- **Synth-only screen** (`run_synth_only_screen.sh`, `run_vocab2_screen.sh`):
-  swin_t at 1024, 1,600 sheets, 1+8 epochs, scored at epoch 8 with 2048
-  inference; three runs concurrently take ~20 min on a GH200. Use seeds 7/31/99
-  and deltas against the same-seed v6d arm (`so_v6d_s{7,31,99}`). The v6d
-  control alone spans 0.640-0.694 on HF14 across seeds, so only a consistent
-  3-seed gain counts.
+- **Screen at 2048, not 1024** (2026-09-27, `run_res_calibration.sh`): the
+  same r8-vs-v6d A/B trained at 1024 and at 2048 (1,600 sheets, seed 7).
+  1024 said r8 HELPS on validation (+0.028) where 2048 says it HURTS (-0.046);
+  on HF14 both say hurts (-0.055 / -0.037; per-selection delta correlation
+  0.61 on HF14, -0.03 on validation). Fine-texture changes alias away at 1024
+  (x0.4 `--domain-random` shrink on top). Use `run_revit_2k.sh`'s recipe:
+  swin_t, ~2k sheets @2048, 1+8 epochs, one seed, ~20 min per arm alone;
+  control = the published v6d 2k (`abshetty/floz-refunet-swint-v6d-e8`).
+  Single-epoch HF14 swings 0.02-0.04 between adjacent epochs, so a one-seed
+  delta under ~0.04 is noise; a winner still needs the real mix.
+- The old 1024 screen (`run_synth_only_screen.sh`): swin_t at 1024, three runs
+  concurrently ~20 min, v6d control spans 0.640-0.694 on HF14 across seeds.
 - **Don't** use `run_synth_ft_ab.sh`: a gentle fine-tune of a converged model
   leaves 48/52 selections tied and cannot detect a pixel-only change. A full
   retrain (`run_nogray_mix.sh`-style) takes ~80 min.
@@ -43,8 +55,9 @@ below "Log".
   epoch; check that it turned over first.
 - Transfer: use `scripts/question_difficulty.py`, not `fresh_synth_iou.py`
   ratios (different question mix). `fresh_synth_iou.py` decides "seen" by
-  filename, and merged pools are all `item_XXXXXX`: pass an empty
-  `--trained-pool` for known-disjoint splits.
+  filename, and merged pools are all `item_XXXXXX`. An empty `--trained-pool`
+  crashes (FileNotFoundError); for known-disjoint splits (fresh ids 100000+)
+  pass the model's own training pool.
 - **Realism probe** (`scripts/synth_realism_probe.py`): frozen DINOv2 plus
   logistic regression on crops inside labelled regions, reference val 14 at
   3168 px (indistinguishable from HF14: AUC 0.423), mean of 3 seeds, 320 synth
@@ -56,8 +69,18 @@ below "Log".
 ## Findings that still bind
 
 - **Volume:** v6d-only at 2048: 1,600 -> 0.640, 12,000 -> 0.693, 100,000
-  seen once -> 0.713. Gains shrink ~60% per 8x. With enough unique data, one
-  pass beats many epochs; a second pass already lowers fresh-synthetic IoU.
+  seen once -> 0.713 (RefUNet). Gains shrink ~60% per 8x. With enough unique
+  data, one pass beats many epochs; a second pass already lowers
+  fresh-synthetic IoU. swin_t (2026-09-27, `run_v6d_scaling.sh`, nested
+  pools, fresh v6d scored with the HF14 protocol): 2k 0.660, 8k 0.716, 16k
+  0.732 -- a 3-point fit flattens at ~0.77. HF14 0.707 / 0.737 / 0.729.
+- **swin_t underfits family grouping, not data** (2026-09-27): the 16k model
+  scores 0.736 on its OWN training plans (HF14 protocol) against a
+  resolution ceiling of 0.904 (`label_ceiling.py`, same 1,798 questions).
+  Single-family sheets 0.957; 4-6 family sheets 0.673 (65% of the error);
+  non-look-alike targets hold 60% of it. Asking all families per step
+  (`--refs-per-image 6`) matches 16k with 2k plans (fresh 0.727, seen 0.741)
+  but hits the same ~0.74 wall; real plans +0.017 val / +0.012 HF14 (noise).
 - **Real-plan penalty:** net of question difficulty, every source (Gemini
   included) pays ~-0.14 to -0.17 on real plans. At matched 148 sources Gemini
   and v6d tie on HF14.
@@ -92,20 +115,35 @@ below "Log".
 | `--mottle` | null, one seed |
 | `--vocab2` | untested (`run_vocab2_screen.sh` ready) |
 | `--gemini-colour`, `--muted-palette` | probe only; r8 uses `--neutral-palette` instead |
-| **r8 set:** `--val-details --material-mix --val-fills --mode-weights 86,7,7 --res-degrade 0.15 --neutral-palette --fill-scale --real-labelling` | probe 0.909; untested on HF14 |
+| **r8 set:** `--val-details --material-mix --val-fills --mode-weights 86,7,7 --res-degrade 0.15 --neutral-palette --fill-scale --real-labelling` | **negative**: HF14 -0.076, val -0.008 (2k @2048; trained WITHOUT `--mode-weights`, i.e. the `R8` dict in `generate_synthetic_fc.py`) |
+| `--real-labelling` alone (on Revit sheets) | **negative on validation**: -0.187 vs Revit, 89% of it val 17 (unlabels the foundation band that val asks about); HF14 -0.008 |
 | `--tight-crop` | framing fix (ink box + pad); untested |
 
-FreeCAD pilot (`scripts/generate_synthetic_fc.py`, `scripts/fc_massing.py`,
-`scripts/revit_render.py --revit`): same houses as r8 with 3D-correct
-geometry, optionally Revit-style rendering. Untested on HF14.
+FreeCAD (`scripts/generate_synthetic_fc.py`, `scripts/fc_massing.py`,
+`scripts/revit_render.py`), all 2k @2048, seed 7, epoch 8, `--mode-weights
+66,16,18` (v6's mix):
+
+| pool | val | HF14 |
+|---|---:|---:|
+| v6d (control) | 0.6702 | 0.7066 |
+| `--revit` | **0.7568** | **0.7564** |
+| no renderer (v6 drawing on FreeCAD houses) | 0.6248 | 0.7126 |
+| `--revit --real-labelling` | 0.5702 | 0.7485 |
+| `--r8 --revit` | 0.6891 | 0.6713 |
+
+Revit model on its own fresh plans (HF14 protocol) 0.758 = its HF14 0.756; it
+scores 0.507 on fresh v6d, the v6d model 0.724 on fresh Revit.
 
 ## Open
 
-- GPU screen, synth-only, 3 seeds: v6d / r8 / r8 + ~40% Revit-style elevations
-  / Revit-only. Pools follow `v6d_1600`'s recipe (`--n 2000 --seed 6 --start 0`,
-  first 1,600, as for `--vocab2`) and take ~10 min each on CPU. FreeCAD must be installed where the pools are
-  built.
-- `--vocab2` screen; second seed at 2560.
+- **Revit in the real + Gemini mix** (swap for v6d_1600 in `v6dmix_plus_r4`):
+  the only test of whether it helps the shipped model.
+- **The ~0.74 grouping wall.** Step budget (A: six-question model + one fresh
+  9-epoch cosine) was running when the VM died -- result below if it
+  finished. Untested: `--swin-decoder selfattn` (code in, CPU-checked; in the
+  frozen screen it only TIED baseline at the best LR), Revit + six-question
+  (`./run_multiref.sh 7 revit`).
+- Second seed for Revit 2k; `--vocab2` screen; second seed at 2560.
 
 ## Log
 
@@ -133,3 +171,22 @@ geometry, optionally Revit-style rendering. Untested on HF14.
 - FreeCAD install (container-local, ~5 min): micromamba from
   `conda.anaconda.org/conda-forge`, then
   `micromamba create -p /opt/fc -c conda-forge freecad`.
+
+### 2026-09-27 — Revit beats v6d; 1024 screens mislead; the grouping wall
+
+One seed throughout, synth-only, swin_t, 2048, 1+8 epochs, epoch 8 scored.
+Numbers are in "Current state", "How to test" and "Generator flags" above;
+drivers: `run_res_calibration.sh` (+ `scripts/res_calibration_report.py`),
+`run_revit_2k.sh [seed] [arms]`, `run_v6d_scaling.sh`, `run_multiref.sh [seed]
+[v6d|revit]` (env `DEC`, `RESTART_FROM`, `TAG`, `BS`).
+
+- Batch size: swin_t @2048 saturates the GH200 at batch 4 (17.7 / 18.0 /
+  18.1 img/s at 4 / 8 / 10; 8 peaks 67 GiB on a full 2048 canvas, 16 OOMs).
+  `--compile` never finished compiling in 15 min (`--domain-random` shapes).
+- `--refs-per-image K` (dataset + `RefSwinUNet.forward_multi`): backbone once
+  per plan, decoder per question; 26 questions/s vs 18; 3 plans x 6 questions
+  ~66 GiB worst case. Default 0 is byte-identical (checked against HEAD).
+- `--swin-decoder selfattn`: `CrossAttnCondition` (moved to
+  `refmask2former/attn_condition.py`) at 1/16 and 1/32; published baseline
+  checkpoints still load strictly.
+

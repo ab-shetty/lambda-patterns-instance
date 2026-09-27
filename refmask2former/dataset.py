@@ -256,7 +256,7 @@ class InstanceSegDataset(Dataset):
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
-                 repeat_reference_prob=0.0):
+                 repeat_reference_prob=0.0, refs_per_image=0):
         self.records = records
         self.indices = list(indices)
         self.image_max_size = image_max_size
@@ -271,6 +271,10 @@ class InstanceSegDataset(Dataset):
         self.small_ref_prob = small_ref_prob
         self.scale_matched_ref = scale_matched_ref
         self.repeat_reference_prob = repeat_reference_prob
+        # > 0 (training only): ask up to this many DIFFERENT families per plan
+        # in one sample -- one reference each, own target union -- instead of
+        # one random question. 0 is the historical sampler, byte-identical.
+        self.refs_per_image = refs_per_image if augment else 0
         # When not augmenting (val / real eval), the reference patch is chosen
         # DETERMINISTICALLY per image so the metric measures the MODEL, not a
         # random "reference lottery" (the dominant epoch-to-epoch noise source).
@@ -310,7 +314,28 @@ class InstanceSegDataset(Dataset):
         # i) so the SAME reference is used every epoch/run -> reproducible metric.
         ref_rng = None if self.augment else random.Random(
             (self.ref_seed * 1_000_003) ^ (i * 65537 + 12345))
-        if len(anns) > 0:
+        multi = self.refs_per_image > 0
+        if multi and len(anns) > 0:
+            # Every question the HF14 protocol asks is "select this family";
+            # one-question-per-plan training reaches each plan's ~12 questions
+            # a few times over a whole run. Here a sample carries K distinct
+            # families (fewer if the plan has fewer; q_valid marks padding).
+            unique_cats = list(dict.fromkeys(cats))
+            fams = (random.sample(unique_cats, self.refs_per_image)
+                    if len(unique_cats) > self.refs_per_image else unique_cats)
+            ref_patches, ref_matches = [], []
+            for fam in fams:
+                cand = [j for j, c in enumerate(cats) if c == fam]
+                bx, by, bw, bh = sample_reference_box(masks[random.choice(cand)],
+                                                      self.min_patch, self.max_patch)
+                ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
+                ref_matches.append(np.array([1.0 if c == fam else 0.0 for c in cats],
+                                            np.float32))
+            q_valid = [1.0] * len(fams) + [0.0] * (self.refs_per_image - len(fams))
+            ref_patches += [ref_patches[0]] * (self.refs_per_image - len(fams))
+            ref_matches += [np.zeros(len(cats), np.float32)] * (self.refs_per_image - len(fams))
+            ref_box_mask = np.zeros((h0, w0), np.uint8)   # anchor unused (anchor-free)
+        elif len(anns) > 0:
             _rc = ref_rng if ref_rng is not None else random
             unique_cats = list(dict.fromkeys(cats))
             repeated_cats = [c for c in unique_cats if cats.count(c) >= 2]
@@ -346,6 +371,12 @@ class InstanceSegDataset(Dataset):
             ref_patch = image[:min(h0, 224), :min(w0, 224)].copy()
             ref_match = np.zeros((0,), np.float32)
             ref_box_mask = np.zeros((h0, w0), np.uint8)
+            if multi:
+                ref_patches = [ref_patch] * self.refs_per_image
+                ref_matches = [ref_match] * self.refs_per_image
+                q_valid = [0.0] * self.refs_per_image
+        if not multi:
+            ref_patches = [ref_patch]
 
         # Aspect-preserving resize of image + masks.
         scale = self.image_max_size / max(h0, w0)
@@ -382,10 +413,10 @@ class InstanceSegDataset(Dataset):
         # a reference token grid, `--corr-grid`, is also a loss: -0.037 at g=4,
         # -0.049 at g=8.)
         if self.scale_matched_ref:
-            ref_r = scale_matched_reference(ref_patch, scale, self.ref_size)
+            refs_r = [scale_matched_reference(rp, scale, self.ref_size) for rp in ref_patches]
         else:
-            ref_r = cv2.resize(ref_patch, (self.ref_size, self.ref_size),
-                               interpolation=cv2.INTER_LINEAR)
+            refs_r = [cv2.resize(rp, (self.ref_size, self.ref_size),
+                                 interpolation=cv2.INTER_LINEAR) for rp in ref_patches]
 
         if self.augment:
             # One flip/rot90 transform shared by image, masks, AND the reference
@@ -398,7 +429,7 @@ class InstanceSegDataset(Dataset):
             hflip, vflip, k = _sample_fliprot()
             image_r = _apply_fliprot_image(image_r, hflip, vflip, k)
             masks_arr = _apply_fliprot_masks(masks_arr, hflip, vflip, k)
-            ref_r = _apply_fliprot_image(ref_r, hflip, vflip, k)
+            refs_r = [_apply_fliprot_image(r, hflip, vflip, k) for r in refs_r]
             # The anchor is a spatial map, so it takes the SAME transform as the
             # image and masks. Leaving it out would point the model at a mirrored
             # location and teach it the anchor is noise.
@@ -408,7 +439,7 @@ class InstanceSegDataset(Dataset):
                 # Train-time only: push synth toward real PDF-export appearance.
                 # Independent draws so scene and reference aren't identically degraded.
                 image_r = _realism_degrade(image_r, random)
-                ref_r = _realism_degrade(ref_r, random)
+                refs_r = [_realism_degrade(r, random) for r in refs_r]
 
             if self.domain_random:
                 # Domain randomization (sim2real): random DOWNSCALE so the model sees
@@ -453,8 +484,19 @@ class InstanceSegDataset(Dataset):
             # Strip colour from both the scene and the reference patch so the
             # synth/real comparison runs on identical (luminance-only) appearance.
             image_r = _to_gray3(image_r)
-            ref_r = _to_gray3(ref_r)
+            refs_r = [_to_gray3(r) for r in refs_r]
 
+        if multi:
+            return {
+                "image": _normalize_chw(image_r),                   # [3, nh, nw]
+                "masks": torch.from_numpy(masks_arr).to(torch.uint8),
+                "ref_matches": torch.from_numpy(np.stack(ref_matches, 0)
+                                                if len(cats) else np.zeros((self.refs_per_image, 0), np.float32)),
+                "references": torch.stack([_normalize_chw(r) for r in refs_r], 0),  # [K, 3, R, R]
+                "q_valid": torch.tensor(q_valid),                   # [K]
+                "ref_box": torch.from_numpy(ref_box_r).float()[None],
+            }
+        ref_r = refs_r[0]
         return {
             "image": _normalize_chw(image_r),                       # [3, nh, nw]
             "masks": torch.from_numpy(masks_arr).to(torch.uint8),   # [G, nh, nw]
@@ -491,6 +533,24 @@ def collate_fn(batch, size_divisible=32, union_only=False):
     ref_boxes = torch.zeros(B, 1, maxH, maxW)
     unions = torch.zeros(B, 1, maxH, maxW, dtype=torch.bool) if union_only else None
     pixel_mask = torch.zeros(B, maxH, maxW, dtype=torch.bool)
+    if "ref_matches" in batch[0]:
+        # --refs-per-image: K questions per plan, flattened plan-major to
+        # [B*K], so row b*K+q is plan b's question q.
+        K = batch[0]["ref_matches"].shape[0]
+        unions = torch.zeros(B * K, 1, maxH, maxW, dtype=torch.bool)
+        for b, sample in enumerate(batch):
+            _, h, w = sample["image"].shape
+            images[b, :, :h, :w] = sample["image"]
+            pixel_mask[b, :h, :w] = True
+            if sample["masks"].shape[0]:
+                for q in range(K):
+                    positive = sample["ref_matches"][q] > 0.5
+                    if bool(positive.any()):
+                        unions[b * K + q, 0, :h, :w] = sample["masks"][positive].any(0)
+        return {"images": images, "pixel_mask": pixel_mask, "ref_boxes": ref_boxes,
+                "references": torch.cat([b["references"] for b in batch], 0),
+                "q_valid": torch.cat([b["q_valid"] for b in batch], 0),
+                "refs_per_image": K, "union": unions, "targets": []}
     references = torch.stack([b["reference"] for b in batch], 0)
 
     targets = []
@@ -566,7 +626,7 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
-                   small_ref_prob=0.0):
+                   small_ref_prob=0.0, refs_per_image=0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -581,7 +641,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   dr_scale_min=dr_scale_min,
                                   small_ref_prob=small_ref_prob,
                                   scale_matched_ref=scale_matched_ref,
-                                  repeat_reference_prob=repeat_reference_prob)
+                                  repeat_reference_prob=repeat_reference_prob,
+                                  refs_per_image=refs_per_image)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,

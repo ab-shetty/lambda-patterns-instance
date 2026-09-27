@@ -564,6 +564,10 @@ resolution column says otherwise. The sampler column is load-bearing.
 | swin_t, no-gray real aug + `--same-fill-new-colour 0.5` synth, infer 4096 | 2048 | 1 | 0.8153 — but validation prefers the unchanged mix (0.791 vs 0.801); data change not supported |
 | swin_t, v7 synth only (1,991) | 2048 | 1 | 0.6834 vs v6d 0.7066 — null (2026-09-23) |
 | v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |
+| **swin_t, Revit-style FreeCAD 1,986 (`generate_synthetic_fc.py --revit --mode-weights 66,16,18`)** | 2048 | 1 | **0.7564** epoch 8 (2026-09-27) — best synthetic-only; val 0.7568; @4096 0.7321 |
+| swin_t, r8 flags 1,991 | 2048 | 1 | 0.6304 epoch 8 — r8 hurts |
+| swin_t, v6d 8k / 16k (5 / 4 epochs) | 2048 | 1 | 0.7367 / 0.7294 |
+| swin_t, v6d 2k, `--refs-per-image 6` | 2048 | 1 | 0.7190 epoch 8 (vs 0.7066 one-question) |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |
 

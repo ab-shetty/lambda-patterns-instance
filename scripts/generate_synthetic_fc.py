@@ -373,6 +373,8 @@ def main():
     ap.add_argument("--mode-weights", default="86,7,7")
     ap.add_argument("--r8", action="store_true", help="the r8 flag set (best probe pool so far)")
     ap.add_argument("--tight-crop", action="store_true")
+    ap.add_argument("--real-labelling", action="store_true",
+                    help="v6's --real-labelling alone (walls labelled, mostly not trim/chimney/foundation)")
     ap.add_argument("--revit", action="store_true",
                     help="elevations drawn Revit-style from the 3D model: cast shadows, line-weight "
                          "hierarchy, level datums, view titles, restrained materials")
@@ -382,6 +384,8 @@ def main():
     flags = dict(R8) if args.r8 else {}
     if args.tight_crop:
         flags["tight_crop_"] = True
+    if args.real_labelling:
+        flags["real_labelling"] = True
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

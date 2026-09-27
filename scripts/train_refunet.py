@@ -132,6 +132,13 @@ def parse_args():
     p.add_argument("--scale-matched-ref", action="store_true",
                    help="crop the reference at the IMAGE's pixel scale instead "
                         "of resizing it to ref-size (median 5.6x magnification).")
+    p.add_argument("--refs-per-image", type=int, default=0,
+                   help="Train on up to K DIFFERENT families per plan per step (one "
+                        "reference each, own union target); the backbone runs once per "
+                        "plan. 0 = one random question per plan (historical). swin only.")
+    p.add_argument("--swin-decoder", choices=("baseline", "selfattn"), default="baseline",
+                   help="selfattn: cross- + self-attention conditioning at 1/16 and 1/32 "
+                        "(refmask2former/attn_condition.py). swin models only.")
     p.add_argument("--init-from")
     p.add_argument("--reset-optimizer", action="store_true",
                    help="On continuation, load model weights and epoch only, then "
@@ -207,6 +214,9 @@ def mask_loss(logits, targets, valid, bce_weight, dice_weight):
 def main():
     args = parse_args()
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
+    if args.refs_per_image > 0 and (not args.model.startswith("swin") or args.compile
+                                    or args.rank_weight > 0 or args.anchor):
+        raise SystemExit("--refs-per-image: swin models, eager, no rank loss / anchor")
     device = torch.device("cuda")
     records = load_local_records(args.local_data)
     train_ds, val_ds = build_datasets(
@@ -214,7 +224,7 @@ def main():
         train_split=args.train_split, seed=args.seed,
         domain_random=args.domain_random, realism_aug=args.realism_aug,
         scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
-        small_ref_prob=args.small_ref_prob)
+        small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,
@@ -240,7 +250,8 @@ def main():
         # Vision-transformer backbone, same decoder. See ref_swin_unet.py.
         model = RefSwinUNet(args.width, pretrained=args.init_from is None,
                             backbone=args.model,
-                            corr_grid=args.corr_grid).to(device)
+                            corr_grid=args.corr_grid,
+                            decoder=args.swin_decoder).to(device)
     else:
         model = RefUNet(args.width, pretrained=args.init_from is None,
                         corr_grid=args.corr_grid,
@@ -305,6 +316,25 @@ def main():
             valid = batch["pixel_mask"].to(device, non_blocking=True)[:, None].float()
             targets = union_targets(batch, device)
             optimizer.zero_grad(set_to_none=True)
+            if args.refs_per_image > 0:
+                # K questions per plan; padding questions (plans with fewer
+                # families than K) are dropped before the loss.
+                k = batch["refs_per_image"]
+                keep = batch["q_valid"].to(device) > 0.5
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    logits = model.forward_multi(images, references, k)
+                    loss, bce, dice = mask_loss(logits[keep], targets[keep],
+                                                valid.repeat_interleave(k, 0)[keep],
+                                                args.bce_weight, args.dice_weight)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
+                optimizer.step(); scheduler.step()
+                running.append(loss.detach())
+                if len(running) % 20 == 0:
+                    progress.set_postfix(loss=f"{float(loss):.3f}",
+                                         bce=f"{float(bce):.3f}",
+                                         dice=f"{float(dice):.3f}")
+                continue
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 ref_boxes = (batch["ref_boxes"].to(device, non_blocking=True)
                              if args.anchor else None)

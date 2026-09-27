@@ -42,7 +42,8 @@ if _m == "crossattn":
 elif str(_m) in DINO_BACKBONES:
     model = RefDinoUNet(width, pretrained=False, backbone=str(_m))
 elif str(_m).startswith("swin"):
-    model = RefSwinUNet(width, pretrained=False, backbone=str(_m))
+    model = RefSwinUNet(width, pretrained=False, backbone=str(_m),
+                        decoder=str(args.get("swin_decoder", "baseline")))
 else:
     model = RefUNet(width, pretrained=False)
 model.load_state_dict(ck["model"]); model = model.cuda().eval()

@@ -67,7 +67,8 @@ def load_refunet(checkpoint_path, device):
     elif str(args.get("model", "unet")).startswith("swin"):
         model = RefSwinUNet(width=int(args.get("width", 128)), pretrained=False,
                             backbone=str(args["model"]),
-                            corr_grid=int(args.get("corr_grid", 0) or 0)).to(device)
+                            corr_grid=int(args.get("corr_grid", 0) or 0),
+                            decoder=str(args.get("swin_decoder", "baseline"))).to(device)
     else:
         # `anchor` must be rebuilt from the saved args: it widens the stem to 4
         # channels, so an anchored checkpoint cannot load into a default model.
