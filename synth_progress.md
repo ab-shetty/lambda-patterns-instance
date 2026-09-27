@@ -22,8 +22,12 @@ below "Log".
   change before it lost or tied: v6e look-alike pairs (negative), v7 (-0.023),
   `--hardscape-plan` / `--same-fill-subtle` (null, 3 seeds), `--mottle`
   (null), v5 confusable pairs (-0.104), **r8 (-0.076 HF14, 2026-09-27)**.
-- **Best synthetic-only:** Revit 2k, swin_t @2048, **HF14 0.7564** (one
-  seed). Previous: v6d 100k single pass on RefUNet 0.7130; swin_t v6d 1,995
+- **Best synthetic-only:** Revit 2k + `--refs-per-image 6`, swin_t @2048,
+  only 4 epochs (VM deadline): **val 0.7816, HF14 0.7607**
+  (`abshetty/floz-refunet-swint-revit2k-sixq-e4`, one seed) -- vs one-question
+  Revit (9 epochs) +0.025 val / +0.004 HF14, both noise, at under half the
+  epochs. One-question Revit 2k: HF14 0.7564
+  (`abshetty/floz-refunet-swint-revit2k-e8`). Previous: v6d 100k single pass on RefUNet 0.7130; swin_t v6d 1,995
   0.7066 (`abshetty/floz-refunet-swint-v6d-e8`).
 - **Realism probe** (vs val 14): r8 0.909 < v6d 0.948 < FreeCAD 0.954 <
   Revit 0.960 -- and on HF14 the order is REVERSED (Revit best, r8 worst).
@@ -144,8 +148,9 @@ scores 0.507 on fresh v6d, the v6d model 0.724 on fresh Revit.
   0.741 -> 0.765 and fresh 0.727 -> 0.745, against a 0.904 ceiling; val
   0.688 -> 0.705, HF14 0.719 -> 0.707 (noise). Next suspect: conditioning /
   capacity. Untested: `--swin-decoder selfattn` (code in, CPU-checked; in the
-  frozen screen it only TIED baseline at the best LR), Revit + six-question
-  (`./run_multiref.sh 7 revit`).
+  frozen screen it only TIED baseline at the best LR). Revit + six-question
+  ran for 4 epochs only (see "Best synthetic-only"); a full 1+8 run is
+  `./run_multiref.sh 7 revit`.
 - Second seed for Revit 2k; `--vocab2` screen; second seed at 2560.
 
 ## Log

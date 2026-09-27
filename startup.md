@@ -568,6 +568,7 @@ resolution column says otherwise. The sampler column is load-bearing.
 | swin_t, r8 flags 1,991 | 2048 | 1 | 0.6304 epoch 8 — r8 hurts |
 | swin_t, v6d 8k / 16k (5 / 4 epochs) | 2048 | 1 | 0.7367 / 0.7294 |
 | swin_t, v6d 2k, `--refs-per-image 6` | 2048 | 1 | 0.7190 epoch 8 (vs 0.7066 one-question) |
+| **swin_t, Revit 2k, `--refs-per-image 6`, 1+4 epochs** | 2048 | 1 | **0.7607** (val 0.7816) — best synthetic-only (2026-09-27) |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |
 

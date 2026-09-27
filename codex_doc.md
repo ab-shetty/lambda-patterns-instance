@@ -17,6 +17,8 @@ see the 2026-09-26 log entry for the install).
    swin_t: 2k synth-only @2048, HF14 0.7564 vs 0.7066, val 0.7568 vs 0.6702
    (`abshetty/floz-refunet-swint-revit2k-e8`). It is the renderer, not the
    FreeCAD geometry. One seed, and at 4096 inference the lead is only +0.016.
+   With `--refs-per-image 6` (4 epochs): val 0.7816 / HF14 0.7607, the best
+   synthetic-only result (`abshetty/floz-refunet-swint-revit2k-sixq-e4`).
    **Next: swap it into the real + Gemini mix** -- the user deferred this.
 2. **Screen synthetic changes at 2048, not 1024.** The 1024 screen flipped the
    sign of r8 on validation. `run_revit_2k.sh` is the recipe.
