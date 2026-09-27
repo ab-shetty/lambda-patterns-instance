@@ -138,9 +138,12 @@ scores 0.507 on fresh v6d, the v6d model 0.724 on fresh Revit.
 
 - **Revit in the real + Gemini mix** (swap for v6d_1600 in `v6dmix_plus_r4`):
   the only test of whether it helps the shipped model.
-- **The ~0.74 grouping wall.** Step budget (A: six-question model + one fresh
-  9-epoch cosine) was running when the VM died -- result below if it
-  finished. Untested: `--swin-decoder selfattn` (code in, CPU-checked; in the
+- **The ~0.74 grouping wall is not mainly step budget** (2026-09-27): one
+  fresh 9-epoch cosine on the six-question model (2x steps, epoch 17,
+  `abshetty/floz-refunet-swint-v6d2k-sixq-restart-e17`) moved own-plan fit
+  0.741 -> 0.765 and fresh 0.727 -> 0.745, against a 0.904 ceiling; val
+  0.688 -> 0.705, HF14 0.719 -> 0.707 (noise). Next suspect: conditioning /
+  capacity. Untested: `--swin-decoder selfattn` (code in, CPU-checked; in the
   frozen screen it only TIED baseline at the best LR), Revit + six-question
   (`./run_multiref.sh 7 revit`).
 - Second seed for Revit 2k; `--vocab2` screen; second seed at 2560.

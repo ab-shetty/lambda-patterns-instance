@@ -25,9 +25,10 @@ see the 2026-09-26 log entry for the install).
    probe ranked r8 best and Revit worst -- it does not predict training value.
 4. **swin_t underfits grouping at ~0.74** (own training plans, HF14 protocol,
    ceiling 0.904); v6d volume flattens toward ~0.77. `--refs-per-image 6`
-   reaches the 16k level with 2k plans but not past the wall. The step-budget
-   test and `--swin-decoder selfattn` are the queued next steps
-   (`run_multiref.sh`).
+   reaches the 16k level with 2k plans but not past the wall, and doubling
+   the steps adds only +0.02 (own-plan fit 0.765). The limit is the model:
+   `--swin-decoder selfattn` (code in, never trained) is the next test
+   (`DEC=selfattn TAG=selfattn ./run_multiref.sh 7 v6d`).
 
 ## Pick up here (2026-09-24)
 
