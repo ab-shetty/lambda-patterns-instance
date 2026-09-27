@@ -26,7 +26,7 @@ below "Log".
   only 4 epochs (VM deadline): **val 0.7816, HF14 0.7607**
   (`abshetty/floz-refunet-swint-revit2k-sixq-e4`, one seed) -- vs one-question
   Revit (9 epochs) +0.025 val / +0.004 HF14, both noise, at under half the
-  epochs. One-question Revit 2k: HF14 0.7564
+  epochs; fresh Revit plans (HF14 protocol) 0.789 vs 0.758. One-question Revit 2k: HF14 0.7564
   (`abshetty/floz-refunet-swint-revit2k-e8`). Previous: v6d 100k single pass on RefUNet 0.7130; swin_t v6d 1,995
   0.7066 (`abshetty/floz-refunet-swint-v6d-e8`).
 - **Realism probe** (vs val 14): r8 0.909 < v6d 0.948 < FreeCAD 0.954 <
