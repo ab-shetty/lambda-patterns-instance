@@ -291,3 +291,28 @@ with no trend; val-selected e18 @4096 -> **HF14 0.8165**, -0.027 paired vs
 0.8440 (p=0.050), 7 better / 24 worse (sign p=0.003) -- broad, not one sheet.
 The six-question fit gain on synthetic does not carry to real. Best stays
 0.8440 (`data/runs/ck_mix_roiadd_dr/swa_12-15.pth`).
+
+### 2026-09-28 — where Revit beats v6d, per question (CPU re-score)
+
+Published `swint-revit2k-e8` vs `swint-v6d-e8`, 2048, re-scored on CPU
+(reproduces 0.7566 / 0.7078 HF14, 0.7574 / 0.6719 val).
+`scripts/per_question_breakdown.py` with hand-tagged sheet types.
+
+| sheet type (HF14 + val questions) | n | v6d | Revit | delta | better / worse |
+|---|---:|---:|---:|---:|---|
+| line-only CAD elevations (8-10, 13, 14) | 34 | 0.57 | 0.70 | **+0.13** | 30 / 3 |
+| colour-markup elevations (17-27) | 64 | 0.71 | 0.78 | +0.07 | 36 / 7 |
+| shaded Revit elevations (2-6) | 17 | 0.80 | 0.85 | +0.05 | 12 / 2 |
+| floor plans (0, 7, 11, 12) | 8 | 0.56 | 0.56 | 0.00 | 3 / 3 |
+| roof plans (1, 15, 16) | 6 | 0.92 | 0.81 | **-0.11** | 0 / 4 |
+
+- The gain is in questions v6d OVER-selects (>1.3x the target): +0.07 HF14,
+  +0.19 val (32 better / 6 worse), about half and 70% of the delta. Revit
+  reduces the look-alike over-selection that is the shipped model's main loss.
+- Small boxes gain too: 32-64 px +0.10 HF14 / +0.12 val.
+- Multi-family sheets gain; single-family sheets are flat (-0.01 / -0.02).
+- Val 17 is 53% of the val gain (0.570 -> 0.699, 23 / 0 better/worse).
+- Revit loses only on plans: roof plans (4 of 6 worse) and floor plan HF14
+  12 (0.44 -> 0.36). Those pool sheets are still v6-drawn (34% of the pool,
+  same as v6d), so the loss is elevation-heavy training, not worse plan data.
+  Generator next: Revit-style roof and floor plans from the same houses.
