@@ -141,8 +141,27 @@ FreeCAD (`scripts/generate_synthetic_fc.py`, `scripts/fc_massing.py`,
 Revit model on its own fresh plans (HF14 protocol) 0.758 = its HF14 0.756; it
 scores 0.507 on fresh v6d, the v6d model 0.724 on fresh Revit.
 
+`--revit --revit-plans` (2026-09-28, `scripts/revit_plans.py`; untrained): roof
+and floor plans drawn Revit-style too, replacing the v6 plan sheets that are 34%
+of the Revit pool (the only sheet types where Revit lost to v6d). Roof plans
+take the roof faces of the FreeCAD model seen from above: all pitched surfaces
+one family (flat roofs labelled only on all-flat houses or sometimes when
+patterned), hatch parallel to each eave / global fine shingle / diagonal
+crosshatch / dark fill / sun-shaded greys, grid bubbles over the roof, section
+heads, slope arrows, ridge text, trellis slats, 1-3 building copies. Floor plans
+label exterior hardscape (flagstone / ashlar / deck boards / pavers / basketweave;
+20% two families) and 30% an interior finish region, over poche walls, drop
+shadows, textured floors, rugs, room tags, tick dimension chains, MEP overlay.
+Off = byte-identical `--revit` pool (checked, 32/32 files). 200 sheets in 56 s on
+4 CPUs, 0 failures. Pool for the screen: `--n 2000 --seed 6 --start 0
+--mode-weights 66,16,18 --revit --revit-plans` (same ids as `revit_train2000`,
+so only the plan sheets differ).
+
 ## Open
 
+- **`--revit --revit-plans` synth-only screen** vs the published Revit 2k
+  (`run_revit_2k.sh` recipe, one seed): does it recover roof / floor plans
+  without losing elevations? Read with `scripts/per_question_breakdown.py`.
 - **Revit in the real + Gemini mix** (swap for v6d_1600 in `v6dmix_plus_r4`):
   the only test of whether it helps the shipped model.
 - **The ~0.74 grouping wall is not mainly step budget** (2026-09-27): one

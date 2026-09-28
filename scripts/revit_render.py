@@ -10,7 +10,7 @@ What makes a Revit elevation read as one, all computed from the fused solids:
   * annotation: dashed level datums with the quartered target head, view title
     with a number bubble line and scale, occasional material tags -- no trees,
     neighbours or scribbles.
-Roof and floor plan sheets fall through to v6. Labels follow v6's rules and the
+Roof and floor plan sheets fall through to v6 unless --revit-plans (revit_plans.py). Labels follow v6's rules and the
 annotation JSON is v6's format, so tight-crop / real-labelling / res-degrade in
 v6's _job apply unchanged.
 """
@@ -28,17 +28,28 @@ FC = None     # generate_synthetic_fc
 _ORIG_COMPOSE = None
 
 
-def install(g, fc):
+PLANS = [False]      # --revit-plans: roof / floor plans drawn by revit_plans.py too
+
+
+def install(g, fc, plans=False):
     global G, FC, _ORIG_COMPOSE
     G, FC = g, fc
     _ORIG_COMPOSE = g.compose
     g.compose = compose
+    PLANS[0] = plans
+    if plans:
+        import revit_plans
+        revit_plans.install(g, fc)
 
 
 def compose(image_id, seed, mode_weights):
     rng = random.Random(seed * 1_000_003 + image_id)
     mode = rng.choices(list(mode_weights.keys()), weights=list(mode_weights.values()))[0]
     if mode != "elevation":
+        if PLANS[0]:
+            import revit_plans
+            return (revit_plans.compose_roof if mode == "roof_plan" else revit_plans.compose_floor)(
+                image_id, seed, mode_weights)
         return _ORIG_COMPOSE(image_id, seed, mode_weights)
     return compose_revit(image_id, seed, mode_weights)
 

@@ -347,13 +347,13 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
 # ----------------------------------------------------------------------------
 # driver
 # ----------------------------------------------------------------------------
-def _init(out, seed, mw, flags, faces, revit=False):
+def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False):
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
     if revit:
         import revit_render
-        revit_render.install(G, sys.modules[__name__])
+        revit_render.install(G, sys.modules[__name__], plans=revit_plans)
 
 
 def _job(image_id):
@@ -378,7 +378,12 @@ def main():
     ap.add_argument("--revit", action="store_true",
                     help="elevations drawn Revit-style from the 3D model: cast shadows, line-weight "
                          "hierarchy, level datums, view titles, restrained materials")
+    ap.add_argument("--revit-plans", action="store_true",
+                    help="with --revit: roof plans (from the 3D model's roof faces) and floor plans drawn "
+                         "Revit-style too (scripts/revit_plans.py); off = v6 plans, byte-identical")
     args = ap.parse_args()
+    if args.revit_plans and not args.revit:
+        ap.error("--revit-plans needs --revit")
     e, r, f = [float(v) for v in args.mode_weights.split(",")]
     mw = {"elevation": e, "roof_plan": r, "freeform": f}
     flags = dict(R8) if args.r8 else {}
@@ -395,7 +400,7 @@ def main():
     faces = {s["id"]: (s, raw[str(s["id"])]) for s in specs if isinstance(raw.get(str(s["id"])), list)}
     print(f"massing {len(faces)}/{len(ids)} in {time.time() - t0:.0f}s", flush=True)
     ok, modes = 0, {}
-    with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw, flags, faces, args.revit)) as pool:
+    with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw, flags, faces, args.revit, args.revit_plans)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
@@ -404,7 +409,8 @@ def main():
                 print(f"{i + 1}/{len(ids)} ok={ok} {time.time() - t0:.0f}s {modes}", flush=True)
     with open(os.path.join(args.out, "generation_manifest.json"), "w") as fo:
         json.dump({"generator": "scripts/generate_synthetic_fc.py", "n": args.n, "seed": args.seed,
-                   "start": args.start, "ok": ok, "modes": modes, "mode_weights": mw, "flags": flags, "revit": args.revit}, fo, indent=2)
+                   "start": args.start, "ok": ok, "modes": modes, "mode_weights": mw, "flags": flags, "revit": args.revit,
+                   "revit_plans": args.revit_plans}, fo, indent=2)
 
 
 if __name__ == "__main__":
