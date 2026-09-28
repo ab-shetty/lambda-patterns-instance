@@ -15,7 +15,7 @@ Detail: `synth_progress.md` Log 2026-09-28. Goal is 0.90 on REAL (HF14).
    infer 4096, round-trip verified): the shipped restart recipe + `--roi-ref
    --roi-ref-mode add` (reference prototype also pooled from the image's own
    features inside the user's box). +0.027 paired over 0.8170, p=0.017.
-   Seed replicate not run (user's call). Recipe: `CK=data/runs/ck_mix_roiadd_dr
+   No seed replicate: one seed per arm from here (user's call). Recipe: `CK=data/runs/ck_mix_roiadd_dr
    EXTRA="--roi-ref --roi-ref-mode add" ./run_restart_swa.sh` on
    `v6dmix_plus_r4` (build it with `run_best_mix.sh`'s data section).
    - **Keep `--domain-random`**: the same run without it val-selects a val-17

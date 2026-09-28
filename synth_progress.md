@@ -5,13 +5,16 @@ in `synth_progress_archive.md`, Part 1, under its original heading; other docs'
 references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
-## Current state (2026-09-27)
+## Current state (2026-09-28)
 
-- **Best model:** a completed restart (`run_restart_swa.sh`, epoch 13) of
-  `abshetty/floz-refunet-swint-mixr4-e8`, inference at 4096 (chosen on
-  validation; 4096-5120 is the plateau): **HF14 0.8170**, vs 0.7887 for the
-  published e8 at 2048. TTA x4 (+0.0015) and multi-scale inference (0.8123) not
-  adopted.
+- **Best model:** `abshetty/floz-refunet-swint-mixr4-roiadd-swa15`, the
+  restart recipe (`run_restart_swa.sh` from `mixr4-e8`) plus `--roi-ref
+  --roi-ref-mode add`, inference at 4096: **HF14 0.8440** (+0.027 paired vs
+  0.8170, p=0.017; one seed). Previous: `...-mixr4-restart-e13`, 0.8170.
+  TTA x4 (+0.0015) and multi-scale inference (0.8123) not adopted.
+- **Seeds: one per arm from here** (user's call, 2026-09-28): at ~0.85, judge
+  a change by the paired per-question test on HF14 against its same-recipe
+  control; no seed replicates.
 - **Synthetic source: Revit-style FreeCAD sheets beat v6d** (2026-09-27, one
   seed, synth-only, 2k @2048): `scripts/generate_synthetic_fc.py --revit
   --mode-weights 66,16,18` gives **HF14 0.7564 / val 0.7568** against v6d's
@@ -151,7 +154,7 @@ scores 0.507 on fresh v6d, the v6d model 0.724 on fresh Revit.
   frozen screen it only TIED baseline at the best LR). Revit + six-question
   ran for 4 epochs only (see "Best synthetic-only"); a full 1+8 run is
   `./run_multiref.sh 7 revit`.
-- Second seed for Revit 2k; `--vocab2` screen; second seed at 2560.
+- `--vocab2` screen.
 
 ## Log
 
@@ -253,8 +256,9 @@ shipped restart (`run_restart_swa.sh` from `mixr4-e8`, DR on, one question per
 plan) + `--roi-ref --roi-ref-mode add`; validation chose swa_12-15 @4096. No
 small-box regression (<50 px 0.900 -> 0.897); gains on 50-100 px (+0.030) and
 >=100 px (+0.030) boxes; the shipped model's over-selected questions 0.425 ->
-0.504. Val 17 untouched. ONE SEED -- seed 31 queued (`logs/queue6.sh`); mix
-without DR queued before it (the DR-on-real A/B).
+0.504. Val 17 untouched. ONE SEED -- the seed-31 replicate queued in
+`logs/queue6.sh` was dropped (no multi-seed runs at ~0.85, user's call); the
+no-DR mix queued before it ran (below).
 
 Control reproduced exactly on this machine: `mixr4-restart-e13` @4096 = 0.8170.
 Rebuilt `v6dmix_plus_r4` = 6,676 records (recorded 6,671; augmentation is
