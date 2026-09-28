@@ -68,7 +68,10 @@ def load_refunet(checkpoint_path, device):
         model = RefSwinUNet(width=int(args.get("width", 128)), pretrained=False,
                             backbone=str(args["model"]),
                             corr_grid=int(args.get("corr_grid", 0) or 0),
-                            decoder=str(args.get("swin_decoder", "baseline"))).to(device)
+                            decoder=str(args.get("swin_decoder", "baseline")),
+                            roi_ref=bool(args.get("roi_ref", False)),
+                            roi_mode=str(args.get("roi_ref_mode", "replace")),
+                            roi_min_cells=float(args.get("roi_min_cells", 0.0) or 0.0)).to(device)
     else:
         # `anchor` must be rebuilt from the saved args: it widens the stem to 4
         # channels, so an anchored checkpoint cannot load into a default model.
@@ -124,7 +127,7 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                 # was trained on. Built at native size, then resized with the
                 # image so it stays pixel-aligned.
                 ref_box = None
-                if getattr(model, "anchor", False):
+                if getattr(model, "anchor", False) or getattr(model, "roi_ref", False):
                     box_native = np.zeros((h0, w0), np.uint8)
                     box_native[y:y + h, x:x + w] = 1
                     ref_box = torch.from_numpy(

@@ -198,3 +198,92 @@ drivers: `run_res_calibration.sh` (+ `scripts/res_calibration_report.py`),
   `refmask2former/attn_condition.py`) at 1/16 and 1/32; published baseline
   checkpoints still load strictly.
 
+
+### 2026-09-28 — the grouping wall was the reference and the shrink; image-box reference on real: 0.8440
+
+One seed throughout (seed 7), swin_t, 2048 training. Drivers: `run_overfit64.sh`,
+`run_multiref.sh` (env `NODR`, `EXTRA`), `run_restart_swa.sh` (env `EXTRA`,
+`NODR`, `CMP`, `SEED`); scorers `scripts/fit_diagnose.py` (per-question error
+decomposition), `scripts/clean_loss.py` (un-augmented loss, comparable across
+DR / no-DR runs), `scripts/export_reference_boxes.py` (the 28 real sheets with
+the evaluator's exact boxes).
+
+**Not data, not steps.** The six-question Revit model fits its own plans no
+better than fresh ones (0.785 vs 0.789, ceiling 0.960). Memorising 64 Revit
+plans (60 epochs, 2 plans x 6 questions) reaches only 0.799 (ceiling 0.957).
+Backbone LR x10: 0.719. `--swin-decoder selfattn`: 0.762 (worse; it had never
+run at 2048 because `attn_condition.py` fed non-contiguous tensors to SDPA,
+forcing the 27 GiB math kernel -- fixed with `.contiguous()`, 2 GiB).
+
+**Two causes, 64-plan overfit (IoU / thin<40px / wrong regions per q / missed per q):**
+
+| arm | IoU | thin | wrong | missed |
+|---|---:|---:|---:|---:|
+| base | 0.799 | 0.715 | 0.35 | 0.35 |
+| `--roi-ref` (prototype pooled from the IMAGE's features in the box) | 0.822 | 0.764 | 0.12 | 0.54 |
+| `--roi-ref-mode add` (crop prototype + zero-init ROI projection) | 0.841 | 0.784 | 0.17 | 0.33 |
+| no `--domain-random` | 0.865 | 0.805 | 0.27 | 0.31 |
+| roi replace + no DR | **0.901** | 0.859 | 0.09 | 0.24 |
+| roi add + no DR | 0.895 | 0.842 | 0.14 | 0.18 |
+
+1. The 224 px crop is magnified ~5x relative to the plan and encoded
+   separately, so reference and targets meet at different scales; colour/tone
+   is the only scale-free cue and the model matches on it (dark tile ->
+   dark walls). Pooling the prototype from the image's own features fixes
+   wrong-family picks.
+2. `--domain-random`'s 0.4-1.0x shrink makes thin targets thinner in training.
+
+**At 2k (six-question, ROI add, no DR, 1+8 epochs):** own plans 0.786 ->
+**0.887**, fresh 0.789 -> 0.872; clean loss 0.268 -> 0.108 (train), 0.255 ->
+0.071 (held-out). But val 0.7816 -> 0.718 (paired -0.063, p=0.013; 55% one
+sheet) and HF14 0.7607 -> 0.743 (noise). **All of it is small user boxes**
+(side at 2048 input): <32 px -0.44, 32-64 -0.088, >=64 +0.01. A sub-cell box
+pools background at 1/16-1/32, and without DR synthetic training has no small
+boxes. `--roi-min-cells` (coverage-gated ROI term) is written, untested.
+
+**Small boxes are answerable -- do not reject them in the UI.** The shipped
+0.8170 model scores 0.827 on the 21 questions under 50 px (val17 q13, a flat
+lavender 34 px patch: 0.810); only val17 q00 fails every model. Its remaining
+loss is over-selection instead: 8 HF14 questions predicting >1.3x the target
+hold 48% of it (val: 9 questions, 51%; val 17 alone is 72% of val's loss).
+
+**On the real mix: HF14 0.8440** (+0.0269 paired vs the shipped 0.8170,
+p=0.017, 16 better / 6 worse / 30 tied; val 0.8150 vs 0.808). Recipe = the
+shipped restart (`run_restart_swa.sh` from `mixr4-e8`, DR on, one question per
+plan) + `--roi-ref --roi-ref-mode add`; validation chose swa_12-15 @4096. No
+small-box regression (<50 px 0.900 -> 0.897); gains on 50-100 px (+0.030) and
+>=100 px (+0.030) boxes; the shipped model's over-selected questions 0.425 ->
+0.504. Val 17 untouched. ONE SEED -- seed 31 queued (`logs/queue6.sh`); mix
+without DR queued before it (the DR-on-real A/B).
+
+Control reproduced exactly on this machine: `mixr4-restart-e13` @4096 = 0.8170.
+Rebuilt `v6dmix_plus_r4` = 6,676 records (recorded 6,671; augmentation is
+chunked, not byte-identical).
+
+**Domain-random on real (mix, ROI add, restart from `mixr4-e8`, seed 7):** without
+DR the val-selected checkpoint scores **HF14 0.8583** (e10 @4096, val 0.8547;
++0.041 paired vs 0.8170, p=0.060, 19 better / 14 worse) -- but e10 is a val-17
+spike (sheet 17: 0.51 -> 0.79 -> 0.49 over e9-e11; 27 of 77 val questions).
+Without sheet 17, DR beats no-DR at all 12 candidates (+0.01 to +0.04) and
+no-DR degrades over the restart (0.913 e8 -> 0.875 e14) while DR holds ~0.92.
+**Keep `--domain-random`.** Record 0.8583 as a val-17 lottery, not a recipe.
+
+**Box-size probe (`scripts/box_size_probe.py`, 0.8440 model, @4096, CPU):**
+every question it scores < 0.6 (9 val + 6 HF14: val 17's band x10, HF14 0
+paving vs floor tile, HF14 18 roof vs band, HF14 12, 25), re-asked with
+larger boxes inside the SAME instance. Mean IoU: evaluator box 0.277, largest
+square <= 512 px 0.278, largest uncapped 0.276, square crop + ROI box
+elongated along the region (<= 4x, the thin rectangle a user draws on a band)
+0.278. Over-selection stays 2-8x the target. **The remaining failures are not
+reference-information limited: the model cannot separate these look-alike
+materials even from the largest box a user could draw.** No inference-time box
+trick or UI guidance reaches 0.90; the fix has to be learned (data/training on
+look-alike pairs).
+
+**Six-question training on the real mix: negative.** Restart from the 0.8440
+checkpoint (same mix, DR, ROI add, `--refs-per-image 6 --batch-size 3`, 8
+epochs, `data/runs/ck_mix_sixq_from844`): val swings 0.753-0.843 per epoch
+with no trend; val-selected e18 @4096 -> **HF14 0.8165**, -0.027 paired vs
+0.8440 (p=0.050), 7 better / 24 worse (sign p=0.003) -- broad, not one sheet.
+The six-question fit gain on synthetic does not carry to real. Best stays
+0.8440 (`data/runs/ck_mix_roiadd_dr/swa_12-15.pth`).

@@ -1,11 +1,37 @@
 # Handoff
 
-Last updated: 2026-09-20
+Last updated: 2026-09-28
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-09-28)
+
+Detail: `synth_progress.md` Log 2026-09-28. Goal is 0.90 on REAL (HF14).
+
+1. **HF14 0.8440, one seed** (`data/runs/ck_mix_roiadd_dr/swa_12-15.pth`, infer
+   4096, not yet published): the shipped restart recipe + `--roi-ref
+   --roi-ref-mode add` (reference prototype also pooled from the image's own
+   features inside the user's box). +0.027 paired over 0.8170, p=0.017.
+   Seed replicate not run (user's call). If the checkpoint was not published
+   before the VM closed, rebuild: `CK=data/runs/ck_mix_roiadd_dr
+   EXTRA="--roi-ref --roi-ref-mode add" ./run_restart_swa.sh` on the rebuilt
+   `v6dmix_plus_r4` (`run_best_mix.sh` data section).
+   - **Keep `--domain-random`**: the same run without it val-selects a val-17
+     spike (HF14 0.8583 by protocol) but loses to DR at all 12 candidates once
+     sheet 17 is excluded, and degrades over the restart.
+   - **Six-question training on the mix is negative** (0.8165, 7 better / 24
+     worse vs 0.8440).
+2. The ~0.74 own-plan "wall" was the magnified crop reference (tone matching)
+   and the DR shrink, not the model's capacity: ROI + no DR fits 64 plans to
+   0.901 and 2k plans to 0.887. No DR breaks small real boxes, though.
+3. Remaining real loss is over-selection (about half on both splits) and val
+   17. The box-size probe rules out reference information: bigger / longer
+   boxes inside the same instance leave the 15 failing questions at 0.278
+   (vs 0.277). It is look-alike discrimination -- next session's lever. Small boxes are NOT a loss source for the shipped model (0.827 on
+   the 21 under 50 px): do not add a minimum box size to the UI.
 
 ## Pick up here (2026-09-27)
 

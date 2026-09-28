@@ -561,6 +561,7 @@ resolution column says otherwise. The sampler column is load-bearing.
 | **swin_t**, gemini r234 only (168 src), 20 ep | 1280 | 1 | **0.7148** val-sel; hard train IoU 0.9257 — **+0.112 on identical fit** |
 | **swin_t**, `v6dmix_plus_r4` (282 src, 6,671 rec) | **2048** | 1 | **0.7887** val-sel (2026-09-21) — **best recorded**, still rising at the final epoch |
 | **swin_t**, `v6dmix_plus_r4` + 1 restart, **inference 4096** | 2048 | 1 | **0.8170** val-sel (2026-09-24) — **best recorded**; same model @2048 inference not read |
+| **swin_t, `v6dmix_plus_r4` + 1 restart + `--roi-ref --roi-ref-mode add`, infer 4096** | 2048 | 1 | **0.8440** val-sel (2026-09-28) -- +0.027 paired vs 0.8170 (p=0.017); second seed pending |
 | swin_t, no-gray real aug + `--same-fill-new-colour 0.5` synth, infer 4096 | 2048 | 1 | 0.8153 — but validation prefers the unchanged mix (0.791 vs 0.801); data change not supported |
 | swin_t, v7 synth only (1,991) | 2048 | 1 | 0.6834 vs v6d 0.7066 — null (2026-09-23) |
 | v6d-only 100,000, single-pass (2 epochs) | 2048 | 1 | 0.7130 — no real data at all |

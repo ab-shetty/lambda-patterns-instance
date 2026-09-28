@@ -44,8 +44,25 @@ class RefSwinUNet(nn.Module):
     """Swin backbone + the unchanged reference-conditioned FPN decoder."""
 
     def __init__(self, width=128, pretrained=True, backbone="swin_b",
-                 corr_grid=0, decoder="baseline"):
+                 corr_grid=0, decoder="baseline", roi_ref=False, roi_mode="replace",
+                 roi_min_cells=0.0):
         super().__init__()
+        # roi_ref (2026-09-27, diagnostic): take each level's prototype from
+        # the IMAGE's own features inside the user's box instead of from the
+        # separately encoded 224 px crop. The crop is magnified ~5x relative
+        # to the plan, so the siamese comparison is across scales; pooling
+        # from the image puts reference and targets at one scale and context.
+        self.roi_ref = bool(roi_ref)
+        # roi_mode "add": keep the crop prototype and ADD a zero-initialised
+        # projection of the image-ROI prototype (starts identical to baseline).
+        if roi_mode not in ("replace", "add"):
+            raise ValueError(f"unknown roi_mode {roi_mode!r}")
+        self.roi_mode = roi_mode
+        # roi_min_cells > 0: per level, scale the ROI term by
+        # min(1, box coverage in feature cells / roi_min_cells). A box smaller
+        # than a coarse cell pools mostly its surroundings (real plans: many
+        # 20-60 px boxes at 2048 input), so there the crop prototype wins.
+        self.roi_min_cells = float(roi_min_cells)
         import torchvision.models as tvm
         if backbone not in SWIN_CHANNELS:
             raise ValueError(f"unknown swin backbone {backbone!r}")
@@ -70,6 +87,10 @@ class RefSwinUNet(nn.Module):
             CrossAttnCondition(c, c, width, num_heads=4, self_attn=True) if i in attn
             else ConditionBlock(c, c, width, corr_grid=(0 if i == 0 else corr_grid))
             for i, c in enumerate(channels))
+        if self.roi_ref and roi_mode == "add":
+            self.roi_proj = nn.ModuleList(nn.Linear(c, c) for c in channels)
+            for lin in self.roi_proj:
+                nn.init.zeros_(lin.weight); nn.init.zeros_(lin.bias)
         self.smooth = nn.ModuleList(
             nn.Sequential(nn.Conv2d(width, width, 3, padding=1, bias=False),
                           nn.GroupNorm(8, width), nn.GELU())
@@ -98,16 +119,35 @@ class RefSwinUNet(nn.Module):
             pyramid = self.smooth[level](pyramid + conditioned[level])
         return self.head(pyramid)
 
+    def roi_prototypes(self, image_features, boxes, fallback):
+        """Box-weighted mean of each image feature level; `boxes` is
+        [N, 1, H, W] at input scale. Falls back to the crop prototype where a
+        box covers no feature cell."""
+        out = []
+        for f, fb in zip(image_features, fallback):
+            w = F.interpolate(boxes.to(f.dtype), size=f.shape[-2:], mode="area")
+            mass = w.flatten(1).sum(1)
+            p = (f * w).flatten(2).sum(2) / mass[:, None].clamp(min=1e-6)
+            ok = (mass > 1e-3).to(f.dtype)[:, None]
+            if getattr(self, "roi_min_cells", 0.0) > 0:
+                ok = ok * (mass / self.roi_min_cells).clamp(max=1.0).to(f.dtype)[:, None]
+            out.append(p * ok + fb * (1 - ok))
+        if getattr(self, "roi_mode", "replace") == "add":
+            return [fb + proj(p - fb) for fb, proj, p in zip(fallback, self.roi_proj, out)]
+        return out
+
     def forward(self, image, reference, ref_box=None, return_embeddings=False,
                 return_aux=False):
-        # `ref_box` is accepted and ignored: this variant is anchor-free, which
-        # is the documented default (see "Deliberately anchor-free" in
+        # `ref_box` is ignored unless roi_ref: this variant is anchor-free,
+        # which is the documented default (see "Deliberately anchor-free" in
         # startup.md). Keeping the argument lets the training loop and the
         # evaluator call every model the same way.
         image_size = image.shape[-2:]
         image_features = self.features(image)
         reference_features = self.features(reference)
         prototypes = [f.mean((-2, -1)) for f in reference_features]
+        if self.roi_ref and ref_box is not None:
+            prototypes = self.roi_prototypes(image_features, ref_box, prototypes)
         logits = self.decode(image_features, prototypes, reference_features)
         out = F.interpolate(logits, size=image_size, mode="bilinear",
                             align_corners=False)
@@ -115,7 +155,7 @@ class RefSwinUNet(nn.Module):
             return out, None
         return out
 
-    def forward_multi(self, image, references, k):
+    def forward_multi(self, image, references, k, boxes=None):
         """K questions per image (`--refs-per-image`): `references` is
         [B*K, 3, R, R], plan-major. The image runs through the backbone ONCE;
         only the conditioning and decoder repeat per question."""
@@ -123,6 +163,8 @@ class RefSwinUNet(nn.Module):
         image_features = [f.repeat_interleave(k, 0) for f in self.features(image)]
         reference_features = self.features(references)
         prototypes = [f.mean((-2, -1)) for f in reference_features]
+        if self.roi_ref and boxes is not None:
+            prototypes = self.roi_prototypes(image_features, boxes, prototypes)
         logits = self.decode(image_features, prototypes, reference_features)
         return F.interpolate(logits, size=image_size, mode="bilinear",
                              align_corners=False)

@@ -323,16 +323,18 @@ class InstanceSegDataset(Dataset):
             unique_cats = list(dict.fromkeys(cats))
             fams = (random.sample(unique_cats, self.refs_per_image)
                     if len(unique_cats) > self.refs_per_image else unique_cats)
-            ref_patches, ref_matches = [], []
+            ref_patches, ref_matches, multi_boxes = [], [], []
             for fam in fams:
                 cand = [j for j, c in enumerate(cats) if c == fam]
                 bx, by, bw, bh = sample_reference_box(masks[random.choice(cand)],
                                                       self.min_patch, self.max_patch)
                 ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
+                multi_boxes.append((bx, by, bw, bh))
                 ref_matches.append(np.array([1.0 if c == fam else 0.0 for c in cats],
                                             np.float32))
             q_valid = [1.0] * len(fams) + [0.0] * (self.refs_per_image - len(fams))
             ref_patches += [ref_patches[0]] * (self.refs_per_image - len(fams))
+            multi_boxes += [multi_boxes[0]] * (self.refs_per_image - len(fams))
             ref_matches += [np.zeros(len(cats), np.float32)] * (self.refs_per_image - len(fams))
             ref_box_mask = np.zeros((h0, w0), np.uint8)   # anchor unused (anchor-free)
         elif len(anns) > 0:
@@ -375,6 +377,7 @@ class InstanceSegDataset(Dataset):
                 ref_patches = [ref_patch] * self.refs_per_image
                 ref_matches = [ref_match] * self.refs_per_image
                 q_valid = [0.0] * self.refs_per_image
+                multi_boxes = [(0, 0, 0, 0)] * self.refs_per_image
         if not multi:
             ref_patches = [ref_patch]
 
@@ -390,6 +393,17 @@ class InstanceSegDataset(Dataset):
         # Same interpolation and geometry as the instance masks, so the anchor
         # stays pixel-aligned with the targets it is supposed to sit inside.
         ref_box_r = cv2.resize(ref_box_mask, (nw, nh), interpolation=cv2.INTER_NEAREST)
+        # --refs-per-image: each question's box as a plane at input scale, for
+        # models that pool the reference from the IMAGE's features (--roi-ref).
+        # Built without touching any RNG, so the historical sampler is unchanged.
+        if multi:
+            boxes_r = np.zeros((len(multi_boxes), nh, nw), np.uint8)
+            for q, (bx, by, bw, bh) in enumerate(multi_boxes):
+                if bw and bh:
+                    x0, y0 = int(bx * scale), int(by * scale)
+                    x1 = max(x0 + 1, int(round((bx + bw) * scale)))
+                    y1 = max(y0 + 1, int(round((by + bh) * scale)))
+                    boxes_r[q, y0:y1, x0:x1] = 1
 
         # Reference patch resize.
         #
@@ -434,6 +448,8 @@ class InstanceSegDataset(Dataset):
             # image and masks. Leaving it out would point the model at a mirrored
             # location and teach it the anchor is noise.
             ref_box_r = _apply_fliprot_masks(ref_box_r[None], hflip, vflip, k)[0]
+            if multi:
+                boxes_r = _apply_fliprot_masks(boxes_r, hflip, vflip, k)
 
             if self.realism_aug:
                 # Train-time only: push synth toward real PDF-export appearance.
@@ -466,6 +482,10 @@ class InstanceSegDataset(Dataset):
                         masks_arr = np.zeros((0, new_h, new_w), np.uint8)
                     ref_box_r = cv2.resize(ref_box_r, (new_w, new_h),
                                            interpolation=cv2.INTER_NEAREST)
+                    if multi:
+                        boxes_r = np.stack([cv2.resize(m, (new_w, new_h),
+                                                       interpolation=cv2.INTER_NEAREST)
+                                            for m in boxes_r], 0)
                     nh, nw = new_h, new_w
                 # (Random crop of the scene was tested here — div@ep10 +0.114, within
                 # noise of DR-alone +0.101, lowered real too — so not kept.)
@@ -495,6 +515,7 @@ class InstanceSegDataset(Dataset):
                 "references": torch.stack([_normalize_chw(r) for r in refs_r], 0),  # [K, 3, R, R]
                 "q_valid": torch.tensor(q_valid),                   # [K]
                 "ref_box": torch.from_numpy(ref_box_r).float()[None],
+                "ref_boxes_multi": torch.from_numpy(np.ascontiguousarray(boxes_r)),  # [K, nh, nw]
             }
         ref_r = refs_r[0]
         return {
@@ -538,10 +559,13 @@ def collate_fn(batch, size_divisible=32, union_only=False):
         # [B*K], so row b*K+q is plan b's question q.
         K = batch[0]["ref_matches"].shape[0]
         unions = torch.zeros(B * K, 1, maxH, maxW, dtype=torch.bool)
+        boxes_multi = torch.zeros(B * K, 1, maxH, maxW, dtype=torch.uint8)
         for b, sample in enumerate(batch):
             _, h, w = sample["image"].shape
             images[b, :, :h, :w] = sample["image"]
             pixel_mask[b, :h, :w] = True
+            if "ref_boxes_multi" in sample:
+                boxes_multi[b * K:(b + 1) * K, 0, :h, :w] = sample["ref_boxes_multi"]
             if sample["masks"].shape[0]:
                 for q in range(K):
                     positive = sample["ref_matches"][q] > 0.5
@@ -550,7 +574,8 @@ def collate_fn(batch, size_divisible=32, union_only=False):
         return {"images": images, "pixel_mask": pixel_mask, "ref_boxes": ref_boxes,
                 "references": torch.cat([b["references"] for b in batch], 0),
                 "q_valid": torch.cat([b["q_valid"] for b in batch], 0),
-                "refs_per_image": K, "union": unions, "targets": []}
+                "refs_per_image": K, "union": unions, "targets": [],
+                "ref_boxes_multi": boxes_multi}
     references = torch.stack([b["reference"] for b in batch], 0)
 
     targets = []

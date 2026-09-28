@@ -16,6 +16,9 @@
 # restart its own CK; START is the first epoch number the restart will save
 # (the base checkpoint's epoch + 1), SIZES the inference sizes to score.
 #
+# Env: EXTRA="..." appends train flags (e.g. "--roi-ref --roi-ref-mode add");
+# NODR=1 drops --domain-random; CMP=<hf14 json> is the paired-comparison baseline;
+# SEED sets the training seed (default 7).
 #   ./run_restart_swa.sh        # ~1.5 h on a GH200
 #   BASE=data/runs/ck_swint_mixr4_restart_full/epoch_13.pth START=14 SIZES=4096 \
 #     CK=data/runs/ck_swint_mixr4_restart2 ./run_restart_swa.sh
@@ -38,8 +41,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
   --batch-size 8 --num-workers 16 --prefetch-factor 4 \
   --image-max-size $SIZE --ref-size 224 --width 128 --model swin_t \
   --lr 2e-4 --backbone-lr-mult 0.1 --train-split 0.99 \
-  --domain-random --mask-thresh 0.35 --seed 7 --pad-grid 512 \
-  --reset-optimizer --init-from $BASE > logs/${TAG}.log 2>&1
+  $([ -n "${NODR:-}" ] || echo --domain-random) --mask-thresh 0.35 --seed ${SEED:-7} --pad-grid 512 \
+  --reset-optimizer --init-from $BASE ${EXTRA:-} > logs/${TAG}.log 2>&1
 echo "== trained"
 
 PYTHONPATH=. python3 - "$BASE" "$CK" "$VAL" "$TAG" "$START" "$SIZES" <<'PY' | tee logs/${TAG}_val.txt
@@ -79,6 +82,7 @@ echo "== HF14, read once: $NAME @ $R_CHOICE"
 PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $CK_CHOICE \
   --indices $HF14 --image-max-size $R_CHOICE --ref-size 224 --mask-thresh 0.35 \
   --metrics-out data/evaluations/${TAG}_choice_hf14.json | tail -2
-python3 scripts/paired_compare.py --a data/evaluations/pub_swint_mixr4_e8_hf14.json \
-  --b data/evaluations/${TAG}_choice_hf14.json --label-a published_e8@2048 --label-b choice \
+CMP=${CMP:-data/evaluations/pub_swint_mixr4_e8_hf14.json}
+python3 scripts/paired_compare.py --a $CMP \
+  --b data/evaluations/${TAG}_choice_hf14.json --label-a $(basename $CMP .json) --label-b choice \
   | sed -n '/mean  /p;/paired mean/,/sign-test/p'

@@ -10,7 +10,8 @@
 # (abshetty/floz-refunet-swint-v6d-e8: fresh 0.660, HF14 0.7066), batch 3 plans
 # x 6 questions (~66 GiB worst case). ~40 min train + ~5 min scoring.
 #   ./run_multiref.sh [seed] [v6d|revit]
-# Env: DEC=selfattn swaps the decoder (--swin-decoder); RESTART_FROM=<ckpt>
+# Env: NODR=1 drops --domain-random; EXTRA="..." appends train flags
+# (e.g. "--roi-ref --roi-ref-mode add"). DEC=selfattn swaps the decoder (--swin-decoder); RESTART_FROM=<ckpt>
 # instead continues that checkpoint with one fresh 9-epoch cosine (step-budget
 # test); TAG names the run; BS overrides the batch (plans per step).
 # revit: same six-question recipe on revit_train2000, compared with the
@@ -38,7 +39,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 COMMON="--batch-size $BS --swin-decoder $DEC --refs-per-image 6 --num-workers 16 --prefetch-factor 4 \
   --image-max-size 2048 --ref-size 224 --width 128 --model swin_t --lr 2e-4 \
   --backbone-lr-mult 0.1 --train-split 0.99 --domain-random --mask-thresh 0.35 \
-  --seed $SEED --pad-grid 512"
+  --seed $SEED --pad-grid 512 ${EXTRA:-}"
+[ -n "${NODR:-}" ] && COMMON=${COMMON/--domain-random /}
 if [ -n "${RESTART_FROM:-}" ]; then
   LAST=$CK/epoch_17.pth
   [ -f $LAST ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data $POOL \

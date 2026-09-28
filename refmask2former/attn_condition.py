@@ -47,16 +47,20 @@ class CrossAttnCondition(nn.Module):
         q = self._heads(x.flatten(2), b, h * w)
         k = self._heads(k.flatten(2), b, 49)
         v = self._heads(v.flatten(2), b, 49)
-        a = F.scaled_dot_product_attention(q.transpose(-2, -1), k.transpose(-2, -1),
-                                           v.transpose(-2, -1))
+        # .contiguous(): a transposed (non-contiguous last dim) input rules out
+        # the flash / memory-efficient kernels and SDPA materialises the full
+        # attention matrix (27 GiB for self-attention at 1/16 of a 2048 sheet).
+        a = F.scaled_dot_product_attention(q.transpose(-2, -1).contiguous(),
+                                           k.transpose(-2, -1).contiguous(),
+                                           v.transpose(-2, -1).contiguous())
         a = a.transpose(-2, -1).reshape(b, c, h, w)
         x = self.norm(x + self.attn_out(a))
         if self.self_attn:
             q2, k2, v2 = self.qkv_self(x).chunk(3, dim=1)
             n = h * w
-            q2 = self._heads(q2.flatten(2), b, n).transpose(-2, -1)
-            k2 = self._heads(k2.flatten(2), b, n).transpose(-2, -1)
-            v2 = self._heads(v2.flatten(2), b, n).transpose(-2, -1)
+            q2 = self._heads(q2.flatten(2), b, n).transpose(-2, -1).contiguous()
+            k2 = self._heads(k2.flatten(2), b, n).transpose(-2, -1).contiguous()
+            v2 = self._heads(v2.flatten(2), b, n).transpose(-2, -1).contiguous()
             s = F.scaled_dot_product_attention(q2, k2, v2)
             s = s.transpose(-2, -1).reshape(b, c, h, w)
             x = self.self_norm(x + self.self_out(s))

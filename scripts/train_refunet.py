@@ -139,6 +139,16 @@ def parse_args():
     p.add_argument("--swin-decoder", choices=("baseline", "selfattn"), default="baseline",
                    help="selfattn: cross- + self-attention conditioning at 1/16 and 1/32 "
                         "(refmask2former/attn_condition.py). swin models only.")
+    p.add_argument("--roi-ref", action="store_true",
+                   help="swin + --refs-per-image only (diagnostic): pool each "
+                        "question's prototype from the image's own features "
+                        "inside the box instead of the 224 px crop.")
+    p.add_argument("--roi-ref-mode", choices=("replace", "add"), default="replace",
+                   help="with --roi-ref: replace the crop prototype, or add a "
+                        "zero-initialised projection of the ROI prototype to it.")
+    p.add_argument("--roi-min-cells", type=float, default=0.0,
+                   help="with --roi-ref: per level, weight the ROI term by box "
+                        "coverage in feature cells / this (0 = off).")
     p.add_argument("--init-from")
     p.add_argument("--reset-optimizer", action="store_true",
                    help="On continuation, load model weights and epoch only, then "
@@ -251,7 +261,10 @@ def main():
         model = RefSwinUNet(args.width, pretrained=args.init_from is None,
                             backbone=args.model,
                             corr_grid=args.corr_grid,
-                            decoder=args.swin_decoder).to(device)
+                            decoder=args.swin_decoder,
+                            roi_ref=args.roi_ref,
+                            roi_mode=args.roi_ref_mode,
+                            roi_min_cells=args.roi_min_cells).to(device)
     else:
         model = RefUNet(args.width, pretrained=args.init_from is None,
                         corr_grid=args.corr_grid,
@@ -265,7 +278,12 @@ def main():
     start_epoch = 0
     if args.init_from:
         checkpoint = torch.load(args.init_from, map_location=device)
-        model.load_state_dict(checkpoint["model"])
+        # --roi-ref-mode add on a checkpoint trained without it: the only new
+        # weights are the zero-initialised roi_proj, so the model starts
+        # exactly where the checkpoint left off. Anything else missing is an error.
+        missing, unexpected = model.load_state_dict(checkpoint["model"], strict=False)
+        if unexpected or any(not k.startswith("roi_proj.") for k in missing):
+            raise SystemExit(f"--init-from mismatch: missing={missing} unexpected={unexpected}")
         start_epoch = int(checkpoint.get("actual_epoch", checkpoint.get("epoch", -1))) + 1
     # `base_model` stays uncompiled: it owns the parameters, so it is what the
     # optimizer, the checkpoint and the per-epoch evaluator use. The evaluator
@@ -322,7 +340,10 @@ def main():
                 k = batch["refs_per_image"]
                 keep = batch["q_valid"].to(device) > 0.5
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    logits = model.forward_multi(images, references, k)
+                    logits = model.forward_multi(
+                        images, references, k,
+                        boxes=(batch["ref_boxes_multi"].to(device, non_blocking=True)
+                               if args.roi_ref else None))
                     loss, bce, dice = mask_loss(logits[keep], targets[keep],
                                                 valid.repeat_interleave(k, 0)[keep],
                                                 args.bce_weight, args.dice_weight)
@@ -337,7 +358,7 @@ def main():
                 continue
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 ref_boxes = (batch["ref_boxes"].to(device, non_blocking=True)
-                             if args.anchor else None)
+                             if args.anchor or args.roi_ref else None)
                 auxiliary = None
                 if args.rank_weight > 0:
                     logits, image_embedding, reference_embedding = model(
@@ -380,7 +401,7 @@ def main():
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     logits = model(images, references,
                                    ref_box=(batch["ref_boxes"].to(device)
-                                            if args.anchor else None))
+                                            if args.anchor or args.roi_ref else None))
                     loss, _, _ = mask_loss(logits, targets, valid,
                                            args.bce_weight, args.dice_weight)
                 val_losses.append(float(loss))

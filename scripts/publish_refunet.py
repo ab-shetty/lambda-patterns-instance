@@ -64,6 +64,9 @@ def main():
     ap.add_argument("--private", action="store_true", default=True)
     ap.add_argument("--public", dest="private", action="store_false")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--note", default="",
+                    help="result line for the card (the checkpoint's own real_mean_iou "
+                         "is the per-epoch 2048 diagnostic, not the reported number)")
     args = ap.parse_args()
 
     tok = os.environ.get("HF_TOKEN")
@@ -106,6 +109,14 @@ def main():
     extra_args = (", num_heads=4" if model_class == "RefCrossAttnUNet"
                   else f", pretrained=False, backbone=\"{_m}\""
                   if model_class == "RefSwinUNet" else ", pretrained=False")
+    # --roi-ref checkpoints carry extra weights (roi_proj in "add" mode) and
+    # need the box plane at inference; the class must be built to match.
+    if model_class == "RefSwinUNet" and train_args.get("roi_ref"):
+        extra_args += (f", roi_ref=True, roi_mode=\"{train_args.get('roi_ref_mode', 'replace')}\""
+                       + (f", roi_min_cells={train_args['roi_min_cells']}"
+                          if train_args.get("roi_min_cells") else ""))
+    if args.note:
+        prov = f"**Result:** {args.note}\n\n" + prov
     repo_name = args.repo.split("/")[-1]
     open(f"{out}/README.md", "w").write(
         CARD.replace("{REPO_NAME}", repo_name).replace("{MODEL_CLASS}", model_class)

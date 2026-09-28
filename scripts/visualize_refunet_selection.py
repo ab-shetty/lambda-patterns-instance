@@ -164,9 +164,19 @@ def main():
                 crop = cv2.resize(crop, (args.ref_size, args.ref_size),
                                   interpolation=cv2.INTER_LINEAR)
                 reference = _normalize_chw(crop).unsqueeze(0).to(device)
+                # Same box plane the evaluator builds for anchored / --roi-ref
+                # models, or those models are drawn without an input they use.
+                ref_box = None
+                if getattr(model, "anchor", False) or getattr(model, "roi_ref", False):
+                    box_native = np.zeros((h0, w0), np.uint8)
+                    box_native[y:y + h, x:x + w] = 1
+                    ref_box = torch.from_numpy(cv2.resize(
+                        box_native, (nw, nh), interpolation=cv2.INTER_NEAREST)
+                    ).float()[None, None].to(device)
                 with torch.autocast("cuda", dtype=torch.bfloat16,
                                     enabled=device.type == "cuda"):
-                    probability = model(image_tensor, reference).sigmoid()[0, 0]
+                    probability = model(image_tensor, reference,
+                                        ref_box=ref_box).sigmoid()[0, 0]
                 pred_small = probability > args.mask_thresh
                 prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
                                         (w0, h0),
