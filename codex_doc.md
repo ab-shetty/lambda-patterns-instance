@@ -11,14 +11,13 @@ here.
 
 Detail: `synth_progress.md` Log 2026-09-28. Goal is 0.90 on REAL (HF14).
 
-1. **HF14 0.8440, one seed** (`data/runs/ck_mix_roiadd_dr/swa_12-15.pth`, infer
-   4096, not yet published): the shipped restart recipe + `--roi-ref
+1. **HF14 0.8440, one seed** (`abshetty/floz-refunet-swint-mixr4-roiadd-swa15`,
+   infer 4096, round-trip verified): the shipped restart recipe + `--roi-ref
    --roi-ref-mode add` (reference prototype also pooled from the image's own
    features inside the user's box). +0.027 paired over 0.8170, p=0.017.
-   Seed replicate not run (user's call). If the checkpoint was not published
-   before the VM closed, rebuild: `CK=data/runs/ck_mix_roiadd_dr
-   EXTRA="--roi-ref --roi-ref-mode add" ./run_restart_swa.sh` on the rebuilt
-   `v6dmix_plus_r4` (`run_best_mix.sh` data section).
+   Seed replicate not run (user's call). Recipe: `CK=data/runs/ck_mix_roiadd_dr
+   EXTRA="--roi-ref --roi-ref-mode add" ./run_restart_swa.sh` on
+   `v6dmix_plus_r4` (build it with `run_best_mix.sh`'s data section).
    - **Keep `--domain-random`**: the same run without it val-selects a val-17
      spike (HF14 0.8583 by protocol) but loses to DR at all 12 candidates once
      sheet 17 is excluded, and degrades over the restart.

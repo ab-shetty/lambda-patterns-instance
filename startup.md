@@ -13,21 +13,28 @@ and is **not comparable** to anything measured afterwards. Always state which
 sampler a number came from. `PROJECT_UNDERSTANDING.md` explains why the fix
 matters; "The reference-box fix" below has the mechanism and its effect.
 
-## Current best (2026-09-24): HF14 0.8170
+## Current best (2026-09-28): HF14 0.8440
 
 swin_t, 282-source mix (`v6dmix_plus_r4`), trained at 2048, **inference at
-4096**: `abshetty/floz-refunet-swint-mixr4-restart-e13` (private Hub; load with
-`scripts/hf_ckpt_to_pth.py`). The 0.7887 checkpoint plus one completed
-fresh-cosine restart (`run_restart_swa.sh`); epoch and inference size both
-chosen on validation (0.808), HF14 read once. One seed.
+4096**, with the image-box reference (`--roi-ref --roi-ref-mode add`: the
+reference prototype is also pooled from the plan's own features inside the
+user's box, so it needs the box at inference -- the evaluator passes it):
+`abshetty/floz-refunet-swint-mixr4-roiadd-swa15` (private Hub; round-trip
+verified). It is one fresh-cosine restart of `...-swint-mixr4-e8`
+(`run_restart_swa.sh` with `EXTRA="--roi-ref --roi-ref-mode add"`), SWA of
+restart epochs 12-15 chosen on validation (0.8150), HF14 read once. +0.0269
+paired vs 0.8170 (p=0.017). **One seed.**
 
 ```bash
-PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-mixr4-restart-e13 \
-  --out data/runs/ck_best/epoch_13.pth
-PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint data/runs/ck_best/epoch_13.pth \
+PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-mixr4-roiadd-swa15 \
+  --out data/runs/ck_best/swa15.pth
+PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint data/runs/ck_best/swa15.pth \
   --indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 --image-max-size 4096 --ref-size 224 --mask-thresh 0.35
-# mean_iou 0.8170
+# mean_iou 0.8440
 ```
+
+Previous best, 0.8170 (2026-09-24): `abshetty/floz-refunet-swint-mixr4-restart-e13`,
+the same restart without `--roi-ref`; reproduced exactly on 2026-09-28.
 
 Inference size is a model-input choice made on validation, not a sweep on
 HF14: `--domain-random` trains on 0.4-1.0x-shrunk sheets, so a 2048 model
