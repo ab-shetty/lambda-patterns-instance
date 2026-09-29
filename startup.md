@@ -13,6 +13,14 @@ and is **not comparable** to anything measured afterwards. Always state which
 sampler a number came from. `PROJECT_UNDERSTANDING.md` explains why the fix
 matters; "The reference-box fix" below has the mechanism and its effect.
 
+**Reference jitter (2026-09-29).** `--domain-random`'s brightness/contrast jitter
+(x0.75-1.25, +-18) used to reach the sheet only: the reference is cropped before it,
+so in training the correct target could look up to ~20 L* lighter or darker than the
+reference, while at inference both come from one image. It now applies the same jitter
+to the reference (no extra RNG draws; sheet and masks unchanged). **Every run before
+2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
+`train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
+
 ## Current best (2026-09-28): HF14 0.8440
 
 swin_t, 282-source mix (`v6dmix_plus_r4`), trained at 2048, **inference at

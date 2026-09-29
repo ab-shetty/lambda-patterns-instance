@@ -256,8 +256,15 @@ class InstanceSegDataset(Dataset):
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
-                 repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0):
+                 repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0,
+                 legacy_ref_jitter=False):
         self.records = records
+        # --domain-random's brightness/contrast jitter used to reach the sheet only: the
+        # reference is cropped before it, so in training the right target could look up to
+        # ~20 L* lighter or darker than the reference, while at inference both come from one
+        # image. Since 2026-09-29 the reference gets the SAME a, b (no extra RNG draws).
+        # True = the sheet-only jitter every run before 2026-09-29 was trained with.
+        self.legacy_ref_jitter = legacy_ref_jitter
         # > 0 (training only): draw the reference only from instances that can hold a
         # square this many px wide, when the family has one. Families split into many
         # pieces (Revit elevations) otherwise hand out a sliver -- a strip beside a
@@ -514,6 +521,9 @@ class InstanceSegDataset(Dataset):
                 b = random.uniform(-18, 18)
                 image_r = np.clip(image_r.astype(np.float32) * a + b,
                                   0, 255).astype(np.uint8)
+                if not self.legacy_ref_jitter:
+                    refs_r = [np.clip(r.astype(np.float32) * a + b, 0, 255).astype(np.uint8)
+                              for r in refs_r]
                 # (Line-weight jitter via morphological erode/dilate was tested here
                 # — div@ep10 +0.153, worse: it disrupts the hatch texture the
                 # reference-matching head depends on, ref_match_auc fell to ~0.48.)
@@ -669,7 +679,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
-                   small_ref_prob=0.0, refs_per_image=0, ref_min_side=0):
+                   small_ref_prob=0.0, refs_per_image=0, ref_min_side=0,
+                   legacy_ref_jitter=False):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -686,7 +697,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   scale_matched_ref=scale_matched_ref,
                                   repeat_reference_prob=repeat_reference_prob,
                                   refs_per_image=refs_per_image,
-                                  ref_min_side=ref_min_side)
+                                  ref_min_side=ref_min_side,
+                                  legacy_ref_jitter=legacy_ref_jitter)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,

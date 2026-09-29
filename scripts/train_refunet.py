@@ -106,6 +106,9 @@ def parse_args():
                    help="floor of --domain-random's random downscale (historical 0.4)")
     p.add_argument("--small-ref-prob", type=float, default=0.0,
                    help="probability a training reference is a deliberately tiny box (16-96 px)")
+    p.add_argument("--legacy-ref-jitter", action="store_true",
+                   help="--domain-random brightness/contrast jitter on the sheet only, not the "
+                        "reference (every run before 2026-09-29); default applies the same jitter to both")
     p.add_argument("--ref-min-side", type=int, default=0,
                    help="training references come only from instances that fit a square this "
                         "wide (px) when the family has one; slivers stay in the target. 0 = off")
@@ -238,7 +241,7 @@ def main():
         domain_random=args.domain_random, realism_aug=args.realism_aug,
         scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
         small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image,
-        ref_min_side=args.ref_min_side)
+        ref_min_side=args.ref_min_side, legacy_ref_jitter=args.legacy_ref_jitter)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,
