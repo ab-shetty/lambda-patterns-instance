@@ -97,14 +97,38 @@ def top_faces(faces, chim):
             ov = F["poly"].intersection(H["poly"])
             if ov.area < 1e-4:
                 continue
-            pt = ov.representative_point()
-            if z(H, pt) > z(F, pt) + 1e-4:
-                occ.append(H["poly"])
+            # planes can cross inside the overlap (a wing's slab running into the
+            # main roof): H hides F only where z_H - z_F > 0, a half-plane
+            d = H["plane"] - F["plane"]
+            hp = _halfplane(ov.bounds, d)
+            if hp is None:
+                continue
+            part = ov.intersection(hp)
+            if not part.is_empty and part.area > 1e-5:
+                occ.append(part)
         vis = F["poly"].difference(unary_union(occ)) if occ else F["poly"]
         if vis.area < 0.05:
             continue
         out.append(dict(F, vis=vis))
     return out
+
+
+def _halfplane(bounds, d, eps=1e-4):
+    """Polygon of {(x, y) in bounds : d0*x + d1*y + d2 > eps}, or None if empty."""
+    x0, y0, x1, y1 = bounds
+    x0, y0, x1, y1 = x0 - 1, y0 - 1, x1 + 1, y1 + 1
+    f = lambda p: d[0] * p[0] + d[1] * p[1] + d[2] - eps
+    ring = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    out = []
+    for k in range(4):
+        a, b = ring[k], ring[(k + 1) % 4]
+        fa, fb = f(a), f(b)
+        if fa > 0:
+            out.append(a)
+        if (fa > 0) != (fb > 0):
+            t = fa / (fa - fb)
+            out.append((a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    return Polygon(out) if len(out) >= 3 else None
 
 
 def ridge_segments(F):
