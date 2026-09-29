@@ -91,6 +91,14 @@ WINDOW_HOLE_PROB = 1.0
 # Gemini sheets and the real eval sheets, which leave casings out of the wall label).
 # False = hole at the glass only, the pre-2026-09-29 pools (--casing-holes 0).
 CASING_HOLES = True
+# 2026-09-29 label audit: white trim (eave fascia, belts, corner boards, chimney cap, porch
+# fascia) is painted over surfaces but was left inside their labels, and a label could end
+# up being nothing but trim. TRIM_CUT (--trim-cut 1, default): trims are cut out of every
+# surface label and slivers thinner than ~3" dropped; the porch roof, nearest the viewer,
+# also hides the wall's belt/fascia behind it (they used to be painted across it); and a
+# "gable" accent on a house with no gable roof becomes "upper"/"wainscot" instead of a
+# sliver under the eave. --trim-cut 0 = the pre-2026-09-29 pools.
+TRIM_CUT = True
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -1046,7 +1054,18 @@ def make_house(rng):
     if house["label_trim"]:
         house["corner_boards"] = True
         house["belt"] = True
+    if TRIM_CUT and not any(b.roof == "gable" for b in blocks):
+        # no gable triangle anywhere: a gable accent only zones the strip under the eave
+        if house["accent"] == "gable":
+            house["accent"] = "upper" if blocks[0].stories >= 2 else "wainscot"
+        if house["accent2"] in ("gable", house["accent"]):
+            house["accent2"] = None
     return house
+
+
+def _thin(q, t=0.12):
+    """True for a label piece narrower than 2t ft everywhere (a sliver left by a trim cut)."""
+    return q.buffer(-t).is_empty
 
 
 def view_map(view):
@@ -1337,6 +1356,8 @@ def build_elevation(house, view, rng):
         porch = {"roof": proof, "posts": [rect(pu0 + 0.3, 0, pu0 + 0.9, top),
                                           rect(pu0 + pw - 0.9, 0, pu0 + pw - 0.3, top)],
                  "fascia": rect(pu0 - 1, top, pu0 + pw + 1, top + 0.5)}
+        if TRIM_CUT:
+            trims = [q for t in trims for q in polys_of(t.difference(proof.union(porch["fascia"])))]
         surfaces = [(f, p.difference(proof.union(porch["fascia"])), bi, k) for (f, p, bi, k) in surfaces]
         surfaces = [(f, q, bi, k) for (f, p, bi, k) in surfaces for q in polys_of(p)]
         for p in polys_of(proof):
@@ -1665,6 +1686,7 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
                  c[1] + rr * 0.8 * math.sin(math.radians(ang)) * rng.uniform(0.75, 1.05))
             cv2.circle(canvas, _pt(q), int(rr * 0.12 * SCALE), bgr(ink), max(1, int(lw)), lineType=cv2.LINE_AA, shift=SHIFT)
     # surfaces
+    pending = []   # TRIM_CUT: labels wait for every trim piece (corner boards, casings too)
     for (fam, poly, bi, kind) in elev["surfaces"]:
         if poly.is_empty:
             continue
@@ -1678,6 +1700,9 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
         cv_outline(canvas, ppx, app["outline"], lw)
         if fam in label_fams:
             lab = poly.difference(label_holes) if (hole_mode and opening_polys is not None) else poly
+            if TRIM_CUT:
+                pending.append((fam, lab))
+                continue
             for q in polys_of(lab):
                 out.append((fam, V.geom(q)))
     # eave and window-head shadows: BIM exports darken the wall under every
@@ -1736,6 +1761,12 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
             trim_polys.append(casing)
     if app.get("vd"):
         _val_annotations(canvas, tq, V, elev, house, app, S, view_name)
+    if pending:
+        cut = unary_union(trim_polys) if trim_polys else None
+        for fam, lab in pending:
+            for q in polys_of(lab.difference(cut) if cut is not None else lab):
+                if not _thin(q):
+                    out.append((fam, V.geom(q)))
     if "trim" in label_fams:
         for p in polys_of(unary_union(trim_polys)):
             if p.area > 0.3:
@@ -2738,10 +2769,11 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT
+    TRIM_CUT = trim_cut
     WINDOW_HOLE_PROB = window_hole_prob
     CASING_HOLES = casing_holes
     REAL_LABELLING = real_labelling
@@ -2849,6 +2881,9 @@ def main():
     ap.add_argument("--casing-holes", type=int, default=1, choices=[0, 1],
                     help="1 = wall-label holes cover window/door casing and head (default); "
                          "0 = holes at the glass only, the pre-2026-09-29 pools")
+    ap.add_argument("--trim-cut", type=int, default=1, choices=[0, 1],
+                    help="1 = white trim cut out of every surface label, trim slivers dropped, porch roof hides "
+                         "the belt behind it, no gable accent on gable-less houses (default); 0 = pre-2026-09-29 pools")
     ap.add_argument("--view-count-weights", default=None,
                     help="weights for 1,2,4 elevation views per sheet, e.g. 85,15,0. "
                          "Default (55,38,7) = 1.59 drawings/sheet, which is what makes "
@@ -2907,7 +2942,7 @@ def main():
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
                         args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling,
-                        args.window_hole_prob, bool(args.casing_holes))) as pool:
+                        args.window_hole_prob, bool(args.casing_holes), bool(args.trim_cut))) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

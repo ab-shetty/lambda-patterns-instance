@@ -317,7 +317,7 @@ def build_elevation_fc(house, view, rng):
                 belt_polys.append(G.rect(u0 - 0.2, yb - house["belt_h"] / 2, u1 + 0.2, yb + house["belt_h"] / 2))
 
         def zone_for(placement):
-            if placement == "gable" and wall.bounds[1] < y_top - 1.0:
+            if placement == "gable" and wall.bounds[1] < y_top - 1.0 and (B.roof == "gable" or not G.TRIM_CUT):
                 belt_polys.append(G.rect(u0 - 0.2, y_top - 0.1, u1 + 0.2, y_top + rng.uniform(0.4, 0.8)))
                 return G.rect(u0 - 1, y_top, u1 + 1, y_top - 100)
             if placement == "wainscot":
@@ -365,6 +365,8 @@ def build_elevation_fc(house, view, rng):
         porch = {"roof": proof, "posts": [G.rect(pu0 + 0.3, 0, pu0 + 0.9, top), G.rect(pu0 + pw - 0.9, 0, pu0 + pw - 0.3, top)],
                  "fascia": G.rect(pu0 - 1, top, pu0 + pw + 1, top + 0.5)}
         cut = proof.union(porch["fascia"])
+        if G.TRIM_CUT:      # the porch is in front: belts / fascia behind it are hidden
+            trims = [q for t in trims for q in G.polys_of(t.difference(cut))]
         surfaces = [(f, q, bi, k) for (f, p, bi, k) in surfaces for q in G.polys_of(p.difference(cut))]
         surfaces.append(("roof", proof, -1, "porch"))
         trims.append(porch["fascia"])
@@ -500,6 +502,9 @@ def main():
     ap.add_argument("--casing-holes", type=int, default=1, choices=[0, 1],
                     help="1 = wall-label holes cover window/door casing and head (default); "
                          "0 = holes at the glass only, the pre-2026-09-29 pools")
+    ap.add_argument("--trim-cut", type=int, default=1, choices=[0, 1],
+                    help="1 = white trim cut out of every surface label, trim slivers dropped, porch roof hides "
+                         "the belt behind it, no gable accent on gable-less houses (default); 0 = pre-2026-09-29 pools")
     ap.add_argument("--shaped", action="store_true",
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
@@ -517,6 +522,7 @@ def main():
         flags["real_labelling"] = True
     flags["window_hole_prob"] = args.window_hole_prob
     flags["casing_holes"] = bool(args.casing_holes)
+    flags["trim_cut"] = bool(args.trim_cut)
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

@@ -40,7 +40,7 @@ mkdir -p logs data/evaluations
 if [ ! -f "$POOL/generation_manifest.json" ]; then
   echo "== generating 100,000 v6d plans (~13 min at 0.01 s/img on 48 cores)"
   python3 generate_synthetic_v6.py --n 100000 --out "$POOL" \
-    --seed 6 --start 0 --workers 48 --window-hole-prob 0.8 --casing-holes 0 > logs/gen_100k.log 2>&1
+    --seed 6 --start 0 --workers 48 --window-hole-prob 0.8 --casing-holes 0 --trim-cut 0 > logs/gen_100k.log 2>&1
 fi
 N=$(ls "$POOL/annotations" | wc -l)
 # batch 8, so one pass is N/8 steps; pick epochs to hit the step budget.

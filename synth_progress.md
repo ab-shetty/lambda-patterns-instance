@@ -195,6 +195,16 @@ stay in the wall, as in the hand-labelled Gemini sheets). Before, casing, head a
 on 91% of those labels; real eval sheets leave casings out. `--casing-holes 0` +
 `--window-hole-prob 0.8` reproduce the old pools byte-identically (60/60 revit, 60/60 v6);
 the new default changes 49/60 revit labels, no images.
+Trim cut (2026-09-29, `--trim-cut 1` default): white trim (eave fascia, belts, corner
+boards, chimney cap, porch fascia) is cut out of every surface label and slivers < ~3" are
+dropped; the porch roof hides the wall belt/fascia behind it (they were painted across it);
+a "gable" accent on an all-hip/flat house becomes "upper"/"wainscot" (it only zoned the strip
+under the eave, which the fascia covered: a label of pure white trim). Revit, 80 sheets: labels
+with >5% of their area on trim 173 -> 42 (the rest are 1-2 px edges on thin labels), trim share
+of label pixels 1.9% -> 0.65%. v6: labelled trim also inside the main-wall label on 81/81
+sheets (median 27% of the trim label) -> 42/81 (median 3%). Images change on 22/60 revit and
+69/300 v6 sheets (porch belt, accent remap, markup/crop RNG after label count changes).
+`--trim-cut 0` (with the two flags above) reproduces the old pools byte-identically.
 
 ## Open
 
