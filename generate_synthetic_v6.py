@@ -86,6 +86,11 @@ MAX_LABEL_FAMS = 0                     # 0 = v6d behaviour (label every family)
 # in 5 with no evidence behind it. Recorded pools pin --window-hole-prob 0.8. The draw
 # happens either way, so images are unchanged; only those sheets' labels differ.
 WINDOW_HOLE_PROB = 1.0
+# the wall-label hole covers the opening's casing and head too, as one rectangle (the
+# sill / head ears that jut past the casing stay in the wall, as in the hand-labelled
+# Gemini sheets and the real eval sheets, which leave casings out of the wall label).
+# False = hole at the glass only, the pre-2026-09-29 pools (--casing-holes 0).
+CASING_HOLES = True
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -1610,6 +1615,7 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
     ink, lw = app["ink"], app["outline_lw"]
     out = []   # (family, poly_px_with_holes)
     opening_polys = unary_union([o["poly"] for o in elev["openings"]]) if elev["openings"] else None
+    label_holes = unary_union([label_hole(o, app) for o in elev["openings"]]) if elev["openings"] else None
     # ground line
     ext = elev["extent"]
     gx0, gx1 = ext[0] - rng.uniform(2, 8), ext[2] + rng.uniform(2, 8)
@@ -1671,7 +1677,7 @@ def render_elevation_view(canvas, tq, V, elev, styles, house, app, rng, S, W, H,
         # outline
         cv_outline(canvas, ppx, app["outline"], lw)
         if fam in label_fams:
-            lab = poly.difference(opening_polys) if (hole_mode and opening_polys is not None) else poly
+            lab = poly.difference(label_holes) if (hole_mode and opening_polys is not None) else poly
             for q in polys_of(lab):
                 out.append((fam, V.geom(q)))
     # eave and window-head shadows: BIM exports darken the wall under every
@@ -1835,6 +1841,20 @@ def _val_annotations(canvas, tq, V, elev, house, app, S, view_name):
     if walls and r.random() < vd["p_note"]:
         pt = r.choice(walls).representative_point()
         tq.add(V.px(pt.x - 2.0, pt.y), r.choice(WALL_NOTES), size * r.uniform(0.8, 1.2), ink)
+
+
+def label_hole(o, app):
+    """Region of an opening cut out of wall labels: the glass / door leaf, or (CASING_HOLES)
+    the rectangle over its casing and head, i.e. everything draw_opening paints in trim
+    colour except the few inches of sill and head that jut out sideways."""
+    p = o["poly"]
+    if not CASING_HOLES or o["type"] not in ("window", "door"):
+        return p
+    x0, y0, x1, y1 = p.bounds
+    if o["type"] == "door":
+        return rect(x0 - 0.3, y0 - 0.3, x1 + 0.3, y1)
+    vd = app.get("vd")
+    return rect(x0 - 0.3, y0 - (0.75 if (vd and vd["head"]) else 0.3), x1 + 0.3, y1 + 0.3)
 
 
 def draw_opening(canvas, V, o, house, app, S, rng, trim_colour=None):
@@ -2718,11 +2738,12 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES
     WINDOW_HOLE_PROB = window_hole_prob
+    CASING_HOLES = casing_holes
     REAL_LABELLING = real_labelling
     MUTED_PALETTE = muted_palette
     NEUTRAL_PALETTE = neutral_palette
@@ -2825,6 +2846,9 @@ def main():
     ap.add_argument("--window-hole-prob", type=float, default=1.0,
                     help="per sheet: cut windows/doors out of wall labels. 1.0 = always (default, the eval "
                          "convention); 0.8 = the pre-2026-09-29 pools (v6d_1600, v6d 100k, ...)")
+    ap.add_argument("--casing-holes", type=int, default=1, choices=[0, 1],
+                    help="1 = wall-label holes cover window/door casing and head (default); "
+                         "0 = holes at the glass only, the pre-2026-09-29 pools")
     ap.add_argument("--view-count-weights", default=None,
                     help="weights for 1,2,4 elevation views per sheet, e.g. 85,15,0. "
                          "Default (55,38,7) = 1.59 drawings/sheet, which is what makes "
@@ -2883,7 +2907,7 @@ def main():
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
                         args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling,
-                        args.window_hole_prob)) as pool:
+                        args.window_hole_prob, bool(args.casing_holes))) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1

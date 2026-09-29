@@ -258,6 +258,7 @@ def compose_revit(image_id, seed, mode_weights):
         x0, y0, x1, y1 = e["extent"]
         V = G.View(S, (cx + left_room - x0) * S, (cy + top_room - y0) * S)
         opening_polys = unary_union([o["poly"] for o in e["openings"]]) if e["openings"] else None
+        label_holes = unary_union([G.label_hole(o, app) for o in e["openings"]]) if e["openings"] else None
         # surfaces: pattern fills
         for (fam, poly, bi, kind) in e["surfaces"]:
             p = poly.difference(opening_polys) if opening_polys is not None else poly
@@ -265,7 +266,7 @@ def compose_revit(image_id, seed, mode_weights):
                 continue
             G.draw_fill(canvas, V.geom(p), styles[fam], S, W, H)
             if fam in label_fams:
-                lab = poly.difference(opening_polys) if (hole_mode and opening_polys is not None) else poly
+                lab = poly.difference(label_holes) if (hole_mode and opening_polys is not None) else poly
                 for q in G.polys_of(lab):
                     labelled.append((fam, V.geom(q)))
         # trims: white boards

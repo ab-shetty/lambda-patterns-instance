@@ -33,7 +33,7 @@ build_pool() {   # variant(v6b|v6c|v6d|v6e) out_dir n
   local VAR=$1 OUT=$2 N=$3
   [ -f "data/synthetic/${VAR}_4000/generation_manifest.json" ] || \
     python3 generate_synthetic_v6.py --n 4000 --out "data/synthetic/${VAR}_4000" \
-      --seed 6 --workers 40 --window-hole-prob 0.8 > "logs/gen_${VAR}_4000.log" 2>&1
+      --seed 6 --workers 40 --window-hole-prob 0.8 --casing-holes 0 > "logs/gen_${VAR}_4000.log" 2>&1
   [ "$(ls "$OUT/annotations" 2>/dev/null | wc -l)" -eq "$N" ] && return
   mkdir -p "$OUT/images" "$OUT/annotations"
   local i=0
