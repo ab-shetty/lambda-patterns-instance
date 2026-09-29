@@ -36,6 +36,12 @@ them the way the real Revit plan sheets in the eval set look (HF14 0/1/7/11/12/
                 labelled exterior hardscape; under-floor / foundation plans
                 (23%, HF14 7 + Gemini): crawlspace hatch / joists / dots and
                 slab labelled, piers cut out of the label.
+                Plan symbols (FreeCAD BIM window/door presets, ArchStairs):
+                swing / double / pocket / bifold / barn doors, exterior
+                patio sliders, garage overhead doors; 3-line / 2-line / sill
+                windows (one style per sheet); straight or U stairs with
+                treads, UP/DN arrow, break line, rail -- always holes in the
+                floor label.
 
 Labels and the annotation JSON follow v6's format, so v6's _job post-steps
 (tight crop, res-degrade) apply unchanged.
@@ -1226,17 +1232,25 @@ def plan_layout(house, r):
         vert = (y1 - y0) > (x1 - x0)
         both_open = rooms[i]["zone"] == rooms[j]["zone"] == "living"
         wide = both_open and r.random() < 0.6
-        w = min(L - 1.0, r.uniform(4, 9)) if wide else min(L - 1.0, r.choice([2.5, 2.67, 3.0]))
+        closet = any(k in rooms[i]["name"] + rooms[j]["name"] for k in ("CLOSET", "W.I.C.", "PANTRY", "LINEN", "LAUNDRY"))
+        if wide:
+            dtype = "open"
+        elif closet:
+            dtype = r.choices(["bifold", "barn", "pocket", "swing", "double"], weights=[35, 15, 15, 25, 10])[0]
+        else:
+            dtype = r.choices(["swing", "pocket", "double", "barn"], weights=[72, 12, 8, 8])[0]
+        w = min(L - 1.0, r.uniform(4, 9)) if wide else \
+            min(L - 1.0, r.uniform(4.5, 6) if dtype in ("double", "bifold") else r.choice([2.5, 2.67, 3.0]))
         if vert:
             c = r.uniform(y0 + 0.5 + w / 2, y1 - 0.5 - w / 2) if y1 - y0 > w + 1 else (y0 + y1) / 2
             x = (x0 + x1) / 2
             op = G.rect(x - t_int, c - w / 2, x + t_int, c + w / 2)
-            doors.append(("v", x, c, w, not wide))
+            doors.append(("v", x, c, w, dtype))
         else:
             c = r.uniform(x0 + 0.5 + w / 2, x1 - 0.5 - w / 2) if x1 - x0 > w + 1 else (x0 + x1) / 2
             y = (y0 + y1) / 2
             op = G.rect(c - w / 2, y - t_int, c + w / 2, y + t_int)
-            doors.append(("h", y, c, w, not wide))
+            doors.append(("h", y, c, w, dtype))
         openings.append((i, j, op))
     # front door + windows on the exterior
     mb = blocks[0]
@@ -1248,12 +1262,42 @@ def plan_layout(house, r):
         a, b = min(fsegs, key=lambda sg: (sg[0][1], -abs(sg[0][0] - sg[1][0])))
         lo, hi = min(a[0], b[0]) + 2, max(a[0], b[0]) - 2
         fx = min(max(fx, lo), hi)
-        doors.append(("h", a[1], fx, 3.0, True))
+        doors.append(("h", a[1], fx, 5.5, "double") if r.random() < 0.3 else ("h", a[1], fx, 3.0, "swing"))
         front_y = a[1]
     else:
         front_y = None
-    windows = []
     edge = foot.boundary
+
+    def ext_segs(cell, min_len):
+        out = []
+        for a, b in zip(list(cell.exterior.coords)[:-1], list(cell.exterior.coords)[1:]):
+            if (abs(a[0] - b[0]) > 1e-6 and abs(a[1] - b[1]) > 1e-6) or math.dist(a, b) < min_len:
+                continue
+            if edge.distance(LineString([a, b]).interpolate(0.5, normalized=True)) > 0.05:
+                continue
+            out.append((a, b))
+        return out
+
+    def add_ext(a, b, w, dtype):
+        L = math.dist(a, b)
+        t0 = r.uniform(1 + w / 2, L - 1 - w / 2) if L > w + 2 else L / 2
+        if abs(a[1] - b[1]) < 1e-6:
+            doors.append(("h", a[1], min(a[0], b[0]) + t0, w, dtype))
+        else:
+            doors.append(("v", a[0], min(a[1], b[1]) + t0, w, dtype))
+    for rm in rooms:
+        if rm["kind"] == "garage":
+            sg = ext_segs(rm["cell"], 11)
+            if sg:
+                a, b = max(sg, key=lambda ab: math.dist(*ab))
+                L = math.dist(a, b)
+                add_ext(a, b, min(16.0, L - 2) if L >= 19 else min(9.0, L - 2), "garage")
+        elif rm["zone"] == "living" and r.random() < 0.35:
+            sg = ext_segs(rm["cell"], 9)
+            if sg:
+                a, b = r.choice(sg)
+                add_ext(a, b, r.uniform(6, min(8, math.dist(a, b) - 2)), "slider")
+    windows = []
     for rm in rooms:
         if rm["kind"] == "garage":
             continue
@@ -1268,12 +1312,11 @@ def plan_layout(house, r):
                 t = (k + 0.5) / n
                 p = seg.interpolate(t, normalized=True)
                 ww = r.choice([2.5, 3.0, 4.0, 5.0])
-                if abs(a[1] - b[1]) < 1e-6:
-                    if front_y is not None and abs(a[1] - front_y) < 1e-6 and abs(p.x - fx) < 4:
-                        continue
-                    windows.append(("h", a[1], p.x, ww))
-                else:
-                    windows.append(("v", a[0], p.y, ww))
+                o = "h" if abs(a[1] - b[1]) < 1e-6 else "v"
+                pos, cc = (a[1], p.x) if o == "h" else (a[0], p.y)
+                if any(d[0] == o and abs(d[1] - pos) < 1e-6 and abs(d[2] - cc) < (d[3] + ww) / 2 + 1 for d in doors):
+                    continue                                        # no window over a door / slider / garage door
+                windows.append((o, pos, cc, ww))
     cut = []
     for (o, pos, c, w, *_) in doors + windows:
         cut.append(G.rect(pos - 1.0, c - w / 2, pos + 1.0, c + w / 2) if o == "v" else
@@ -1282,6 +1325,175 @@ def plan_layout(house, r):
     walls = walls_full.difference(unary_union(cut))
     return {"rooms": rooms, "doors": doors, "windows": windows, "openings": openings, "walls": walls,
             "walls_full": walls_full, "foot": foot, "t_ext": t_ext, "t_int": t_int}
+
+
+# ---- plan symbols: windows, door types, stairs (FreeCAD BIM window/door presets, ArchStairs)
+def _seg(canvas, V, o, pos, a, b, off, ink, lw):
+    """Line along the wall (o, pos) from a to b, offset `off` across the wall."""
+    if o == "h":
+        G.cv_line(canvas, V.px(a, pos + off), V.px(b, pos + off), ink, lw)
+    else:
+        G.cv_line(canvas, V.px(pos + off, a), V.px(pos + off, b), ink, lw)
+
+
+def _pt_(o, pos, along, across):
+    return (along, pos + across) if o == "h" else (pos + across, along)
+
+
+def _draw_window(canvas, V, o, pos, c, w, t, style, ink, lw):
+    a, b = c - w / 2, c + w / 2
+    if style == "3line":
+        for k in (-0.4, 0, 0.4):
+            _seg(canvas, V, o, pos, a, b, k * t, ink, lw)
+    elif style == "2line":
+        for k in (-0.12, 0.12):
+            _seg(canvas, V, o, pos, a, b, k * t, ink, lw)
+    else:                                                     # glass line + projecting sill
+        _seg(canvas, V, o, pos, a, b, 0, ink, lw)
+        for k in (-0.5, 0.5):
+            _seg(canvas, V, o, pos, a - 0.2, b + 0.2, k * t * 1.35, ink, lw)
+        for x in (a - 0.2, b + 0.2):
+            p, q = _pt_(o, pos, x, -0.5 * t * 1.35), _pt_(o, pos, x, 0.5 * t * 1.35)
+            G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw)
+    for x in (a, b):                                          # jambs
+        p, q = _pt_(o, pos, x, -t / 2), _pt_(o, pos, x, t / 2)
+        G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw)
+
+
+def _arc(canvas, V, hinge, rad, a0, a1, ink, lw, S):
+    cv2.ellipse(canvas, G._pt(V.px(*hinge)), (int(rad * S * G.SCALE), int(rad * S * G.SCALE)), 0, a0, a1,
+                G.bgr(ink), max(1, int(lw * 0.8)), cv2.LINE_AA, G.SHIFT)
+
+
+def _swing(canvas, V, o, pos, hx, leaf, sgn, toward, ink, lw, S):
+    """One leaf hinged at along-wall position hx, swinging to side sgn, opening toward +1/-1 along the wall."""
+    hinge = _pt_(o, pos, hx, 0)
+    end = _pt_(o, pos, hx, sgn * leaf)
+    G.cv_line(canvas, V.px(*hinge), V.px(*end), ink, lw * 1.3)
+    # arc from the leaf tip back to the closed position (along +toward)
+    ang_leaf = math.degrees(math.atan2(end[1] - hinge[1], end[0] - hinge[0]))
+    closed = _pt_(o, pos, hx + toward * leaf, 0)
+    ang_closed = math.degrees(math.atan2(closed[1] - hinge[1], closed[0] - hinge[0]))
+    a0, a1 = sorted([ang_leaf, ang_closed])
+    if a1 - a0 > 180:
+        a0, a1 = a1, a0 + 360
+    _arc(canvas, V, hinge, leaf, a0, a1, ink, lw, S)
+
+
+def _draw_door(canvas, V, d, t_ext, t_int, ink, lw, S, r):
+    o, pos, c, w, dtype = d
+    a, b = c - w / 2, c + w / 2
+    sgn = r.choice([-1, 1])
+    if dtype == "open":
+        return
+    if dtype == "swing":
+        if r.random() < 0.5:
+            _swing(canvas, V, o, pos, a, w, sgn, 1, ink, lw, S)
+        else:
+            _swing(canvas, V, o, pos, b, w, sgn, -1, ink, lw, S)
+    elif dtype == "double":
+        _swing(canvas, V, o, pos, a, w / 2, sgn, 1, ink, lw, S)
+        _swing(canvas, V, o, pos, b, w / 2, sgn, -1, ink, lw, S)
+    elif dtype == "pocket":                                   # leaf slides into the wall (dashed inside it)
+        _seg(canvas, V, o, pos, a, b, 0, ink, lw * 1.3)
+        p0, p1 = _pt_(o, pos, b, 0), _pt_(o, pos, b + w * 0.9, 0)
+        _dash_line(canvas, V.px(*p0), V.px(*p1), ink, lw, [(0.3 * S, 0.2 * S)])
+    elif dtype == "bifold":                                   # zig-zag panels from both jambs
+        for side, x0 in ((1, a), (-1, b)):
+            n = 2
+            pw = (w / 2) / n
+            pts = [_pt_(o, pos, x0 + side * k * pw, (sgn * pw * 0.45) * (k % 2)) for k in range(n + 1)]
+            G.cv_polyline(canvas, [V.px(*p) for p in pts], ink, lw * 1.2)
+    elif dtype == "barn":                                     # surface-mounted slab outside the opening
+        off = sgn * (t_int / 2 + 0.25)
+        _seg(canvas, V, o, pos, a - 0.3, b + 0.3, off, ink, lw * 1.4)
+        _seg(canvas, V, o, pos, b + 0.3, b + w * 0.9, off, ink, lw)
+    elif dtype == "slider":                                   # two glazed panels, overlapping, in the wall
+        for k, (u, v) in enumerate(((a, c + 0.3), (c - 0.3, b))):
+            off = (k - 0.5) * t_ext * 0.35
+            _seg(canvas, V, o, pos, u, v, off - 0.05, ink, lw)
+            _seg(canvas, V, o, pos, u, v, off + 0.05, ink, lw)
+        for x in (a, b):
+            p, q = _pt_(o, pos, x, -t_ext / 2), _pt_(o, pos, x, t_ext / 2)
+            G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw)
+    elif dtype == "garage":                                   # overhead door: panel line + dashed track inside
+        _seg(canvas, V, o, pos, a, b, 0, ink, lw * 1.2)
+        for x in (a, b):
+            p, q = _pt_(o, pos, x, -t_ext / 2), _pt_(o, pos, x, t_ext / 2)
+            G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw)
+
+
+def plan_stairs(rooms, r):
+    """0-1 stair runs (straight or U) inside a hall / living room, as plan polygons with
+    tread geometry. Stairs are always holes in the floor label (like skylights, piers)."""
+    cand = []
+    for rm in rooms:
+        q = rm["inner"]
+        x0, y0, x1, y1 = q.bounds
+        if rm["zone"] in ("living",) and q.area > 0.9 * (x1 - x0) * (y1 - y0) and max(x1 - x0, y1 - y0) >= 12 \
+                and min(x1 - x0, y1 - y0) >= 4.2:
+            cand.append(rm)
+    if not cand:
+        return []
+    rm = r.choice(cand)
+    x0, y0, x1, y1 = rm["inner"].bounds
+    horiz = (x1 - x0) >= (y1 - y0)
+    along0, along1 = (x0, x1) if horiz else (y0, y1)
+    across0, across1 = (y0, y1) if horiz else (x0, x1)
+    sw = r.uniform(3.0, 3.8)
+    L = min(along1 - along0 - 1.0, r.uniform(10, 13))
+    u_type = (across1 - across0) >= 2 * sw + 0.6 and r.random() < 0.4
+    s0 = r.uniform(along0 + 0.2, along1 - 0.2 - L)
+    side = r.choice([0, 1])                                   # against one of the long walls
+    runs = []
+    if u_type:
+        L = min(L, 8.5)
+        ca = across0 + 0.1 if side == 0 else across1 - 0.1 - (2 * sw + 0.3)
+        runs = [(s0, s0 + L, ca, ca + sw, 1), (s0, s0 + L, ca + sw + 0.3, ca + 2 * sw + 0.3, -1)]
+        land = (s0 + L, s0 + L + sw, ca, ca + 2 * sw + 0.3) if s0 + L + sw < along1 - 0.1 else None
+        if land is None:
+            return []
+    else:
+        ca = across0 + 0.1 if side == 0 else across1 - 0.1 - sw
+        runs = [(s0, s0 + L, ca, ca + sw, r.choice([1, -1]))]
+        land = None
+
+    def box_(a0, a1, c0, c1):
+        return G.rect(a0, c0, a1, c1) if horiz else G.rect(c0, a0, c1, a1)
+    polys = [box_(*run[:4]) for run in runs] + ([box_(*land)] if land else [])
+    return [{"poly": unary_union(polys), "runs": runs, "land": land, "horiz": horiz, "box": box_,
+             "tread": r.uniform(0.85, 1.0), "rail": r.random() < 0.5, "brk": r.random() < 0.5,
+             "label": r.choice(["UP", "UP", "DN"])}]
+
+
+def draw_stairs(canvas, tq, V, st, ink, lw, size, S):
+    horiz, box_ = st["horiz"], st["box"]
+    _mfill(canvas, V.geom(st["poly"]), (255, 255, 255), canvas.shape[1], canvas.shape[0])
+    G.cv_outline(canvas, V.geom(st["poly"]), ink, lw * 1.2)
+    for (a0, a1, c0, c1, direc) in st["runs"]:
+        n = int((a1 - a0) / st["tread"])
+        brk = a0 + (a1 - a0) * 0.62 if st["brk"] else None
+        for k in range(1, n + 1):
+            a = a0 + k * (a1 - a0) / (n + 1)
+            p, q = ((a, c0), (a, c1)) if horiz else ((c0, a), (c1, a))
+            if brk is not None and a > brk:
+                _dash_line(canvas, V.px(*p), V.px(*q), ink, lw * 0.8, [(0.25 * S, 0.18 * S)])
+            else:
+                G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw * 0.8)
+        if brk is not None:                                  # diagonal cut line with a zig-zag
+            p, q = ((brk - 0.8, c0), (brk + 0.8, c1)) if horiz else ((c0, brk - 0.8), (c1, brk + 0.8))
+            G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw * 1.2)
+        if st["rail"]:
+            off = 0.25
+            p, q = ((a0, c1 - off), (a1, c1 - off)) if horiz else ((c1 - off, a0), (c1 - off, a1))
+            G.cv_line(canvas, V.px(*p), V.px(*q), ink, lw * 0.8)
+        cm = (c0 + c1) / 2
+        s_, e_ = (a0 + 0.4, a1 - 0.4) if direc > 0 else (a1 - 0.4, a0 + 0.4)
+        p, q = ((s_, cm), (e_, cm)) if horiz else ((cm, s_), (cm, e_))
+        _slope_arrow(canvas, tq, V.px(*p), V.px(*q), "", ink, lw, size, half=False)
+        tq.add(V.px(*p), st["label"], size * 0.8, ink, bold=True, anchor="mm")
+    if st["land"]:
+        G.cv_outline(canvas, V.geom(box_(*st["land"])), ink, lw)
 
 
 # ---- floor finishes (Gemini floor plans: finish per room group, labelled through doorways)
@@ -1533,6 +1745,8 @@ def compose_floor(image_id, seed, mode_weights):
             G.cv_outline(canvas, V.geom(p), ink, lw_thin)
             labelled.append(("hardscape", V.geom(p)))
 
+    stairs = plan_stairs(rooms, r) if sheet in ("finish", "rendered") and r.random() < 0.45 else []
+    stair_u = unary_union([st["poly"] for st in stairs]) if stairs else None
     # ---- floors: regions = rooms of a material + the openings between two such rooms
     if sheet in ("finish", "rendered"):
         fams = {}
@@ -1547,6 +1761,8 @@ def compose_floor(image_id, seed, mode_weights):
                 fams[_mkey(mi)][1].append(op)
         for n, (key, (m, polys)) in enumerate(sorted(fams.items(), key=lambda kv: str(kv[0]))):
             reg = unary_union(polys)
+            if stair_u is not None:
+                reg = reg.difference(stair_u)
             draw_floor(canvas, V.geom(reg), m, S, W, H, lw_pat)
             if sheet == "finish":                        # patterned finish => always labelled
                 labelled.append((f"floor{n}", V.geom(reg)))
@@ -1601,6 +1817,8 @@ def compose_floor(image_id, seed, mode_weights):
         # every sheet must ask something: label the largest patterned region
         pass
 
+    for st in stairs:
+        draw_stairs(canvas, tq, V, st, ink, lw_thin, size, S)
     # ---- walls
     if sheet == "underfloor":
         wg = V.geom(lay["walls_full"].difference(unary_union([rm["inner"] for rm in rooms]).buffer(0)))
@@ -1625,26 +1843,11 @@ def compose_floor(image_id, seed, mode_weights):
             _mfill(canvas, wg, (255, 255, 255), W, H)
             G.cv_outline(canvas, wg, ink, lw_thin * 1.2)
         t = lay["t_ext"]
+        win_style = r.choices(["3line", "2line", "sill"], weights=[45, 30, 25])[0]
         for (o, pos, c, w) in lay["windows"]:
-            for kk in (-0.5, 0, 0.5):
-                if o == "h":
-                    G.cv_line(canvas, V.px(c - w / 2, pos + kk * t * 0.8), V.px(c + w / 2, pos + kk * t * 0.8), ink, lw_thin)
-                else:
-                    G.cv_line(canvas, V.px(pos + kk * t * 0.8, c - w / 2), V.px(pos + kk * t * 0.8, c + w / 2), ink, lw_thin)
-        for (o, pos, c, w, leaf) in lay["doors"]:
-            if not leaf:
-                continue
-            sgn = r.choice([-1, 1])
-            if o == "h":
-                hinge = (c - w / 2, pos)
-                G.cv_line(canvas, V.px(*hinge), V.px(hinge[0], pos + sgn * w), ink, lw_thin * 1.3)
-                a0, a1 = (0, 90) if sgn > 0 else (270, 360)
-            else:
-                hinge = (pos, c - w / 2)
-                G.cv_line(canvas, V.px(*hinge), V.px(pos + sgn * w, hinge[1]), ink, lw_thin * 1.3)
-                a0, a1 = (0, 90) if sgn > 0 else (90, 180)
-            cv2.ellipse(canvas, G._pt(V.px(*hinge)), (int(w * S * G.SCALE), int(w * S * G.SCALE)), 0, a0, a1,
-                        G.bgr(ink), max(1, int(lw_thin * 0.8)), cv2.LINE_AA, G.SHIFT)
+            _draw_window(canvas, V, o, pos, c, w, t, win_style, ink, lw_thin)
+        for d in lay["doors"]:
+            _draw_door(canvas, V, d, t, lay["t_int"], ink, lw_thin, S, r)
     if grid_on:
         xs = _merge_close([v for b in blocks for v in (b.x0, b.x1)], 4.0)
         ys = _merge_close([v for b in blocks for v in (b.y0, b.y1)], 4.0)
@@ -1656,7 +1859,8 @@ def compose_floor(image_id, seed, mode_weights):
     for rm in rooms:
         x0, y0, x1, y1 = rm["inner"].bounds
         if sheet != "underfloor":
-            if rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0):       # fixtures assume a rectangle
+            if rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
+                    not (stair_u is not None and rm["inner"].intersects(stair_u)):   # rectangles, no stair
                 G.draw_fixtures(canvas, V, rm["name"], (x0, y0, x1, y1), ink, lw_thin, S, r)
             rp_ = rm["inner"].representative_point() if rm["inner"].area < 0.9 * (x1 - x0) * (y1 - y0) else \
                 Point((x0 + x1) / 2, (y0 + y1) / 2)
