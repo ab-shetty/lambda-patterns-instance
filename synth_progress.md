@@ -188,6 +188,13 @@ shipped mix) with no evidence behind it. Recorded pools pin `--window-hole-prob 
 (run_best_mix.sh, run_fit_100k.sh, run_synth_v6.sh) and reproduce byte-identically;
 with 1.0, 16/120 v6 label files change (2/120 images: highlight / cloud markup picks
 a labelled piece), revit 5/60 labels, 0 images.
+The hole also covers each window/door casing and head as one rectangle since
+2026-09-29 (`--casing-holes 1`, default; the sill/head ears that jut past the casing
+stay in the wall, as in the hand-labelled Gemini sheets). Before, casing, head and sill
+(painted in trim colour) sat inside the wall label: ~15% of revit main-wall label area,
+on 91% of those labels; real eval sheets leave casings out. `--casing-holes 0` +
+`--window-hole-prob 0.8` reproduce the old pools byte-identically (60/60 revit, 60/60 v6);
+the new default changes 49/60 revit labels, no images.
 
 ## Open
 
