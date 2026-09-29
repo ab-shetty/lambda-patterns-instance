@@ -51,6 +51,111 @@ def house_for(image_id, seed, mw):
     return G.make_house(rng)
 
 
+SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
+
+
+def _rect_block(b, x0, y0, x1, y1, parent):
+    nb = dict(b, x0=x0, y0=y0, w=x1 - x0, d=y1 - y0, parent=parent)
+    nb.pop("poly", None)
+    if b["roof"] in ("gable", "hip"):
+        nb["ridge"] = "x" if (x1 - x0) >= (y1 - y0) else "y"
+    return nb
+
+
+def _poly_block(b, pts, sloped, parent, **kw):
+    from shapely.geometry import Polygon
+    from shapely.geometry.polygon import orient
+    q = orient(Polygon(pts), 1.0)
+    cc = [tuple(round(v, 4) for v in p) for p in list(q.exterior.coords)[:-1]]
+    x0, y0, x1, y1 = q.bounds
+    nb = dict(b, x0=x0, y0=y0, w=x1 - x0, d=y1 - y0, parent=parent, poly=cc, **kw)
+    n = len(cc)
+    nb["sloped"] = [i for i in range(n) if sloped(cc[i], cc[(i + 1) % n])]
+    return nb
+
+
+def shape_blocks(blocks, house, r):
+    """--shaped: turn the main block into an L (notch), a U (rear courtyard) or a chamfered
+    polygon, and add a 45-degree bay. Pieces keep `parent` (the v6 block they came from)
+    so elevation zoning still uses the right Block."""
+    from shapely.geometry import box as sbox
+    main, rest = blocks[0], blocks[1:]
+    x0, y0, x1, y1 = main["x0"], main["y0"], main["x0"] + main["w"], main["y0"] + main["d"]
+    others = [sbox(b["x0"], b["y0"], b["x0"] + b["w"], b["y0"] + b["d"]).buffer(0.5) for b in rest]
+
+    def free(g):
+        return not any(g.intersects(o) for o in others)
+    pieces = [dict(main, parent=0)]
+    op = r.random()
+    w, d = x1 - x0, y1 - y0
+    if op < 0.30 and w >= 28 and d >= 24:                         # L: notch a corner
+        u, v = r.uniform(0.25, 0.42) * w, r.uniform(0.3, 0.48) * d
+        opts = []
+        for right in (True, False):
+            for front in (True, False):
+                nx = (x1 - u, x1) if right else (x0, x0 + u)
+                ny = (y0, y0 + v) if front else (y1 - v, y1)
+                if free(sbox(nx[0], ny[0], nx[1], ny[1])):
+                    opts.append((right, front, nx, ny))
+        if opts:
+            right, front, nx, ny = r.choice(opts)
+            A = (x0, y0, x1 - u, y1) if right else (x0 + u, y0, x1, y1)
+            B = (nx[0], y0 + v, nx[1], y1) if front else (nx[0], y0, nx[1], y1 - v)
+            pieces = [_rect_block(main, *A, 0), _rect_block(main, *B, 0)]
+    elif op < 0.42 and w >= 34 and d >= 26:                       # U: courtyard into the rear
+        cw, cd = r.uniform(0.3, 0.45) * w, r.uniform(0.35, 0.5) * d
+        cx = x0 + (w - cw) / 2 + r.uniform(-0.1, 0.1) * w
+        if free(sbox(cx, y1 - cd, cx + cw, y1)):
+            pieces = [_rect_block(main, x0, y0, x1, y1 - cd, 0), _rect_block(main, x0, y1 - cd, cx, y1, 0),
+                      _rect_block(main, cx + cw, y1 - cd, x1, y1, 0)]
+    elif op < 0.65 and main["roof"] in ("hip", "gable", "flat"):  # chamfered corners
+        corners = [(x0, y0, 1, 1), (x1, y0, -1, 1), (x1, y1, -1, -1), (x0, y1, 1, -1)]
+        cut = [c for c in corners if free(sbox(min(c[0], c[0] + 6 * c[2]), min(c[1], c[1] + 6 * c[3]),
+                                                max(c[0], c[0] + 6 * c[2]), max(c[1], c[1] + 6 * c[3])))]
+        r.shuffle(cut)
+        cut = cut[:r.choice([1, 1, 2])]
+        pts = []
+        for (cx, cy, sx, sy) in corners:
+            if (cx, cy, sx, sy) in cut:
+                k = r.uniform(3, 6)
+                a = (cx, cy + sy * k) if (sx * sy) > 0 else (cx + sx * k, cy)
+                b = (cx + sx * k, cy) if (sx * sy) > 0 else (cx, cy + sy * k)
+                pts += [a, b]
+            else:
+                pts.append((cx, cy))
+        if cut:
+            ridge_x = main["ridge"] == "x"
+
+            def sl(p, q):
+                if main["roof"] == "hip":
+                    return True
+                dx, dy = abs(q[0] - p[0]), abs(q[1] - p[1])
+                if dx > 1e-6 and dy > 1e-6:
+                    return True                                      # chamfer edges carry a small hip
+                return (dy < 1e-6) if ridge_x else (dx < 1e-6)       # eave edges run parallel to the ridge
+            pieces = [_poly_block(main, pts, sl, 0)]
+    # 45-degree bay on the front or rear wall of the largest piece
+    if r.random() < 0.25 and main["roof"] != "flat":
+        P = max(pieces, key=lambda b: b["w"] * b["d"])
+        px0, px1 = P["x0"], P["x0"] + P["w"]
+        wy = r.choice([P["y0"], P["y0"] + P["d"]])
+        out = -1 if wy == P["y0"] else 1
+        bw, bd = r.uniform(7, 12), r.uniform(2.5, 4)
+        bd = min(bd, (bw - 2.0) / 2)                                # keep the trapezoid's outer face >= 2 ft
+        if px1 - px0 > bw + 6:
+            a = r.uniform(px0 + 2, px1 - 2 - bw)
+            pts = [(a, wy), (a + bd, wy + out * bd), (a + bw - bd, wy + out * bd), (a + bw, wy)]
+            if free(sbox(a, min(wy, wy + out * bd), a + bw, max(wy, wy + out * bd))):
+                Hb = min(main["H"], house["fh"] + house["plate"])
+
+                def sl_bay(p, q):
+                    return not (abs(p[1] - wy) < 1e-3 and abs(q[1] - wy) < 1e-3)   # not the house-side edge
+                pieces.append(_poly_block(main, pts, sl_bay, 0, H=Hb, roof="hip", ov=0.6))
+    for i, b in enumerate(rest):
+        b.setdefault("parent", i + 1)
+    return pieces + rest
+
+
 def massing_spec(image_id, seed, house):
     r = random.Random(seed * 1_000_003 + image_id * 151 + 7)
     blocks = []
@@ -60,6 +165,9 @@ def massing_spec(image_id, seed, house):
         pitch = b.pitch if b.roof == "flat" or b.pitch >= 0.1 else r.uniform(0.25, 0.45)
         blocks.append({"x0": b.x0, "y0": b.y0, "w": b.w, "d": b.d, "H": H, "roof": b.roof, "ridge": b.ridge,
                        "pitch": pitch, "ov": b.ov, "parapet": r.uniform(1.0, 2.5)})
+    if SHAPED[0]:
+        # own rng stream: the rest of the spec (chimney) is unchanged by the flag
+        blocks = shape_blocks(blocks, house, random.Random(seed * 1_000_003 + image_id * 211 + 3))
     spec = {"id": image_id, "blocks": blocks}
     if house["chimney"]:
         m = blocks[0]
@@ -150,8 +258,12 @@ def classify(F, blocks, chim):
             chim["y0"] - 0.05 <= cy <= chim["y0"] + chim["d"] + 0.05 and cz > chim["z0"]:
         return ("chimney", None)
     for bi, b in enumerate(blocks):
-        if b["x0"] - 0.05 <= cx <= b["x0"] + b["w"] + 0.05 and b["y0"] - 0.05 <= cy <= b["y0"] + b["d"] + 0.05:
-            return ("wall", bi)
+        if b.get("poly"):
+            from shapely.geometry import Point, Polygon
+            if Polygon(b["poly"]).buffer(0.05).contains(Point(cx, cy)):
+                return ("wall", b.get("parent", bi))
+        elif b["x0"] - 0.05 <= cx <= b["x0"] + b["w"] + 0.05 and b["y0"] - 0.05 <= cy <= b["y0"] + b["d"] + 0.05:
+            return ("wall", b.get("parent", bi))
     return ("trim", None)           # rake boards / fascia: slab edges outside every footprint
 
 
@@ -381,7 +493,12 @@ def main():
     ap.add_argument("--revit-plans", action="store_true",
                     help="with --revit: roof plans (from the 3D model's roof faces) and floor plans drawn "
                          "Revit-style too (scripts/revit_plans.py); off = v6 plans, byte-identical")
+    ap.add_argument("--shaped", action="store_true",
+                    help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
+                         "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
+                         "Off = byte-identical")
     args = ap.parse_args()
+    SHAPED[0] = args.shaped
     if args.revit_plans and not args.revit:
         ap.error("--revit-plans needs --revit")
     e, r, f = [float(v) for v in args.mode_weights.split(",")]
@@ -410,7 +527,7 @@ def main():
     with open(os.path.join(args.out, "generation_manifest.json"), "w") as fo:
         json.dump({"generator": "scripts/generate_synthetic_fc.py", "n": args.n, "seed": args.seed,
                    "start": args.start, "ok": ok, "modes": modes, "mode_weights": mw, "flags": flags, "revit": args.revit,
-                   "revit_plans": args.revit_plans}, fo, indent=2)
+                   "revit_plans": args.revit_plans, "shaped": args.shaped}, fo, indent=2)
 
 
 if __name__ == "__main__":

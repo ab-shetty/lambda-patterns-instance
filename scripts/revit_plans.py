@@ -594,6 +594,11 @@ def draw_material(canvas, poly_px, m, ang, tone, S, W, H, lw_thin):
 # ----------------------------------------------------------------------------
 # roof plan
 # ----------------------------------------------------------------------------
+def _bpoly(b):
+    """A spec block's footprint: its polygon (--shaped) or its rectangle."""
+    return Polygon(b["poly"]) if b.get("poly") else box(b["x0"], b["y0"], b["x0"] + b["w"], b["y0"] + b["d"])
+
+
 def compose_roof(image_id, seed, mode_weights):
     house = _house(image_id, seed, mode_weights)
     r = random.Random(seed * 1_000_003 + image_id * 181 + 53)
@@ -602,14 +607,13 @@ def compose_roof(image_id, seed, mode_weights):
     tops = top_faces(faces, chim)
     # a flat face is a flat ROOF only over a flat-roofed block; elsewhere it is a
     # sliver where pitched roofs meet and is drawn / labelled with the roof
-    flat_fp = unary_union([box(b["x0"] - b["ov"] - 0.1, b["y0"] - b["ov"] - 0.1, b["x0"] + b["w"] + b["ov"] + 0.1,
-                               b["y0"] + b["d"] + b["ov"] + 0.1) for b in spec["blocks"] if b["roof"] == "flat"])
+    flat_fp = unary_union([_bpoly(b).buffer(b["ov"] + 0.1, join_style=2) for b in spec["blocks"] if b["roof"] == "flat"])
     for t in tops:
         if t["kind"] == "flat" and (flat_fp.is_empty or not flat_fp.contains(t["vis"].representative_point())):
             t["kind"] = "pitched"
     if not any(t["kind"] in ("pitched", "flat") for t in tops):
         raise RuntimeError("no roof faces")
-    footprint = unary_union([box(b["x0"], b["y0"], b["x0"] + b["w"], b["y0"] + b["d"]) for b in spec["blocks"]])
+    footprint = unary_union([_bpoly(b) for b in spec["blocks"]])
     ink = (r.randint(0, 30),) * 3
 
     # ---- roof materials: every labelled roof carries a texture (Gemini + real roof plans,
@@ -641,8 +645,7 @@ def compose_roof(image_id, seed, mode_weights):
     for t in tops:
         c = t["poly"].representative_point()
         for i, bl in enumerate(spec["blocks"]):
-            o = bl["ov"] + 0.05
-            if bl["x0"] - o <= c.x <= bl["x0"] + bl["w"] + o and bl["y0"] - o <= c.y <= bl["y0"] + bl["d"] + o:
+            if _bpoly(bl).buffer(bl["ov"] + 0.05, join_style=2).contains(c):
                 block_of[id(t)] = i
                 if i != 0:
                     break

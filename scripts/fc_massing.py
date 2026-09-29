@@ -90,6 +90,81 @@ def block_solids(b):
     return out
 
 
+# ---- convex polygon blocks (--shaped: chamfered corners, 45-degree bays)
+# For a convex footprint, a hip roof is the lower envelope of the edges' slope planes,
+# so the roof is the footprint prism intersected with one half-space per sloped edge.
+# Gable edges contribute no plane (their triangle rises flush with the wall); a shed
+# keeps one plane.
+def _halfspace_below(E0, e, n_in, tan_t, B=400.0):
+    U = V(e[0], e[1], 0)
+    U.normalize()
+    Vv = V(n_in[0], n_in[1], tan_t)
+    Vv.normalize()
+    W = U.cross(Vv)
+    if W.z > 0:                           # box must lie BELOW the plane: flip W (and U to stay right-handed)
+        W, U = -W, -U
+    O = E0 - U * B - Vv * B
+    m = App.Matrix(U.x, Vv.x, W.x, O.x, U.y, Vv.y, W.y, O.y, U.z, Vv.z, W.z, O.z, 0, 0, 0, 1)
+    box = Part.makeBox(2 * B, 2 * B, 2 * B)
+    box.Placement = App.Placement(m)          # rigid placement keeps the faces planar (transformGeometry -> BSpline)
+    return box
+
+
+def _ccw(pts):
+    a = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
+    return pts if a > 0 else pts[::-1]
+
+
+def _prism(pts, z0, z1):
+    wire = Part.makePolygon([V(x, y, z0) for x, y in pts] + [V(pts[0][0], pts[0][1], z0)])
+    return _outward(Part.Face(wire).extrude(V(0, 0, z1 - z0)))
+
+
+def _offset_pts(pts, d):
+    """Offset a convex CCW polygon outward by d (edge-parallel)."""
+    n = len(pts)
+    lines = []
+    for i in range(n):
+        (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % n]
+        L = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+        nx, ny = (y1 - y0) / L, -(x1 - x0) / L         # outward for CCW
+        lines.append(((x0 + nx * d, y0 + ny * d), (x1 - x0, y1 - y0)))
+    out = []
+    for i in range(n):
+        (p, d1), (q, d2) = lines[i - 1], lines[i]
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        t = ((q[0] - p[0]) * d2[1] - (q[1] - p[1]) * d2[0]) / den
+        out.append((p[0] + d1[0] * t, p[1] + d1[1] * t))
+    return out
+
+
+def poly_block_solids(b):
+    pts = _ccw([tuple(p) for p in b["poly"]])
+    H, roof, pitch, ov = b["H"], b["roof"], b["pitch"], b["ov"]
+    n = len(pts)
+    top = H + 60.0
+    if roof == "flat":
+        return [_prism(pts, 0.0, H + b.get("parapet", 0.0))]
+    out = [_prism(pts, 0.0, H)]
+    sloped = b["sloped"]                       # indices of edges carrying a roof plane
+    attic = _prism(pts, H - 0.01, top)
+    slab_top = _prism(_offset_pts(pts, ov), H - ov * pitch - SLAB - 0.5, top)
+    slab_bot = slab_top.copy()
+    for i in sloped:
+        (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % n]
+        e = (x1 - x0, y1 - y0)
+        L = (e[0] ** 2 + e[1] ** 2) ** 0.5
+        n_in = (-e[1] / L, e[0] / L)           # inward for CCW
+        E0 = V(x0, y0, H)
+        attic = attic.common(_halfspace_below(E0, e, n_in, pitch))
+        slab_top = slab_top.common(_halfspace_below(E0, e, n_in, pitch))
+        slab_bot = slab_bot.common(_halfspace_below(E0 - V(0, 0, SLAB), e, n_in, pitch))
+    # booleans return compounds; the fuse in build() needs plain solids
+    out += [sd for sd in attic.Solids if sd.Volume > 1e-3]
+    out += [sd for sd in slab_top.cut(slab_bot).Solids if sd.Volume > 1e-3]
+    return out
+
+
 def faces_of(shape):
     faces = []
     for f in shape.Faces:
@@ -124,7 +199,7 @@ def faces_of(shape):
 def build(house):
     solids = []
     for b in house["blocks"]:
-        solids += block_solids(b)
+        solids += poly_block_solids(b) if b.get("poly") else block_solids(b)
     ch = house.get("chimney")
     if ch:
         solids.append(Part.makeBox(ch["w"], ch["d"], ch["z1"] - ch["z0"], V(ch["x0"], ch["y0"], ch["z0"])))

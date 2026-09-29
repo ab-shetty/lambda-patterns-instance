@@ -167,6 +167,17 @@ rule: two families of one pattern type differ in spacing (>= 1.4x, effective
 line spacing for tiles) or tone, never by direction alone (0 violations on
 300 floor + 300 roof sheets).
 
+`--shaped` (2026-09-29, untrained; needs `--revit`): 3D houses beyond boxes. The main
+block becomes an L (notch, split into two fused rect blocks: real valleys), a U
+(rear courtyard, three blocks) or a chamfered polygon, plus 25% a 45-degree bay.
+Convex polygon blocks are roofed as the lower envelope of the edges' slope planes
+(prism intersected with half-space boxes, `fc_massing.py poly_block_solids`); FreeCAD's
+ArchRoof was tried and rejected (needs a correct per-edge run; hips on L / bay
+outlines fail). Pieces keep `parent` so elevation zoning uses the right v6 block.
+Mix on 400 houses: 136 chamfer, 89 L, 85 bay, 16 U, 124 plain; 0 FreeCAD failures,
+0 roof-plan gaps / overlaps; off = byte-identical (--revit and --revit-plans, 80/80
+files each). Floor plans still use their own 2D shaping, not the 3D spec.
+
 ## Open
 
 - **`--revit --revit-plans` synth-only screen** vs the published Revit 2k
