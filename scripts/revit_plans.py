@@ -22,7 +22,10 @@ them the way the real Revit plan sheets in the eval set look (HF14 0/1/7/11/12/
                 walls-below dashed, gutters, trellis / louver slats (unlabelled
                 parallel-line look-alikes), copies of the building.
   floor plan -- rewritten 2026-09-29 from the ~40 Gemini + 3 real floor plans.
-                Rooms in EVERY block (wings too), doors / wide cased openings
+                Rooms in EVERY block (wings too) inside a shaped footprint
+                (notches, chamfers, 45-degree bays, U courtyards), corridors,
+                merged L-shaped open-plan rooms, closets carved from corners;
+                doors / wide cased openings
                 on a spanning tree, windows on the exterior. Three sheet types:
                 finish plans (55%, Gemini): one material per room group (wet
                 tile / mosaic, living planks / tile / basketweave, bedroom
@@ -895,15 +898,113 @@ def _zone(name):
     return "bed"
 
 
+def _convex_corners(poly):
+    """Convex 90-degree corners of a polygon's exterior: (corner, dir_a, dir_b) with unit
+    directions along the two edges leaving the corner."""
+    from shapely.geometry.polygon import orient
+    pts = list(orient(poly, 1.0).exterior.coords)[:-1]
+    out = []
+    n = len(pts)
+    for i in range(n):
+        p0, p1, p2 = pts[i - 1], pts[i], pts[(i + 1) % n]
+        a = (p0[0] - p1[0], p0[1] - p1[1])
+        b = (p2[0] - p1[0], p2[1] - p1[1])
+        la, lb = math.hypot(*a), math.hypot(*b)
+        if la < 1e-6 or lb < 1e-6:
+            continue
+        cross = (p1[0] - p0[0]) * (p2[1] - p1[1]) - (p1[1] - p0[1]) * (p2[0] - p1[0])
+        if cross > 0 and abs(a[0] * b[0] + a[1] * b[1]) < 1e-6 * la * lb:
+            out.append((p1, (a[0] / la, a[1] / la), (b[0] / lb, b[1] / lb), la, lb))
+    return out
+
+
+def shaped_footprint(blocks, r):
+    """Union of the blocks, then notches, chamfered corners, 45-degree bays and a U
+    courtyard, so plans are not always unions of rectangles."""
+    foot = unary_union([G.rect(b.x0, b.y0, b.x1, b.y1) for b in blocks])
+
+    def ok(g):
+        return isinstance(g, Polygon) and g.is_valid and g.area > 0.6 * foot.area and \
+            g.buffer(-4.0, join_style=2).geom_type == "Polygon"
+    if r.random() < 0.35:                                         # notch a convex corner
+        cs = [c for c in _convex_corners(foot) if c[3] > 14 and c[4] > 14]
+        if cs:
+            p, da, db, la, lb = r.choice(cs)
+            u, v = r.uniform(0.2, 0.4) * la, r.uniform(0.2, 0.4) * lb
+            q = Polygon([p, (p[0] + da[0] * u, p[1] + da[1] * u),
+                         (p[0] + da[0] * u + db[0] * v, p[1] + da[1] * u + db[1] * v),
+                         (p[0] + db[0] * v, p[1] + db[1] * v)])
+            g = foot.difference(q)
+            foot = g if ok(g) else foot
+    for _ in range(r.choice([0, 0, 1, 2])):                       # chamfer corners
+        cs = [c for c in _convex_corners(foot) if c[3] > 10 and c[4] > 10]
+        if cs:
+            p, da, db, la, lb = r.choice(cs)
+            d = r.uniform(3, 6)
+            g = foot.difference(Polygon([p, (p[0] + da[0] * d, p[1] + da[1] * d), (p[0] + db[0] * d, p[1] + db[1] * d)]))
+            foot = g if ok(g) else foot
+    if r.random() < 0.3:                                          # 45-degree bay on a long wall
+        from shapely.geometry.polygon import orient
+        pts = list(orient(foot, 1.0).exterior.coords)
+        segs = [(a, b) for a, b in zip(pts[:-1], pts[1:]) if math.dist(a, b) >= 14 and
+                (abs(a[0] - b[0]) < 1e-6 or abs(a[1] - b[1]) < 1e-6)]
+        if segs:
+            a, b = r.choice(segs)
+            L = math.dist(a, b)
+            ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+            nx, ny = uy, -ux                                     # outward for a CCW ring
+            w, dpt = r.uniform(7, min(12, L - 4)), r.uniform(2.5, 4)
+            t0 = r.uniform(2, L - 2 - w)
+            p0 = (a[0] + ux * t0, a[1] + uy * t0)
+            p3 = (p0[0] + ux * w, p0[1] + uy * w)
+            p1 = (p0[0] + ux * dpt + nx * dpt, p0[1] + uy * dpt + ny * dpt)
+            p2 = (p3[0] - ux * dpt + nx * dpt, p3[1] - uy * dpt + ny * dpt)
+            bay = Polygon([p0, p1, p2, p3])
+            g = foot.union(bay)
+            if not ok(g) or g.area <= foot.area:
+                bay = Polygon([p0, (p0[0] + ux * dpt - nx * dpt, p0[1] + uy * dpt - ny * dpt),
+                               (p3[0] - ux * dpt - nx * dpt, p3[1] - uy * dpt - ny * dpt), p3])
+                g = foot.union(bay)
+            foot = g if ok(g) and g.area > foot.area else foot
+    mb = blocks[0]
+    if r.random() < 0.12 and min(mb.w, mb.d) > 34:                # U: courtyard into a long side
+        if mb.w >= mb.d:
+            cw, cd = r.uniform(0.3, 0.5) * mb.w, r.uniform(0.3, 0.45) * mb.d
+            cx = r.uniform(mb.x0 + 10, mb.x1 - 10 - cw)
+            q = G.rect(cx, mb.y1 - cd, cx + cw, mb.y1 + 1)
+        else:
+            cw, cd = r.uniform(0.3, 0.5) * mb.d, r.uniform(0.3, 0.45) * mb.w
+            cy = r.uniform(mb.y0 + 10, mb.y1 - 10 - cw)
+            q = G.rect(mb.x1 - cd, cy, mb.x1 + 1, cy + cw)
+        g = foot.difference(q)
+        foot = g if ok(g) else foot
+    return foot
+
+
+def _shared_seg(a, b):
+    """Longest axis-aligned piece of the boundary two cells share, as bounds, or None."""
+    sh = a.boundary.intersection(b.boundary)
+    best = None
+    for seg in G.lines_of(sh):
+        c = list(seg.coords)
+        for p, q in zip(c[:-1], c[1:]):
+            if abs(p[0] - q[0]) > 1e-6 and abs(p[1] - q[1]) > 1e-6:
+                continue
+            L = math.dist(p, q)
+            if best is None or L > best[1]:
+                best = ((min(p[0], q[0]), min(p[1], q[1]), max(p[0], q[0]), max(p[1], q[1])), L)
+    return best
+
+
 def plan_layout(house, r):
     blocks = house["blocks"]
     t_ext, t_int = r.uniform(0.55, 0.85), r.uniform(0.35, 0.5)
-    foot = unary_union([G.rect(b.x0, b.y0, b.x1, b.y1) for b in blocks])
+    foot = shaped_footprint(blocks, r)
     inner_foot = foot.buffer(-t_ext, join_style=2)
     cells, taken = [], None
     for b in blocks:
         R = G.rect(b.x0, b.y0, b.x1, b.y1)
-        reg = R if taken is None else R.difference(taken)
+        reg = (R if taken is None else R.difference(taken)).intersection(foot)
         taken = R if taken is None else taken.union(R)
         for q in G.polys_of(reg):
             if q.area < 20:
@@ -911,12 +1012,72 @@ def plan_layout(house, r):
             if b.kind == "garage":
                 cells.append((q, "garage"))
                 continue
-            bx = q.bounds
-            if q.area > 0.97 * (bx[2] - bx[0]) * (bx[3] - bx[1]):
-                for (x0, y0, x1, y1) in G.split_rooms(r, *bx):
-                    cells.append((G.rect(x0, y0, x1, y1), "room"))
-            else:
-                cells.append((q, "room"))
+            x0, y0, x1, y1 = q.bounds
+            parts = [(x0, y0, x1, y1, "room")]
+            # a corridor through the block (Gemini plans: halls connect the rooms)
+            if min(x1 - x0, y1 - y0) >= 24 and r.random() < 0.45:
+                hw = r.uniform(3.5, 4.5)
+                if x1 - x0 >= y1 - y0:
+                    yc = r.uniform(y0 + 0.35 * (y1 - y0), y0 + 0.65 * (y1 - y0))
+                    parts = [(x0, y0, x1, yc - hw / 2, "room"), (x0, yc - hw / 2, x1, yc + hw / 2, "hall"),
+                             (x0, yc + hw / 2, x1, y1, "room")]
+                else:
+                    xc = r.uniform(x0 + 0.35 * (x1 - x0), x0 + 0.65 * (x1 - x0))
+                    parts = [(x0, y0, xc - hw / 2, y1, "room"), (xc - hw / 2, y0, xc + hw / 2, y1, "hall"),
+                             (xc + hw / 2, y0, x1, y1, "room")]
+            for (a0, b0, a1, b1, kind) in parts:
+                subs = [(a0, b0, a1, b1)] if kind == "hall" else G.split_rooms(r, a0, b0, a1, b1)
+                for (s0, u0, s1, u1) in subs:
+                    for piece in G.polys_of(G.rect(s0, u0, s1, u1).intersection(q)):
+                        if piece.area > 1:
+                            cells.append((piece, kind))
+    # anything of the footprint outside the blocks (bays) joins the cell it touches most
+    covered = unary_union([c for c, _ in cells])
+    for extra in G.polys_of(foot.difference(covered)):
+        if extra.area < 0.5:
+            continue
+        k = max(range(len(cells)), key=lambda i: cells[i][0].boundary.intersection(extra.boundary).length)
+        cells[k] = (cells[k][0].union(extra), cells[k][1])
+    # slivers join their longest-shared neighbour
+    changed = True
+    while changed:
+        changed = False
+        for i, (c, kind) in enumerate(cells):
+            if c.area < 25 and kind != "garage" and len(cells) > 1:
+                j = max((j for j in range(len(cells)) if j != i and cells[j][1] != "garage"),
+                        key=lambda j: cells[j][0].boundary.intersection(c.boundary).length, default=None)
+                if j is not None and cells[j][0].boundary.intersection(c.boundary).length > 1:
+                    cells[j] = (cells[j][0].union(c), cells[j][1])
+                    cells.pop(i)
+                    changed = True
+                    break
+    # open plan: merge neighbours into L-shaped / larger rooms
+    for _ in range(r.choice([0, 1, 1, 2])):
+        pairs = [(i, j) for i in range(len(cells)) for j in range(i + 1, len(cells))
+                 if cells[i][1] == cells[j][1] == "room" and (_shared_seg(cells[i][0], cells[j][0]) or (0, 0))[1] > 5]
+        if not pairs:
+            break
+        i, j = r.choice(pairs)
+        m = cells[i][0].union(cells[j][0])
+        if isinstance(m, Polygon):
+            cells[i] = (m, "room")
+            cells.pop(j)
+    # closets / baths carved out of big rooms' corners -> L-shaped rooms
+    for i in range(len(cells)):
+        c, kind = cells[i]
+        if kind != "room" or c.area < 150 or r.random() > 0.35:
+            continue
+        cs = [k for k in _convex_corners(c) if k[3] > 10 and k[4] > 10]
+        if not cs:
+            continue
+        p, da, db, la, lb = r.choice(cs)
+        u, v = r.uniform(4, 7), r.uniform(4.5, 8)
+        q = Polygon([p, (p[0] + da[0] * u, p[1] + da[1] * u),
+                     (p[0] + da[0] * u + db[0] * v, p[1] + da[1] * u + db[1] * v), (p[0] + db[0] * v, p[1] + db[1] * v)])
+        rest = c.difference(q)
+        if isinstance(rest, Polygon) and q.within(c.buffer(1e-6)):
+            cells[i] = (rest, "room")
+            cells.append((q, "carve"))
     rooms = []
     for (c, kind) in cells:
         inner = c.buffer(-t_int / 2, join_style=2).intersection(inner_foot)
@@ -925,10 +1086,14 @@ def plan_layout(house, r):
         inner = max(G.polys_of(inner), key=lambda q: q.area)
         rooms.append({"cell": c, "inner": inner, "kind": kind})
     # names by size / shape
-    free = sorted([k for k, rm in enumerate(rooms) if rm["kind"] != "garage"], key=lambda k: -rooms[k]["inner"].area)
+    free = sorted([k for k, rm in enumerate(rooms) if rm["kind"] == "room"], key=lambda k: -rooms[k]["inner"].area)
     names = {}
     for k in [k for k, rm in enumerate(rooms) if rm["kind"] == "garage"]:
         names[k] = r.choice(["GARAGE", "GARAGE", "2-CAR GARAGE"])
+    for k in [k for k, rm in enumerate(rooms) if rm["kind"] == "hall"]:
+        names[k] = r.choice(["HALL", "HALLWAY", "CORRIDOR"])
+    for k in [k for k, rm in enumerate(rooms) if rm["kind"] == "carve"]:
+        names[k] = r.choice(["CLOSET", "W.I.C.", "BATH", "PANTRY", "LAUNDRY", "POWDER"])
     nb = 1
     for rank, k in enumerate(free):
         q = rooms[k]["inner"]
@@ -960,13 +1125,9 @@ def plan_layout(house, r):
     pairs = []
     for i in range(len(rooms)):
         for j in range(i + 1, len(rooms)):
-            sh = rooms[i]["cell"].buffer(0.05).intersection(rooms[j]["cell"].buffer(0.05))
-            if sh.is_empty:
-                continue
-            x0, y0, x1, y1 = sh.bounds
-            L = max(x1 - x0, y1 - y0)
-            if L > 3.6:
-                pairs.append((i, j, (x0, y0, x1, y1), L))
+            sh = _shared_seg(rooms[i]["cell"], rooms[j]["cell"])
+            if sh is not None and sh[1] > 3.6:
+                pairs.append((i, j, sh[0], sh[1]))
     r.shuffle(pairs)
     parent = list(range(len(rooms)))
 
@@ -1003,7 +1164,17 @@ def plan_layout(house, r):
     # front door + windows on the exterior
     mb = blocks[0]
     fx = mb.x0 + house["front_door_u"] * mb.w
-    doors.append(("h", mb.y0, fx, 3.0, True))
+    # front door on the front-most horizontal exterior wall (the footprint may be notched)
+    fsegs = [(a, b) for a, b in zip(list(foot.exterior.coords)[:-1], list(foot.exterior.coords)[1:])
+             if abs(a[1] - b[1]) < 1e-6 and abs(a[0] - b[0]) > 6]
+    if fsegs:
+        a, b = min(fsegs, key=lambda sg: (sg[0][1], -abs(sg[0][0] - sg[1][0])))
+        lo, hi = min(a[0], b[0]) + 2, max(a[0], b[0]) - 2
+        fx = min(max(fx, lo), hi)
+        doors.append(("h", a[1], fx, 3.0, True))
+        front_y = a[1]
+    else:
+        front_y = None
     windows = []
     edge = foot.boundary
     for rm in rooms:
@@ -1011,6 +1182,8 @@ def plan_layout(house, r):
             continue
         for a, b in zip(list(rm["cell"].exterior.coords)[:-1], list(rm["cell"].exterior.coords)[1:]):
             seg = LineString([a, b])
+            if abs(a[0] - b[0]) > 1e-6 and abs(a[1] - b[1]) > 1e-6:      # no windows in diagonal walls
+                continue
             if seg.length < 5 or edge.distance(seg.interpolate(0.5, normalized=True)) > 0.05:
                 continue
             n = max(0, int(seg.length / r.uniform(7, 13)))
@@ -1019,7 +1192,7 @@ def plan_layout(house, r):
                 p = seg.interpolate(t, normalized=True)
                 ww = r.choice([2.5, 3.0, 4.0, 5.0])
                 if abs(a[1] - b[1]) < 1e-6:
-                    if abs(a[1] - mb.y0) < 1e-6 and abs(p.x - fx) < 4:
+                    if front_y is not None and abs(a[1] - front_y) < 1e-6 and abs(p.x - fx) < 4:
                         continue
                     windows.append(("h", a[1], p.x, ww))
                 else:
@@ -1385,8 +1558,11 @@ def compose_floor(image_id, seed, mode_weights):
     for rm in rooms:
         x0, y0, x1, y1 = rm["inner"].bounds
         if sheet != "underfloor":
-            G.draw_fixtures(canvas, V, rm["name"], (x0, y0, x1, y1), ink, lw_thin, S, r)
-            c = V.px((x0 + x1) / 2, (y0 + y1) / 2)
+            if rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0):       # fixtures assume a rectangle
+                G.draw_fixtures(canvas, V, rm["name"], (x0, y0, x1, y1), ink, lw_thin, S, r)
+            rp_ = rm["inner"].representative_point() if rm["inner"].area < 0.9 * (x1 - x0) * (y1 - y0) else \
+                Point((x0 + x1) / 2, (y0 + y1) / 2)
+            c = V.px(rp_.x, rp_.y)
             if rm["inner"].area > 30:
                 tq.add(c, rm["name"], size * 0.95, ink, bold=True, anchor="mm")
                 if r.random() < 0.7:
