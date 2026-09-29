@@ -157,6 +157,16 @@ Off = byte-identical `--revit` pool (checked, 32/32 files). 200 sheets in 56 s o
 --mode-weights 66,16,18 --revit --revit-plans` (same ids as `revit_train2000`,
 so only the plan sheets differ).
 
+2026-09-29 plan rework (all `--revit-plans`, untrained): roofs always textured
+(from the 14 Gemini + 4 real roof plans), skylights / piers always holes;
+floor plans rewritten from ~40 Gemini + 3 real (finish plans by room group
+through doorways, rendered hardscape plans, under-floor plans), shaped
+footprints and rooms (notches, chamfers, bays, U, corridors, L-rooms, carved
+closets); FreeCAD TechDraw hatch library as tiles (`scripts/hatch_tiles/`);
+rule: two families of one pattern type differ in spacing (>= 1.4x, effective
+line spacing for tiles) or tone, never by direction alone (0 violations on
+300 floor + 300 roof sheets).
+
 ## Open
 
 - **`--revit --revit-plans` synth-only screen** vs the published Revit 2k

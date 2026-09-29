@@ -353,6 +353,52 @@ def _mfill(canvas, geom_px, colour, W, H):
     G.blend_mask(canvas[y0:y1, x0:x1], layer, m)
 
 
+# ---- FreeCAD TechDraw hatch library (scripts/hatch_tiles/*.png, seamless 256 px tiles)
+import os
+HATCH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hatch_tiles")
+# kind -> (tile file, look class, effective line/unit spacing as a fraction of the tile,
+#          tile size range in feet)
+TILES = {"t_hbone": ("hbone", "hbone", 1 / 3, (2.5, 4.5)), "t_earth": ("earth", "basket", 1 / 2, (2.0, 3.5)),
+         "t_brick": ("brick01", "bond", 1 / 4, (2.5, 4.0)), "t_aggregate": ("concrete", "aggregate", 1 / 3, (2.5, 5.0)),
+         "t_woodgrain": ("woodgrain", "woodgrain", 1 / 5, (2.5, 5.0)), "t_plus": ("plus", "plus", 1 / 2, (2.0, 4.0)),
+         "t_cross": ("cross", "diag", 1 / 5, (2.5, 4.5)), "t_zinc": ("zinc", "diag", 1 / 8, (2.0, 3.5)),
+         "t_steel": ("steel", "lines", 1 / 8, (2.5, 4.5)), "t_aluminium": ("aluminium", "lines", 1 / 8, (3.0, 5.0)),
+         "t_cuprous": ("cuprous", "lines", 1 / 10, (2.5, 4.5)), "t_glass": ("glass", "dashes", 1 / 10, (2.5, 4.5)),
+         "t_plastic": ("plastic", "plastic", 1 / 6, (2.5, 4.0))}
+_TILE_CACHE = {}
+
+
+def _tile_alpha(name):
+    if name not in _TILE_CACHE:
+        g = cv2.imread(os.path.join(HATCH_DIR, name + ".png"), cv2.IMREAD_GRAYSCALE)
+        _TILE_CACHE[name] = 1.0 - g.astype(np.float32) / 255.0
+    return _TILE_CACHE[name]
+
+
+def hatch_layer(layer, ox, oy, S, kind, tile_ft, colour, ang=0.0):
+    """Composite TechDraw tile `kind` (tile_ft feet per repeat, rotated by ang degrees)
+    in `colour` over `layer`, which covers sheet pixels (ox, oy)+(w, h). Phase is
+    anchored to the sheet so one family's pieces line up."""
+    h, w = layer.shape[:2]
+    T = max(8, int(round(tile_ft * S)))
+    a = _tile_alpha(TILES[kind][0])
+    t = cv2.resize(a, (T, T), interpolation=cv2.INTER_AREA if T < a.shape[0] else cv2.INTER_LINEAR)
+    t = np.clip(t * max(1.0, (a.shape[0] / T) ** 0.6), 0, 1)       # keep thin lines visible when shrunk
+    if ang % 180:
+        D = int(math.hypot(w, h)) + 2 * T
+        big = np.tile(t, (D // T + 2, D // T + 2))[:D, :D]
+        M = cv2.getRotationMatrix2D((D / 2, D / 2), -ang, 1.0)
+        big = cv2.warpAffine(big, M, (D, D), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP)
+        a2 = big[(D - h) // 2:(D - h) // 2 + h, (D - w) // 2:(D - w) // 2 + w]
+    else:
+        py, px = int(oy) % T, int(ox) % T
+        big = np.tile(t, (h // T + 2, w // T + 2))
+        a2 = big[py:py + h, px:px + w]
+    a2 = a2[..., None]
+    col = np.array(G.bgr(colour), np.float32)
+    layer[:] = (layer.astype(np.float32) * (1 - a2) + col * a2).astype(np.uint8)
+
+
 def _shade(canvas, geom_px, k, W, H):
     m = np.zeros((H, W), np.uint8)
     for q in G.polys_of(geom_px):
@@ -404,8 +450,8 @@ TINT_ROOF = [(196, 160, 140), (150, 160, 172), (172, 152, 124), (140, 150, 136),
 # ----------------------------------------------------------------------------
 # roof materials
 # ----------------------------------------------------------------------------
-PITCHED_KINDS = ["bond_facet", "bond_global", "eave_lines", "seam", "cross", "dots"]
-PITCHED_W = [32, 10, 18, 16, 9, 5]
+PITCHED_KINDS = ["bond_facet", "bond_global", "eave_lines", "seam", "cross", "dots", "t_zinc", "t_brick"]
+PITCHED_W = [30, 9, 17, 15, 8, 5, 8, 8]
 
 
 def roof_material(r, avoid, seed):
@@ -426,13 +472,21 @@ def roof_material(r, avoid, seed):
     return {"kind": kind, "style": style, "base": base, "line": line, "seed": seed,
             "row": r.uniform(0.35, 0.8), "unit": r.uniform(0.9, 1.8), "sp": r.uniform(0.45, 1.4),
             "seam_sp": r.uniform(1.0, 2.0), "cross_sp": r.uniform(1.2, 3.0), "dot_sp": r.uniform(0.6, 1.3),
-            "dot_fill": r.random() < 0.5, "lwk": r.uniform(0.55, 0.9)}
+            "dot_fill": r.random() < 0.5, "lwk": r.uniform(0.55, 0.9),
+            "tile": r.uniform(*TILES[kind][3]) if kind in TILES else 0.0}
 
 
 ROOF_LOOK = {"bond_facet": "bond", "bond_global": "bond", "eave_lines": "lines", "seam": "lines",
-             "flat_seams": "lines", "cross": "diag", "dots": "dots", "membrane": "dots", "gravel": "stipple"}
+             "flat_seams": "lines", "cross": "diag", "dots": "dots", "membrane": "dots", "gravel": "stipple",
+             "t_zinc": "diag", "t_brick": "bond", "t_aggregate": "aggregate", "t_glass": "dashes"}
 ROOF_SP = {"bond_facet": "row", "bond_global": "row", "eave_lines": "sp", "seam": "seam_sp", "flat_seams": "seam_sp",
-           "cross": "cross_sp", "dots": "dot_sp", "membrane": "dot_sp", "gravel": "density"}
+           "cross": "cross_sp", "dots": "dot_sp", "membrane": "dot_sp", "gravel": "density",
+           "t_zinc": "tile", "t_brick": "tile", "t_aggregate": "tile", "t_glass": "tile"}
+
+
+def _roof_eff(m):
+    v = m[ROOF_SP[m["kind"]]]
+    return v * TILES[m["kind"]][2] if m["kind"] in TILES else v
 
 
 def roof_separate(m, others):
@@ -446,21 +500,23 @@ def roof_separate(m, others):
                 continue
             if abs(_lum(o["base"]) - _lum(m["base"])) >= 30 or math.dist(o["base"], m["base"]) >= 60:
                 continue
-            a, b = m[key], o[ROOF_SP[o["kind"]]]
+            a, b = _roof_eff(m), _roof_eff(o)
             if max(a, b) / min(a, b) < 1.4:
                 clash = b
                 break
         if clash is None:
             return
-        m[key] = clash * 1.6 if m[key] >= clash else clash / 1.6
+        f = TILES[m["kind"]][2] if m["kind"] in TILES else 1.0
+        m[key] = (clash * 1.6 if _roof_eff(m) >= clash else clash / 1.6) / f
 
 
 def flat_material(r, seed):
-    kind = r.choices(["gravel", "membrane", "flat_seams"], weights=[40, 35, 25])[0]
+    kind = r.choices(["gravel", "membrane", "flat_seams", "t_aggregate", "t_glass"], weights=[32, 28, 20, 12, 8])[0]
     base = (r.randint(236, 252),) * 3 if r.random() < 0.7 else (255, 255, 255)
     return {"kind": kind, "style": "grey", "base": base, "line": (r.randint(90, 160),) * 3, "seed": seed,
             "density": r.uniform(1.0, 3.0), "dot_sp": r.uniform(0.9, 1.8), "dot_fill": r.random() < 0.4,
-            "seam_sp": r.uniform(2.5, 4.5), "seam_ang": r.choice([0, 90]), "lwk": r.uniform(0.5, 0.8)}
+            "seam_sp": r.uniform(2.5, 4.5), "seam_ang": r.choice([0, 90]), "lwk": r.uniform(0.5, 0.8),
+            "tile": r.uniform(*TILES[kind][3]) if kind in TILES else 0.0}
 
 
 def _dotgrid(layer, ox, oy, S, sp, rpx, colour, filled, lw):
@@ -521,6 +577,9 @@ def draw_material(canvas, poly_px, m, ang, tone, S, W, H, lw_thin):
             _dotgrid(layer, x0, y0, S, m["dot_sp"], max(1.2, 0.07 * S), line, m["dot_fill"], lw)
         elif k == "flat_seams":
             G._dlines(layer, x0, y0, S, m["seam_sp"], m["seam_ang"], line, lw)
+        elif k in TILES:
+            # brick-bond tiles turn with the facet's eave, like the drawn shingle bond
+            hatch_layer(layer, x0, y0, S, k, m["tile"], line, ang if k == "t_brick" else 0.0)
     mask = G.poly_mask(affinity.translate(poly_px, -x0, -y0), w, h)
     G.blend_mask(canvas[y0:y1, x0:x1], layer, mask)
 
@@ -862,10 +921,25 @@ def _hard_style(kind, r, lw, seed, colour):
         return G.Style("hatch", base, line, lw, {"sp": r.uniform(0.35, 0.6), "angle": 0}, seed, "hard")
     if kind == "basket":
         return G.Style("basket", base, line, lw, {"sp": r.uniform(0.8, 1.4)}, seed, "hard")
+    if kind in TILES:
+        return G.Style(kind, base, line, lw, {"sp": r.uniform(*TILES[kind][3]), "angle": r.choice([0, 90])}, seed, "hard")
     return G.Style("concrete", base, line, lw, {"density": r.uniform(0.8, 1.8)}, seed, "hard")
 
 
 def _fill(canvas, poly_px, st, S, W, H):
+    if st.kind in TILES:
+        minx, miny, maxx, maxy = poly_px.bounds
+        x0, y0 = max(0, int(minx) - 2), max(0, int(miny) - 2)
+        x1, y1 = min(W, int(math.ceil(maxx)) + 2), min(H, int(math.ceil(maxy)) + 2)
+        if x1 <= x0 or y1 <= y0:
+            return
+        layer = np.empty((y1 - y0, x1 - x0, 3), np.uint8)
+        layer[:] = G.bgr(st.base)
+        hatch_layer(layer, x0, y0, S, st.kind, st.params["sp"], st.line,
+                    st.params.get("angle", 0) if st.kind in ("t_hbone", "t_brick") else 0)
+        m = G.poly_mask(affinity.translate(poly_px, -x0, -y0), x1 - x0, y1 - y0)
+        G.blend_mask(canvas[y0:y1, x0:x1], layer, m)
+        return
     if st.kind == "basket":
         layer_st = G.Style("grid", st.base, st.line, st.lw, {"sp": st.params["sp"]}, st.seed, st.label_name)
         minx, miny, maxx, maxy = poly_px.bounds
@@ -959,13 +1033,16 @@ def shaped_footprint(blocks, r):
             p3 = (p0[0] + ux * w, p0[1] + uy * w)
             p1 = (p0[0] + ux * dpt + nx * dpt, p0[1] + uy * dpt + ny * dpt)
             p2 = (p3[0] - ux * dpt + nx * dpt, p3[1] - uy * dpt + ny * dpt)
-            bay = Polygon([p0, p1, p2, p3])
-            g = foot.union(bay)
-            if not ok(g) or g.area <= foot.area:
-                bay = Polygon([p0, (p0[0] + ux * dpt - nx * dpt, p0[1] + uy * dpt - ny * dpt),
-                               (p3[0] - ux * dpt - nx * dpt, p3[1] - uy * dpt - ny * dpt), p3])
-                g = foot.union(bay)
-            foot = g if ok(g) and g.area > foot.area else foot
+            try:
+                bay = Polygon([p0, p1, p2, p3])
+                g = foot.union(bay) if bay.is_valid else foot
+                if not ok(g) or g.area <= foot.area:
+                    bay = Polygon([p0, (p0[0] + ux * dpt - nx * dpt, p0[1] + uy * dpt - ny * dpt),
+                                   (p3[0] - ux * dpt - nx * dpt, p3[1] - uy * dpt - ny * dpt), p3])
+                    g = foot.union(bay) if bay.is_valid else foot
+                foot = g if ok(g) and g.area > foot.area else foot
+            except Exception:                                  # degenerate bay: keep the footprint
+                pass
     mb = blocks[0]
     if r.random() < 0.12 and min(mb.w, mb.d) > 34:                # U: courtyard into a long side
         if mb.w >= mb.d:
@@ -1237,6 +1314,8 @@ def floor_material(kind, r, seed, colour, ang=None):
         m["sp"] = r.choice([1.333, 1.333, 2.0])
     elif kind == "ashlar":
         m["unit"] = r.uniform(0.9, 1.6)
+    elif kind in TILES:
+        m["sp"] = r.uniform(*TILES[kind][3])
     return m
 
 
@@ -1254,10 +1333,15 @@ LOOK = {"hatch": "lines", "plank_lines": "lines", "plank": "lines", "joists": "l
         "basket": "basket", "ashlar": "ashlar", "rubble": "stone"}
 
 
-def _spacing(p):
+for _k, (_f, _look, _eff, _rng) in TILES.items():
+    LOOK[_k] = _look
+
+
+def _spacing(p, kind=None):
+    """(param key, effective spacing in ft). Tiles: tile size times the tile's line fraction."""
     for k in ("sp", "w", "unit", "density"):
         if p.get(k):
-            return k, p[k]
+            return k, p[k] * (TILES[kind][2] if kind in TILES else 1.0)
     return None, None
 
 
@@ -1270,21 +1354,23 @@ def _distinct(k1, p1, b1, k2, p2, b2):
         return True
     if abs(_lum(b1) - _lum(b2)) >= 30 or math.dist(b1, b2) >= 60:
         return True
-    s1, s2 = _spacing(p1)[1], _spacing(p2)[1]
+    s1, s2 = _spacing(p1, k1)[1], _spacing(p2, k2)[1]
     return bool(s1 and s2) and max(s1, s2) / min(s1, s2) >= 1.4
 
 
 def _separate(kind, params, base, others):
     """Rescale this family's spacing until it differs from every same-type family in `others`."""
-    key = _spacing(params)[0]
+    key = _spacing(params, kind)[0]
     if key is None:
         return
+    f = TILES[kind][2] if kind in TILES else 1.0
     for _ in range(4):
         clash = [(k, p, b) for (k, p, b) in others if not _distinct(kind, params, base, k, p, b)]
         if not clash:
             return
-        s2 = _spacing(clash[0][1])[1]
-        params[key] = s2 * 1.6 if params[key] >= s2 else s2 / 1.6
+        s2 = _spacing(clash[0][1], clash[0][0])[1]
+        mine = params[key] * f
+        params[key] = (s2 * 1.6 if mine >= s2 else s2 / 1.6) / f
 
 
 def _separate_all(mats):
@@ -1331,14 +1417,17 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
         G._basketweave(layer, x0, y0, S, m["sp"], c, lw)
     elif k == "ashlar":
         G._ashlar(layer, x0, y0, S, m["unit"], c, lw, m["seed"])
+    elif k in TILES:
+        hatch_layer(layer, x0, y0, S, k, m["sp"], c, m.get("ang", 0) if k in ("t_hbone", "t_earth", "t_woodgrain") else 0)
     mask = G.poly_mask(affinity.translate(poly_px, -x0, -y0), x1 - x0, y1 - y0)
     G.blend_mask(canvas[y0:y1, x0:x1], layer, mask)
 
 
-LIVING_FIN = (["plank_lines", "plank", "tile", "diag_tile", "dots", "basket"], [40, 18, 18, 10, 7, 7])
-WET_FIN = (["tile", "mosaic", "diag_tile", "dots"], [50, 25, 15, 10])
-BED_FIN = (["carpet", "plank_lines", "plank", "dots"], [45, 30, 15, 10])
-GARAGE_FIN = (["concrete", "dots", "carpet"], [60, 25, 15])
+LIVING_FIN = (["plank_lines", "plank", "tile", "diag_tile", "dots", "basket", "t_hbone", "t_earth", "t_woodgrain",
+               "t_cross"], [32, 14, 14, 8, 5, 5, 10, 6, 3, 3])
+WET_FIN = (["tile", "mosaic", "diag_tile", "dots", "t_zinc", "t_plus", "t_cross"], [42, 20, 12, 8, 8, 5, 5])
+BED_FIN = (["carpet", "plank_lines", "plank", "dots", "t_hbone", "t_woodgrain"], [40, 26, 12, 8, 9, 5])
+GARAGE_FIN = (["concrete", "dots", "carpet", "t_aggregate"], [42, 18, 10, 30])
 
 
 def compose_floor(image_id, seed, mode_weights):
@@ -1375,6 +1464,9 @@ def compose_floor(image_id, seed, mode_weights):
             pieces.append(box(x0f + 2, y1f, min(x1f, x0f + 22), y1f + r.uniform(8, 14)))
         hard = unary_union(pieces).difference(foot.buffer(0.3, join_style=2))
         hard_polys = [q for q in G.polys_of(hard) if q.area > 12]
+        if not hard_polys and sheet == "rendered":              # the rendered sheet's question is the hardscape
+            pw = min(22.0, x1f - x0f)
+            hard_polys = [box(x0f, y1f + 0.5, x0f + pw, y1f + r.uniform(8, 14))]
 
     # ---- finishes: one material per zone; identical materials are ONE family
     zone_mat = {}
@@ -1388,8 +1480,11 @@ def compose_floor(image_id, seed, mode_weights):
         for z in ("bed", "living", "wet", "garage"):          # some zones left blank, as Gemini does
             if r.random() < {"bed": 0.3, "living": 0.2, "wet": 0.15, "garage": 0.25}[z]:
                 zone_mat[z] = None
-        if all(v is None for v in zone_mat.values()):
-            zone_mat["living"] = floor_material(r.choices(*LIVING_FIN)[0], r, fam_seed + 1, colour, ang)
+        present = [rm["zone"] for rm in rooms]
+        if all(zone_mat.get(z) is None for z in present):       # something on the sheet must be patterned
+            z0 = max(set(present), key=present.count)
+            fin = {"living": LIVING_FIN, "bed": BED_FIN, "wet": WET_FIN, "garage": GARAGE_FIN}[z0]
+            zone_mat[z0] = floor_material(r.choices(*fin)[0], r, fam_seed + 1, colour, ang)
     elif sheet == "rendered":
         fl = floor_material(r.choice(["plank", "plank_lines", "tile"]), r, fam_seed + 1, False, r.choice([0, 90]))
         fl["base"] = (r.randint(222, 242),) * 3
@@ -1423,7 +1518,8 @@ def compose_floor(image_id, seed, mode_weights):
 
     # ---- hardscape
     if hard_polys:
-        hk = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket"], weights=[26, 14, 16, 26, 8, 10])[0]
+        hk = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket", "t_brick", "t_hbone", "t_aggregate"],
+                       weights=[22, 12, 13, 22, 5, 7, 8, 6, 5])[0]
         hs = _hard_style(hk, r, lw_pat, fam_seed + 11, colour)
         _separate(hs.kind, hs.params, hs.base, floor_fams)
         for p in hard_polys:
@@ -1460,7 +1556,8 @@ def compose_floor(image_id, seed, mode_weights):
         crawl = foot.buffer(-lay["t_ext"], join_style=2)
         if slab_rooms:
             crawl = crawl.difference(unary_union([rm["cell"] for rm in rooms if rm["zone"] == "garage"]).buffer(lay["t_ext"]))
-        ck = r.choices(["hatch45", "joists", "dots", "basket", "carpet", "blank"], weights=[25, 25, 12, 12, 11, 15])[0]
+        ck = r.choices(["hatch45", "joists", "dots", "basket", "carpet", "blank", "t_earth", "t_steel", "t_cuprous",
+                        "t_aluminium"], weights=[18, 20, 9, 8, 8, 12, 10, 5, 5, 5])[0]
         if ck == "blank" and not slab_rooms:
             ck = "hatch45"
         # piers on a grid (holes in the crawlspace label, like skylights in a roof)
@@ -1483,7 +1580,8 @@ def compose_floor(image_id, seed, mode_weights):
             lab = crawl.difference(unary_union(piers)) if piers else crawl
             labelled.append(("crawl", V.geom(lab)))
         if slab_rooms:
-            sm = floor_material(r.choice(["concrete", "concrete", "dots"]), r, fam_seed + 22, colour)
+            sm = floor_material(r.choice(["concrete", "concrete", "dots", "t_aggregate", "t_aggregate"]), r,
+                                fam_seed + 22, colour)
             if ck != "blank":
                 _separate(sm["kind"], sm, sm["base"], [(cm["kind"], cm, cm["base"])])
             reg = unary_union(slab_rooms)
