@@ -16,7 +16,8 @@ them the way the real Revit plan sheets in the eval set look (HF14 0/1/7/11/12/
                 dot grids, on white / grey / tinted / dark bases, optionally
                 sun-shaded per facet; 35% a wing in a second labelled roof
                 material, flat roofs gravel / membrane dots / seams (labelled
-                60%), skylights labelled 30% of the time. Grid lines + bubbles, section heads, slope
+                60%). Skylights and chimneys are ALWAYS excluded: holes in the roof
+                label, never labelled themselves. Grid lines + bubbles, section heads, slope
                 arrows ("3\" / 1'-0\""), ridge/valley text, spot elevations,
                 walls-below dashed, gutters, trellis / louver slats (unlabelled
                 parallel-line look-alikes), copies of the building.
@@ -489,7 +490,6 @@ def compose_roof(image_id, seed, mode_weights):
     if not any(t["kind"] == "pitched" for t in tops):          # all-flat house: the flat roof is the question
         flat_label = True
     skylights_on = r.random() < 0.35
-    sky_label = skylights_on and r.random() < 0.3
     sky_look = r.choice(["double", "x", "glass"])
     colourful = main["base"] != (255, 255, 255) and max(main["base"]) - min(main["base"]) > 12
     block_of = {}
@@ -632,8 +632,6 @@ def compose_roof(image_id, seed, mode_weights):
                 for f in (0.35, 0.5):
                     G.cv_line(canvas, V.px(x0s + (x1s - x0s) * f, y0s + (y1s - y0s) * (1 - f) * 0.9),
                               V.px(x0s + (x1s - x0s) * (f + 0.3), y0s + (y1s - y0s) * (0.6 - f) * 0.9), ink, lw_thin * 0.7)
-            if sky_label:
-                labelled.append(("skylight", V.geom(s)))
         all_skylights += sky
         if pitched_polys:
             lab = unary_union(pitched_polys)
