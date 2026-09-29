@@ -77,7 +77,7 @@ done
 V6=data/synthetic/v6d_1600
 if [ ! -d $V6 ]; then
   [ -d data/synthetic/v6d_train2000 ] || python3 generate_synthetic_v6.py --n 2000 \
-    --out data/synthetic/v6d_train2000 --seed 6 --start 0 --workers 64
+    --out data/synthetic/v6d_train2000 --seed 6 --start 0 --workers 64 --window-hole-prob 0.8
   mkdir -p $V6/images $V6/annotations
   ls data/synthetic/v6d_train2000/annotations | sort | head -1600 | while read -r f; do
     ln data/synthetic/v6d_train2000/annotations/$f $V6/annotations/$f

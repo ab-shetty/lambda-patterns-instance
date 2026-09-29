@@ -178,6 +178,17 @@ Mix on 400 houses: 136 chamfer, 89 L, 85 bay, 16 U, 124 plain; 0 FreeCAD failure
 0 roof-plan gaps / overlaps; off = byte-identical (--revit and --revit-plans, 80/80
 files each). Floor plans still use their own 2D shaping, not the 3D spec.
 
+Window holes (2026-09-29): wall labels now ALWAYS exclude windows / doors
+(`WINDOW_HOLE_PROB` 0.8 -> 1.0 in v6, inherited by the FreeCAD / Revit generator;
+`--window-hole-prob`). All 7 real eval sheets that label walls cut every opening;
+Gemini / real-pool labels cut them with `remove` polygons (106 of 165 elevation-type
+images use them; the rest trace around openings or don't label walls). The old 0.8
+left windows inside the wall label on 1 elevation sheet in 5 (~210 sheets, ~3% of the
+shipped mix) with no evidence behind it. Recorded pools pin `--window-hole-prob 0.8`
+(run_best_mix.sh, run_fit_100k.sh, run_synth_v6.sh) and reproduce byte-identically;
+with 1.0, 16/120 v6 label files change (2/120 images: highlight / cloud markup picks
+a labelled piece), revit 5/60 labels, 0 images.
+
 ## Open
 
 - **`--revit --revit-plans` synth-only screen** vs the published Revit 2k

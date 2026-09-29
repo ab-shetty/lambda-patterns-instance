@@ -494,6 +494,9 @@ def main():
     ap.add_argument("--revit-plans", action="store_true",
                     help="with --revit: roof plans (from the 3D model's roof faces) and floor plans drawn "
                          "Revit-style too (scripts/revit_plans.py); off = v6 plans, byte-identical")
+    ap.add_argument("--window-hole-prob", type=float, default=1.0,
+                    help="per sheet: cut windows/doors out of wall labels (1.0 = always, the eval convention; "
+                         "0.8 reproduces the pre-2026-09-29 revit pools)")
     ap.add_argument("--shaped", action="store_true",
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
@@ -509,6 +512,7 @@ def main():
         flags["tight_crop_"] = True
     if args.real_labelling:
         flags["real_labelling"] = True
+    flags["window_hole_prob"] = args.window_hole_prob
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

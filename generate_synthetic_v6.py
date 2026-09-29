@@ -80,7 +80,12 @@ LONG_SIDE_PX = (2800, 5200)            # eval median ~4000, Gemini 3168
 COLOUR_PROB = 0.55                     # 16/28 eval images carry colour
 VIEW_COUNT_WEIGHTS = {1: 55, 2: 38, 4: 7}
 MAX_LABEL_FAMS = 0                     # 0 = v6d behaviour (label every family)
-WINDOW_HOLE_PROB = 0.8                 # per image: windows/doors cut as holes
+# per image: windows/doors cut as holes in the wall labels. 1.0 since 2026-09-29: every
+# real eval sheet that labels walls cuts every opening (and Gemini / real-pool labels cut
+# them with `remove` polygons); the old 0.8 left windows inside the wall label on 1 sheet
+# in 5 with no evidence behind it. Recorded pools pin --window-hole-prob 0.8. The draw
+# happens either way, so images are unchanged; only those sheets' labels differ.
+WINDOW_HOLE_PROB = 1.0
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -2713,10 +2718,11 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB
+    WINDOW_HOLE_PROB = window_hole_prob
     REAL_LABELLING = real_labelling
     MUTED_PALETTE = muted_palette
     NEUTRAL_PALETTE = neutral_palette
@@ -2816,6 +2822,9 @@ def main():
     ap.add_argument("--start", type=int, default=0, help="first image id")
     ap.add_argument("--workers", type=int, default=max(1, os.cpu_count() // 2))
     ap.add_argument("--mode-weights", default=None, help="elevation,roof_plan,freeform e.g. 60,20,20")
+    ap.add_argument("--window-hole-prob", type=float, default=1.0,
+                    help="per sheet: cut windows/doors out of wall labels. 1.0 = always (default, the eval "
+                         "convention); 0.8 = the pre-2026-09-29 pools (v6d_1600, v6d 100k, ...)")
     ap.add_argument("--view-count-weights", default=None,
                     help="weights for 1,2,4 elevation views per sheet, e.g. 85,15,0. "
                          "Default (55,38,7) = 1.59 drawings/sheet, which is what makes "
@@ -2873,7 +2882,8 @@ def main():
     with Pool(args.workers, initializer=_init,
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
-                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling)) as pool:
+                        args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling,
+                        args.window_hole_prob)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
