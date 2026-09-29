@@ -303,6 +303,12 @@ def compose_revit(image_id, seed, mode_weights):
             _outline_geom(canvas, V.geom(poly), ink, lw_thin)
         for tp in e["trims"]:
             _outline_geom(canvas, V.geom(tp), ink, lw_thin)
+        if getattr(FC, "SHAPED", [False])[0]:
+            # --shaped: pieces of one v6 block (L / U / bay) are zoned as one surface, so draw
+            # every visible 3D wall face's edge too -- the step where a wall sets back reads
+            for Wf in e["vf"]:
+                if Wf["kind"][0] in ("wall", "chimney"):
+                    _outline_geom(canvas, V.geom(Wf["vis"]), ink, lw_thin)
         # heavy profile
         sil = unary_union([p for (_, p, _, _) in e["surfaces"]] + list(e["trims"])).buffer(0.02)
         for p in G.polys_of(sil):

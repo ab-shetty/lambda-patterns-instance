@@ -459,7 +459,8 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
 # ----------------------------------------------------------------------------
 # driver
 # ----------------------------------------------------------------------------
-def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False):
+def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=False):
+    SHAPED[0] = shaped
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -517,7 +518,8 @@ def main():
     faces = {s["id"]: (s, raw[str(s["id"])]) for s in specs if isinstance(raw.get(str(s["id"])), list)}
     print(f"massing {len(faces)}/{len(ids)} in {time.time() - t0:.0f}s", flush=True)
     ok, modes = 0, {}
-    with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw, flags, faces, args.revit, args.revit_plans)) as pool:
+    with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw, flags, faces, args.revit, args.revit_plans,
+                                                                args.shaped)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
