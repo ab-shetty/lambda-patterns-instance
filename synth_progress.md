@@ -205,6 +205,17 @@ of label pixels 1.9% -> 0.65%. v6: labelled trim also inside the main-wall label
 sheets (median 27% of the trim label) -> 42/81 (median 3%). Images change on 22/60 revit and
 69/300 v6 sheets (porch belt, accent remap, markup/crop RNG after label count changes).
 `--trim-cut 0` (with the two flags above) reproduces the old pools byte-identically.
+Distinct looks (2026-09-29, `--distinct-looks 1` default, Revit elevations): a family with no
+pattern (flat colour: TPO roofs, plain walls/chimneys on colour sheets) is drawn but never
+labelled (130 sheets: 13 labelled plain families -> 0); two families may not share a look class
+(vertical boards = standing seam) with spacing within 1.4x and colour within CIELAB dE 8 -- the
+lower-priority one is re-drawn with another kind from its own RNG (look-alike labelled pairs
+2 -> 0; a light grey vs cream lap pair, dE ~10, is a real difference and stays). 18/150 sheets
+change. Slivers are left in the labels on purpose (selecting the wall must still segment
+them); training can keep them out of the REFERENCE instead: `train_refunet.py --ref-min-side 24`
+draws references only from instances that fit a 24 px square when the family has one (Revit
+pool: sliver references 4.0% -> 2.0%, the rest are families with only thin pieces). Off by
+default. Gemini labels trace the middle of the outline (half the line inside), as Revit does.
 
 ## Open
 

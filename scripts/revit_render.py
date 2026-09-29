@@ -30,6 +30,61 @@ _ORIG_COMPOSE = None
 
 PLANS = [False]      # --revit-plans: roof / floor plans drawn by revit_plans.py too
 
+# ---- distinct looks (G.DISTINCT_LOOKS, --distinct-looks 1): two families on one sheet must
+# not look the same, and a family with no pattern is not a pattern question.
+# Same look = same LOOK class, spacing within 1.4x, colour within CIELAB dE 8 (a light grey
+# vs cream lap pair, dE ~10, reads as two materials; white vs white never does).
+LOOK = {"vertical": "vlines", "seam": "vlines"}          # seam = vertical lines + a faint twin
+SPACING = {"lap": "sp", "bb": "sp", "seam": "sp", "vertical": "sp", "asphalt": "row", "brick": "row",
+           "shingle": "row", "tile_roof": "row", "stipple": "density", "concrete": "density"}
+KIND_POOL = {"roof": "ROOF_KINDS", "chimney": ["brick", "stone", "stucco"], "foundation": ["concrete", "flat"]}
+PRIORITY = ["main", "roof", "accent", "accent2", "chimney", "foundation"]
+
+
+def _lab(c):
+    px = np.uint8([[list(c)[::-1]]])       # style colours are RGB
+    L, a, b = cv2.cvtColor(px, cv2.COLOR_BGR2LAB)[0, 0].astype(float)
+    return L * 100 / 255, a - 128, b - 128
+
+
+def _same_look(s1, s2):
+    if LOOK.get(s1.kind, s1.kind) != LOOK.get(s2.kind, s2.kind):
+        return False
+    k1, k2 = SPACING.get(s1.kind), SPACING.get(s2.kind)
+    if k1 and k2 and s1.params.get(k1) and s2.params.get(k2):
+        a, b = s1.params[k1], s2.params[k2]
+        if max(a, b) / min(a, b) >= 1.4:
+            return False
+    return math.dist(_lab(s1.base), _lab(s2.base)) < 8
+
+
+def _finish_style(st, shaded, app):
+    if not shaded:
+        st.base = (255, 255, 255)
+        st.line = app["ink_fill"]
+    else:
+        lum = 0.299 * st.base[0] + 0.587 * st.base[1] + 0.114 * st.base[2]
+        st.line = G.mix(st.base, (0, 0, 0), 0.35) if lum > 90 else G.mix(st.base, (255, 255, 255), 0.3)
+    st.params.pop("grad", None)
+
+
+def distinct_looks(styles, shaded, app, fam_seed, S_guess):
+    """Re-draw the lower-priority family of every look-alike pair with another kind, from its
+    own RNG so the sheet's main random stream is untouched."""
+    fams = [f for f in PRIORITY if f in styles]
+    for j, fb in enumerate(fams):
+        for tries in range(12):
+            if not any(_same_look(styles[fa], styles[fb]) for fa in fams[:j]):
+                break
+            rr = random.Random(fam_seed * 31 + j * 1009 + tries)
+            pool = KIND_POOL.get(fb, "WALL_KINDS")
+            pool = getattr(G, pool) if isinstance(pool, str) else pool
+            styles[fb] = G.make_style(rr, rr.choice(pool), app, fam_seed + 50 + j * 7 + tries, S_guess, fb,
+                                      roof=(fb == "roof"))
+            if fb == "roof" and styles[fb].kind == "flat" and not shaded:
+                styles[fb].kind, styles[fb].params = "asphalt", {"row": 0.5, "unit": 1.0}
+            _finish_style(styles[fb], shaded, app)
+
 
 def install(g, fc, plans=False):
     global G, FC, _ORIG_COMPOSE
@@ -186,6 +241,8 @@ def compose_revit(image_id, seed, mode_weights):
             lum = 0.299 * st.base[0] + 0.587 * st.base[1] + 0.114 * st.base[2]
             st.line = G.mix(st.base, (0, 0, 0), 0.35) if lum > 90 else G.mix(st.base, (255, 255, 255), 0.3)
         st.params.pop("grad", None)
+    if G.DISTINCT_LOOKS:
+        distinct_looks(styles, shaded, app, fam_seed, S_guess)
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):
@@ -201,6 +258,8 @@ def compose_revit(image_id, seed, mode_weights):
         label_fams.add("chimney")
     if r.random() < 0.4 and styles["foundation"].kind != "flat":
         label_fams.add("foundation")
+    if G.DISTINCT_LOOKS:        # plain colour, no pattern: drawn, never a pattern question
+        label_fams = {f for f in label_fams if styles.get(f) is None or styles[f].kind != "flat"}
     hole_mode = r.random() < G.WINDOW_HOLE_PROB
 
     # ---- views

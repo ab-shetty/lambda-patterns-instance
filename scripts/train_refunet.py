@@ -106,6 +106,9 @@ def parse_args():
                    help="floor of --domain-random's random downscale (historical 0.4)")
     p.add_argument("--small-ref-prob", type=float, default=0.0,
                    help="probability a training reference is a deliberately tiny box (16-96 px)")
+    p.add_argument("--ref-min-side", type=int, default=0,
+                   help="training references come only from instances that fit a square this "
+                        "wide (px) when the family has one; slivers stay in the target. 0 = off")
     p.add_argument("--early-stop-patience", type=int, default=0,
                    help="stop when the monitored metric has not improved for N "
                         "epochs (0 = off). Saves the tail of a long schedule "
@@ -234,7 +237,8 @@ def main():
         train_split=args.train_split, seed=args.seed,
         domain_random=args.domain_random, realism_aug=args.realism_aug,
         scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
-        small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image)
+        small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image,
+        ref_min_side=args.ref_min_side)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,

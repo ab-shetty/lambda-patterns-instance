@@ -505,6 +505,9 @@ def main():
     ap.add_argument("--trim-cut", type=int, default=1, choices=[0, 1],
                     help="1 = white trim cut out of every surface label, trim slivers dropped, porch roof hides "
                          "the belt behind it, no gable accent on gable-less houses (default); 0 = pre-2026-09-29 pools")
+    ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
+                    help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
+                         "family (default); 0 = pre-2026-09-29 pools")
     ap.add_argument("--shaped", action="store_true",
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
@@ -523,6 +526,7 @@ def main():
     flags["window_hole_prob"] = args.window_hole_prob
     flags["casing_holes"] = bool(args.casing_holes)
     flags["trim_cut"] = bool(args.trim_cut)
+    flags["distinct_looks"] = bool(args.distinct_looks)
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

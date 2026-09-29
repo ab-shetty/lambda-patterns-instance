@@ -256,8 +256,15 @@ class InstanceSegDataset(Dataset):
                  augment=True, min_patch=128, max_patch=512, grayscale=False,
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
-                 repeat_reference_prob=0.0, refs_per_image=0):
+                 repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0):
         self.records = records
+        # > 0 (training only): draw the reference only from instances that can hold a
+        # square this many px wide, when the family has one. Families split into many
+        # pieces (Revit elevations) otherwise hand out a sliver -- a strip beside a
+        # door, a wedge under a rake, mostly outline ink -- as often as the whole
+        # wall. The slivers stay in the TARGET: selecting the wall must still
+        # segment them. 0 = historical sampler, byte-identical.
+        self.ref_min_side = ref_min_side if augment else 0
         self.indices = list(indices)
         self.image_max_size = image_max_size
         self.ref_size = ref_size
@@ -281,6 +288,17 @@ class InstanceSegDataset(Dataset):
         # ref_seed selects WHICH fixed reference; the eval harness sweeps it over
         # several values and averages for a robust, low-variance number.
         self.ref_seed = 0
+
+    def _ref_cands(self, cand, masks):
+        if self.ref_min_side <= 0 or len(cand) < 2:
+            return cand
+        ok = []
+        for j in cand:
+            m = (np.asarray(masks[j]) > 0).astype(np.uint8)
+            dt = cv2.distanceTransform(np.pad(m, 1), cv2.DIST_C, 3)
+            if 2 * dt.max() - 1 >= self.ref_min_side:
+                ok.append(j)
+        return ok or cand
 
     def __len__(self):
         return len(self.indices)
@@ -325,7 +343,7 @@ class InstanceSegDataset(Dataset):
                     if len(unique_cats) > self.refs_per_image else unique_cats)
             ref_patches, ref_matches, multi_boxes = [], [], []
             for fam in fams:
-                cand = [j for j, c in enumerate(cats) if c == fam]
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam], masks)
                 bx, by, bw, bh = sample_reference_box(masks[random.choice(cand)],
                                                       self.min_patch, self.max_patch)
                 ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
@@ -346,7 +364,7 @@ class InstanceSegDataset(Dataset):
                 target_cat = _rc.choice(repeated_cats)
             else:
                 target_cat = _rc.choice(unique_cats)
-            cand = [j for j, c in enumerate(cats) if c == target_cat]
+            cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat], masks)
             ref_idx = _rc.choice(cand)
             if self.augment and self.small_ref_prob > 0 and random.random() < self.small_ref_prob:
                 # Tiny user rectangles are where real plans fail (2026-09-24):
@@ -651,7 +669,7 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    seed=42, grayscale=False, realism_aug=False,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
-                   small_ref_prob=0.0, refs_per_image=0):
+                   small_ref_prob=0.0, refs_per_image=0, ref_min_side=0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -667,7 +685,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   small_ref_prob=small_ref_prob,
                                   scale_matched_ref=scale_matched_ref,
                                   repeat_reference_prob=repeat_reference_prob,
-                                  refs_per_image=refs_per_image)
+                                  refs_per_image=refs_per_image,
+                                  ref_min_side=ref_min_side)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,
