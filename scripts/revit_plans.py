@@ -42,6 +42,7 @@ import random
 
 import cv2
 import numpy as np
+import shapely
 from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
@@ -112,7 +113,10 @@ def top_faces(faces, chim):
             part = ov.intersection(hp)
             if not part.is_empty and part.area > 1e-5:
                 occ.append(part)
-        vis = F["poly"].difference(unary_union(occ)) if occ else F["poly"]
+        vis = F["poly"].difference(unary_union([o.buffer(0) for o in occ]).buffer(0)) if occ else F["poly"]
+        # the half-plane split leaves near-degenerate slivers; keep a valid polygon set
+        vis = shapely.set_precision(vis.buffer(0), 1e-4)
+        vis = unary_union([q for q in G.polys_of(vis) if q.area > 1e-3]) if not vis.is_empty else vis
         if vis.area < 0.05:
             continue
         out.append(dict(F, vis=vis))
@@ -422,6 +426,32 @@ def roof_material(r, avoid, seed):
             "dot_fill": r.random() < 0.5, "lwk": r.uniform(0.55, 0.9)}
 
 
+ROOF_LOOK = {"bond_facet": "bond", "bond_global": "bond", "eave_lines": "lines", "seam": "lines",
+             "flat_seams": "lines", "cross": "diag", "dots": "dots", "membrane": "dots", "gravel": "stipple"}
+ROOF_SP = {"bond_facet": "row", "bond_global": "row", "eave_lines": "sp", "seam": "seam_sp", "flat_seams": "seam_sp",
+           "cross": "cross_sp", "dots": "dot_sp", "membrane": "dot_sp", "gravel": "density"}
+
+
+def roof_separate(m, others):
+    """Same rule as the floors: a roof family of the same pattern type as another (direction
+    ignored: eave lines vs seams, per-facet vs global bond) must differ in spacing or tone."""
+    key = ROOF_SP[m["kind"]]
+    for _ in range(4):
+        clash = None
+        for o in others:
+            if ROOF_LOOK[o["kind"]] != ROOF_LOOK[m["kind"]]:
+                continue
+            if abs(_lum(o["base"]) - _lum(m["base"])) >= 30 or math.dist(o["base"], m["base"]) >= 60:
+                continue
+            a, b = m[key], o[ROOF_SP[o["kind"]]]
+            if max(a, b) / min(a, b) < 1.4:
+                clash = b
+                break
+        if clash is None:
+            return
+        m[key] = clash * 1.6 if m[key] >= clash else clash / 1.6
+
+
 def flat_material(r, seed):
     kind = r.choices(["gravel", "membrane", "flat_seams"], weights=[40, 35, 25])[0]
     base = (r.randint(236, 252),) * 3 if r.random() < 0.7 else (255, 255, 255)
@@ -530,7 +560,9 @@ def compose_roof(image_id, seed, mode_weights):
     if len(pitched_blocks) >= 2 and r.random() < 0.35:
         alt_block = r.choice(pitched_blocks[1:])
         alt = roof_material(r, main, fam_seed + 11)
+        roof_separate(alt, [main])
     fmat = flat_material(r, fam_seed + 7)
+    roof_separate(fmat, [main] + ([alt] if alt_block is not None else []))
     flat_label = r.random() < 0.6
     if not any(t["kind"] == "pitched" for t in tops):          # all-flat house: the flat roof is the question
         flat_label = True
@@ -1040,6 +1072,60 @@ def _mkey(m):
                                 for k in sorted(m) if k not in ("kind", "seed"))
 
 
+# Two families of the same pattern TYPE on one sheet must differ in spacing (>= 1.4x) or
+# tone. Direction never counts: a pattern that turns is still the same family (roof
+# facets, deck pieces), so two families told apart only by direction would contradict it.
+LOOK = {"hatch": "lines", "plank_lines": "lines", "plank": "lines", "joists": "lines", "hatch45": "lines",
+        "grid": "grid", "tile": "grid", "mosaic": "grid", "diag_tile": "diag", "cross": "diag",
+        "concrete": "stipple", "carpet": "stipple", "stipple": "stipple", "dots": "dots",
+        "basket": "basket", "ashlar": "ashlar", "rubble": "stone"}
+
+
+def _spacing(p):
+    for k in ("sp", "w", "unit", "density"):
+        if p.get(k):
+            return k, p[k]
+    return None, None
+
+
+def _lum(b):
+    return 0.299 * b[0] + 0.587 * b[1] + 0.114 * b[2]
+
+
+def _distinct(k1, p1, b1, k2, p2, b2):
+    if LOOK.get(k1, k1) != LOOK.get(k2, k2):
+        return True
+    if abs(_lum(b1) - _lum(b2)) >= 30 or math.dist(b1, b2) >= 60:
+        return True
+    s1, s2 = _spacing(p1)[1], _spacing(p2)[1]
+    return bool(s1 and s2) and max(s1, s2) / min(s1, s2) >= 1.4
+
+
+def _separate(kind, params, base, others):
+    """Rescale this family's spacing until it differs from every same-type family in `others`."""
+    key = _spacing(params)[0]
+    if key is None:
+        return
+    for _ in range(4):
+        clash = [(k, p, b) for (k, p, b) in others if not _distinct(kind, params, base, k, p, b)]
+        if not clash:
+            return
+        s2 = _spacing(clash[0][1])[1]
+        params[key] = s2 * 1.6 if params[key] >= s2 else s2 / 1.6
+
+
+def _separate_all(mats):
+    """Floor materials (dicts) in order; identical objects are one family and skipped."""
+    done, seen = [], set()
+    for m in mats:
+        if m is None or id(m) in seen:
+            continue
+        seen.add(id(m))
+        _separate(m["kind"], m, m["base"], done)
+        done.append((m["kind"], m, m["base"]))
+    return done
+
+
 def draw_floor(canvas, poly_px, m, S, W, H, lw):
     if poly_px.is_empty:
         return
@@ -1140,7 +1226,7 @@ def compose_floor(image_id, seed, mode_weights):
         zone_mat["wet"] = floor_material("tile", r, fam_seed + 2, False)
         zone_mat["wet"]["base"], zone_mat["wet"]["line"] = fl["base"], fl["line"]
         zone_mat["garage"] = floor_material("concrete", r, fam_seed + 4, False) if r.random() < 0.6 else None
-    label_rendered_floor = False
+    floor_fams = _separate_all([zone_mat.get(z) for z in ("living", "bed", "wet", "garage")])
 
     # ---- layout
     allg = unary_union([foot] + hard_polys)
@@ -1166,6 +1252,7 @@ def compose_floor(image_id, seed, mode_weights):
     if hard_polys:
         hk = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket"], weights=[26, 14, 16, 26, 8, 10])[0]
         hs = _hard_style(hk, r, lw_pat, fam_seed + 11, colour)
+        _separate(hs.kind, hs.params, hs.base, floor_fams)
         for p in hard_polys:
             st = hs
             if st.kind == "hatch":                               # deck boards run the long way of each piece
@@ -1224,6 +1311,8 @@ def compose_floor(image_id, seed, mode_weights):
             labelled.append(("crawl", V.geom(lab)))
         if slab_rooms:
             sm = floor_material(r.choice(["concrete", "concrete", "dots"]), r, fam_seed + 22, colour)
+            if ck != "blank":
+                _separate(sm["kind"], sm, sm["base"], [(cm["kind"], cm, cm["base"])])
             reg = unary_union(slab_rooms)
             draw_floor(canvas, V.geom(reg), sm, S, W, H, lw_pat)
             if ck == "blank" or r.random() < 0.85:
