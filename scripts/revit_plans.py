@@ -9,9 +9,14 @@ them the way the real Revit plan sheets in the eval set look (HF14 0/1/7/11/12/
   roof plan  -- every pitched roof surface is one family (all facets, across
                 separate buildings); flat roofs usually unlabelled. Facets come
                 from the FreeCAD model seen from above (true valleys / hips /
-                intersections), hatched parallel to their eave, or a global
-                fine shingle pattern, diagonal crosshatch, dark fill, or
-                sun-shaded greys. Grid lines + bubbles, section heads, slope
+                intersections). ALWAYS textured (2026-09-29, from the 14
+                Gemini + 4 real roof plans): running-bond shingle courses
+                turning with each facet's eave, global shingle bond,
+                eave-parallel lines, down-slope seams, diamond crosshatch or
+                dot grids, on white / grey / tinted / dark bases, optionally
+                sun-shaded per facet; 35% a wing in a second labelled roof
+                material, flat roofs gravel / membrane dots / seams (labelled
+                60%), skylights labelled 30% of the time. Grid lines + bubbles, section heads, slope
                 arrows ("3\" / 1'-0\""), ridge/valley text, spot elevations,
                 walls-below dashed, gutters, trellis / louver slats (unlabelled
                 parallel-line look-alikes), copies of the building.
@@ -344,6 +349,105 @@ TINT_ROOF = [(196, 160, 140), (150, 160, 172), (172, 152, 124), (140, 150, 136),
 
 
 # ----------------------------------------------------------------------------
+# roof materials
+# ----------------------------------------------------------------------------
+PITCHED_KINDS = ["bond_facet", "bond_global", "eave_lines", "seam", "cross", "dots"]
+PITCHED_W = [32, 10, 18, 16, 9, 5]
+
+
+def roof_material(r, avoid, seed):
+    """One roof family's look. `avoid`: another family's material this one must differ from."""
+    kinds, wts = PITCHED_KINDS, PITCHED_W
+    if avoid is not None:
+        kw = [(k, w) for k, w in zip(kinds, wts) if k != avoid["kind"]]
+        kinds, wts = [k for k, _ in kw], [w for _, w in kw]
+    kind = r.choices(kinds, weights=wts)[0]
+    style = r.choices(["white", "grey", "tint", "dark"], weights=[50, 15, 17, 18])[0]
+    if avoid is not None and style == avoid["style"] and r.random() < 0.6:
+        style = r.choice([x for x in ["white", "grey", "tint", "dark"] if x != avoid["style"]])
+    base = {"white": (255, 255, 255), "grey": (r.randint(222, 246),) * 3,
+            "tint": r.choice(TINT_ROOF), "dark": r.choice(DARK_ROOF)}[style]
+    lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
+    line = G.mix(base, (255, 255, 255), r.uniform(0.2, 0.4)) if lum < 110 else \
+        ((r.randint(40, 150),) * 3 if style in ("white", "grey") else G.mix(base, (0, 0, 0), r.uniform(0.35, 0.55)))
+    return {"kind": kind, "style": style, "base": base, "line": line, "seed": seed,
+            "row": r.uniform(0.35, 0.8), "unit": r.uniform(0.9, 1.8), "sp": r.uniform(0.45, 1.4),
+            "seam_sp": r.uniform(1.0, 2.0), "cross_sp": r.uniform(1.2, 3.0), "dot_sp": r.uniform(0.6, 1.3),
+            "dot_fill": r.random() < 0.5, "lwk": r.uniform(0.55, 0.9)}
+
+
+def flat_material(r, seed):
+    kind = r.choices(["gravel", "membrane", "flat_seams"], weights=[40, 35, 25])[0]
+    base = (r.randint(236, 252),) * 3 if r.random() < 0.7 else (255, 255, 255)
+    return {"kind": kind, "style": "grey", "base": base, "line": (r.randint(90, 160),) * 3, "seed": seed,
+            "density": r.uniform(1.0, 3.0), "dot_sp": r.uniform(0.9, 1.8), "dot_fill": r.random() < 0.4,
+            "seam_sp": r.uniform(2.5, 4.5), "seam_ang": r.choice([0, 90]), "lwk": r.uniform(0.5, 0.8)}
+
+
+def _dotgrid(layer, ox, oy, S, sp, rpx, colour, filled, lw):
+    h, w = layer.shape[:2]
+    step = sp * S
+    if step < 3:
+        return
+    j0, j1 = int(math.floor(oy / step)) - 1, int(math.ceil((oy + h) / step)) + 1
+    for j in range(j0, j1):
+        off = (j % 2) * step / 2
+        i0, i1 = int(math.floor((ox - off) / step)) - 1, int(math.ceil((ox + w - off) / step)) + 1
+        for i in range(i0, i1):
+            c = (i * step + off - ox, j * step - oy)
+            cv2.circle(layer, G._pt(c), int(rpx * G.SCALE), G.bgr(colour), -1 if filled else max(1, int(lw)),
+                       cv2.LINE_AA, G.SHIFT)
+
+
+def draw_material(canvas, poly_px, m, ang, tone, S, W, H, lw_thin):
+    """Paint material `m` into poly_px; `ang` = eave direction (deg, y-down) of the facet."""
+    if poly_px.is_empty:
+        return
+    minx, miny, maxx, maxy = poly_px.bounds
+    x0, y0 = max(0, int(math.floor(minx)) - 2), max(0, int(math.floor(miny)) - 2)
+    x1, y1 = min(W, int(math.ceil(maxx)) + 2), min(H, int(math.ceil(maxy)) + 2)
+    if x1 <= x0 or y1 <= y0:
+        return
+    w, h = x1 - x0, y1 - y0
+    base = tuple(int(v * tone) for v in m["base"])
+    line = tuple(int(v * tone) for v in m["line"])
+    lw = max(0.8, lw_thin * m["lwk"])
+    k = m["kind"]
+    if k == "bond_facet":
+        # running-bond courses parallel to this facet's eave: draw horizontal, rotate
+        D = int(math.hypot(w, h)) + 8
+        big = np.empty((D, D, 3), np.uint8)
+        big[:] = G.bgr(base)
+        G._courses(big, 0, 0, S, m["row"], m["unit"], line, lw, m["seed"], stagger=0.5)
+        M = cv2.getRotationMatrix2D((D / 2, D / 2), -ang, 1.0)
+        big = cv2.warpAffine(big, M, (D, D), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        layer = np.ascontiguousarray(big[(D - h) // 2:(D - h) // 2 + h, (D - w) // 2:(D - w) // 2 + w])
+    else:
+        layer = np.empty((h, w, 3), np.uint8)
+        layer[:] = G.bgr(base)
+        if k == "bond_global":
+            G._courses(layer, x0, y0, S, m["row"], m["unit"], line, lw, m["seed"], stagger=0.5)
+        elif k == "eave_lines":
+            G._dlines(layer, x0, y0, S, m["sp"], ang, line, lw)
+        elif k == "seam":
+            G._dlines(layer, x0, y0, S, m["seam_sp"], ang + 90, line, lw)
+        elif k == "cross":
+            G._dlines(layer, x0, y0, S, m["cross_sp"], 45, line, lw)
+            G._dlines(layer, x0, y0, S, m["cross_sp"], -45, line, lw)
+        elif k == "dots":
+            _dotgrid(layer, x0, y0, S, m["dot_sp"], max(1.2, 0.09 * S), line, m["dot_fill"], lw)
+        elif k == "gravel":
+            G._stipple(layer, x0, y0, S, m["density"], line, m["seed"], r_px=1)
+        elif k == "membrane":
+            _dotgrid(layer, x0, y0, S, m["dot_sp"], max(1.2, 0.07 * S), line, m["dot_fill"], lw)
+        elif k == "flat_seams":
+            G._dlines(layer, x0, y0, S, m["seam_sp"], m["seam_ang"], line, lw)
+    mask = G.poly_mask(affinity.translate(poly_px, -x0, -y0), w, h)
+    G.blend_mask(canvas[y0:y1, x0:x1], layer, mask)
+
+
+
+# ----------------------------------------------------------------------------
 # roof plan
 # ----------------------------------------------------------------------------
 def compose_roof(image_id, seed, mode_weights):
@@ -364,32 +468,39 @@ def compose_roof(image_id, seed, mode_weights):
     footprint = unary_union([box(b["x0"], b["y0"], b["x0"] + b["w"], b["y0"] + b["d"]) for b in spec["blocks"]])
     ink = (r.randint(0, 30),) * 3
 
-    # ---- roof look
-    look = r.choices(["hatch", "shingle", "dark", "cross", "shaded"], weights=[30, 18, 17, 15, 20])[0]
-    tint = look in ("hatch", "shingle", "cross") and r.random() < 0.2
-    base = (255, 255, 255)
-    if look == "dark":
-        base = r.choice(DARK_ROOF)
-    elif tint:
-        base = r.choice(TINT_ROOF)
-    elif look == "shingle" and r.random() < 0.5:
-        base = (r.randint(232, 248),) * 3
-    lum = 0.299 * base[0] + 0.587 * base[1] + 0.114 * base[2]
-    pline = G.mix(base, (255, 255, 255), r.uniform(0.2, 0.4)) if lum < 110 else \
-        (r.randint(70, 170),) * 3 if base == (255, 255, 255) else G.mix(base, (0, 0, 0), r.uniform(0.3, 0.5))
-    sp = r.uniform(0.5, 1.6)
-    row, unit = r.uniform(0.3, 0.6), r.uniform(0.9, 1.6)
-    cross_sp = r.uniform(1.2, 3.0)
+    # ---- roof materials: every labelled roof carries a texture (Gemini + real roof plans,
+    # 2026-09-29): running-bond shingle courses turning with each facet's eave is the
+    # commonest; then eave-parallel lines, down-slope standing seams, global shingle
+    # bond, diamond crosshatch, dot grids; flat roofs gravel stipple / membrane dots /
+    # seam lines. Gemini sheets often carry 2-4 roof families (a wing in another
+    # material, flat roofs, skylights), real Revit sheets usually one.
+    fam_seed = r.randrange(1 << 30)
     sun3 = np.array([r.uniform(-1, 1), r.uniform(-1, 1), r.uniform(0.8, 1.6)])
     sun3 /= np.linalg.norm(sun3)
-    shaded_hatch = r.random() < 0.5
-    flat_look = r.choices(["plain", "gravel", "seams"], weights=[60, 20, 20])[0]
-    flat_label = flat_look != "plain" and r.random() < 0.5
+    shade_facets = r.random() < 0.2                       # Revit sun-shaded tone ON TOP of the pattern
+    main = roof_material(r, None, fam_seed)
+    pitched_blocks = [i for i, b in enumerate(spec["blocks"]) if b["roof"] != "flat"]
+    alt_block = None
+    if len(pitched_blocks) >= 2 and r.random() < 0.35:
+        alt_block = r.choice(pitched_blocks[1:])
+        alt = roof_material(r, main, fam_seed + 11)
+    fmat = flat_material(r, fam_seed + 7)
+    flat_label = r.random() < 0.6
     if not any(t["kind"] == "pitched" for t in tops):          # all-flat house: the flat roof is the question
-        flat_look = r.choice(["gravel", "seams"]) if flat_look == "plain" else flat_look
         flat_label = True
-    skylights_on = r.random() < 0.3
-    fam_seed = r.randrange(1 << 30)
+    skylights_on = r.random() < 0.35
+    sky_label = skylights_on and r.random() < 0.3
+    sky_look = r.choice(["double", "x", "glass"])
+    colourful = main["base"] != (255, 255, 255) and max(main["base"]) - min(main["base"]) > 12
+    block_of = {}
+    for t in tops:
+        c = t["poly"].representative_point()
+        for i, bl in enumerate(spec["blocks"]):
+            o = bl["ov"] + 0.05
+            if bl["x0"] - o <= c.x <= bl["x0"] + bl["w"] + o and bl["y0"] - o <= c.y <= bl["y0"] + bl["d"] + o:
+                block_of[id(t)] = i
+                if i != 0:
+                    break
 
     # ---- building copies (HF14 15/16: several buildings on one roof plan)
     ncopy = r.choices([1, 2, 3], weights=[70, 20, 10])[0]
@@ -458,40 +569,25 @@ def compose_roof(image_id, seed, mode_weights):
     labelled = []
     all_skylights = []
     for g in geo:
-        pitched_polys = []
+        pitched_polys, alt_polys = [], []
         for (t, v, n2) in g["items"]:
             if t["kind"] != "pitched":
                 continue
             nn = math.hypot(*n2)
             ang = math.degrees(math.atan2(n2[0], -n2[1])) if nn > 1e-6 else 0.0
-            if look in ("hatch", "dark"):
-                st = G.Style("hatch", base, pline, lw_thin * 0.8, {"sp": sp, "angle": ang}, fam_seed, "roof")
-            elif look == "shingle":
-                st = G.Style("asphalt", base, pline, max(0.8, lw_thin * 0.6), {"row": row, "unit": unit}, fam_seed, "roof")
-            elif look == "cross":
-                st = G.Style("cross", base, pline, lw_thin * 0.7, {"sp": cross_sp}, fam_seed, "roof")
-            else:
+            is_alt = alt_block is not None and block_of.get(id(t)) == alt_block
+            mat = alt if is_alt else main
+            tone = 1.0
+            if shade_facets:
                 nv = np.array(t["n"], float)
                 nv[:2] = n2
                 nv /= np.linalg.norm(nv)
-                L = max(0.0, float(nv @ sun3))
-                gv = int(120 + 125 * L)
-                b_ = (gv, gv, gv)
-                st = G.Style("hatch" if shaded_hatch else "flat", b_, G.mix(b_, (0, 0, 0), 0.3), lw_thin * 0.7,
-                             {"sp": sp, "angle": ang}, fam_seed, "roof")
-            G.draw_fill(canvas, V.geom(v), st, S, W, H)
-            pitched_polys.append(v)
+                tone = 0.72 + 0.28 * max(0.0, float(nv @ sun3))
+            draw_material(canvas, V.geom(v), mat, ang, tone, S, W, H, lw_thin)
+            (alt_polys if is_alt else pitched_polys).append(v)
         for (t, v, n2) in g["items"]:
             if t["kind"] == "flat":
-                fb = (r.randint(238, 252),) * 3 if r.random() < 0.7 else (255, 255, 255)
-                if flat_look == "gravel":
-                    st = G.Style("stipple", fb, (150, 150, 150), 1, {"density": r.uniform(0.6, 1.5)}, fam_seed + 7, "flat")
-                elif flat_look == "seams":
-                    st = G.Style("hatch", fb, (175, 175, 175), lw_thin * 0.6, {"sp": r.uniform(2.5, 4.5), "angle": r.choice([0, 90])},
-                                 fam_seed + 7, "flat")
-                else:
-                    st = G.Style("flat", fb, fb, 1, {}, fam_seed + 7, "flat")
-                G.draw_fill(canvas, V.geom(v), st, S, W, H)
+                draw_material(canvas, V.geom(v), fmat, 0.0, 1.0, S, W, H, lw_thin)
                 # parapet line + crickets to a drain
                 inner = v.buffer(-r.uniform(0.5, 1.0), join_style=2)
                 if not inner.is_empty:
@@ -511,6 +607,8 @@ def compose_roof(image_id, seed, mode_weights):
                 fl = v.buffer(-0.5, join_style=2)
                 if not fl.is_empty:
                     G.cv_outline(canvas, V.geom(fl), ink, lw_thin)
+        if alt_polys:
+            labelled.append(("roof2", V.geom(unary_union(alt_polys))))
         # skylights on big facets
         sky = []
         if skylights_on:
@@ -523,8 +621,19 @@ def compose_roof(image_id, seed, mode_weights):
                         sky.append(s)
         for s in sky:
             G.cv_fill(canvas, V.geom(s), (255, 255, 255))
-            G.cv_outline(canvas, V.geom(s), ink, lw_thin)
-            G.cv_outline(canvas, V.geom(s.buffer(-0.35, join_style=2)), ink, lw_thin)
+            G.cv_outline(canvas, V.geom(s), ink, lw_thin * 1.3)
+            q = s.buffer(-0.35, join_style=2)
+            G.cv_outline(canvas, V.geom(q), ink, lw_thin)
+            x0s, y0s, x1s, y1s = q.bounds
+            if sky_look == "x":
+                G.cv_line(canvas, V.px(x0s, y0s), V.px(x1s, y1s), ink, lw_thin * 0.8)
+                G.cv_line(canvas, V.px(x0s, y1s), V.px(x1s, y0s), ink, lw_thin * 0.8)
+            elif sky_look == "glass":
+                for f in (0.35, 0.5):
+                    G.cv_line(canvas, V.px(x0s + (x1s - x0s) * f, y0s + (y1s - y0s) * (1 - f) * 0.9),
+                              V.px(x0s + (x1s - x0s) * (f + 0.3), y0s + (y1s - y0s) * (0.6 - f) * 0.9), ink, lw_thin * 0.7)
+            if sky_label:
+                labelled.append(("skylight", V.geom(s)))
         all_skylights += sky
         if pitched_polys:
             lab = unary_union(pitched_polys)
@@ -645,7 +754,7 @@ def compose_roof(image_id, seed, mode_weights):
     _title(canvas, tq, V, ex0, ey1 + bot * 0.55, ex0 + (ex1 - ex0) * r.uniform(0.3, 0.6),
            r.choice(["ROOF PLAN", "ROOF PLAN", "PROPOSED ROOF PLAN", "(N) ROOF PLAN"]), r, ink, lw_thin, size)
     canvas = _finish(canvas, tq, r)
-    return canvas, _annotations(labelled, S, W, H, image_id, "roof_plan", look == "dark" or tint)
+    return canvas, _annotations(labelled, S, W, H, image_id, "roof_plan", colourful)
 
 
 # ----------------------------------------------------------------------------
