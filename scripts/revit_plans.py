@@ -21,12 +21,18 @@ them the way the real Revit plan sheets in the eval set look (HF14 0/1/7/11/12/
                 arrows ("3\" / 1'-0\""), ridge/valley text, spot elevations,
                 walls-below dashed, gutters, trellis / louver slats (unlabelled
                 parallel-line look-alikes), copies of the building.
-  floor plan -- exterior hardscape is the labelled family (flagstone / ashlar
-                patio and front walk, deck boards turning per piece, pavers),
-                sometimes an interior finish region too. Poche walls, Revit
-                wall drop shadows, textured interior floors, rugs, fixtures,
-                room tags, tick-mark dimension chains, grid bubbles, MEP
-                overlays.
+  floor plan -- rewritten 2026-09-29 from the ~40 Gemini + 3 real floor plans.
+                Rooms in EVERY block (wings too), doors / wide cased openings
+                on a spanning tree, windows on the exterior. Three sheet types:
+                finish plans (55%, Gemini): one material per room group (wet
+                tile / mosaic, living planks / tile / basketweave, bedroom
+                carpet / planks, garage concrete / dots), a label runs through
+                the openings between rooms of the same material, identical
+                materials are ONE family, every patterned finish is labelled;
+                rendered plans (22%, HF14 0 / 12): textured grey interiors,
+                labelled exterior hardscape; under-floor / foundation plans
+                (23%, HF14 7 + Gemini): crawlspace hatch / joists / dots and
+                slab labelled, piers cut out of the label.
 
 Labels and the annotation JSON follow v6's format, so v6's _job post-steps
 (tight crop, res-degrade) apply unchanged.
@@ -323,6 +329,21 @@ def _notes(tq, x, y, title, lines, ink, size):
     tq.add((x, y), title, size * 1.05, ink, bold=True)
     for i, n in enumerate(lines):
         tq.add((x, y + size * 1.5 * (i + 1)), n, size * 0.85, ink)
+
+
+def _mfill(canvas, geom_px, colour, W, H):
+    """Fill respecting holes (G.cv_fill paints holes white: wrong for a wall ring around patterned rooms)."""
+    if geom_px.is_empty:
+        return
+    minx, miny, maxx, maxy = geom_px.bounds
+    x0, y0 = max(0, int(minx) - 2), max(0, int(miny) - 2)
+    x1, y1 = min(W, int(math.ceil(maxx)) + 2), min(H, int(math.ceil(maxy)) + 2)
+    if x1 <= x0 or y1 <= y0:
+        return
+    m = G.poly_mask(affinity.translate(geom_px, -x0, -y0), x1 - x0, y1 - y0)
+    layer = np.empty((y1 - y0, x1 - x0, 3), np.uint8)
+    layer[:] = G.bgr(colour)
+    G.blend_mask(canvas[y0:y1, x0:x1], layer, m)
 
 
 def _shade(canvas, geom_px, k, W, H):
@@ -826,58 +847,306 @@ def _fill(canvas, poly_px, st, S, W, H):
     G.draw_fill(canvas, poly_px, st, S, W, H)
 
 
+# ---- floor layout: rooms in EVERY block (v6's build_floor_plan only splits the main one)
+WET = ("BATH", "LAUNDRY", "POWDER", "MUD", "UTIL")
+LIVING = ("LIVING", "DINING", "KITCHEN", "HALL", "ENTRY", "FOYER", "FAMILY", "GREAT", "PANTRY")
+BED = ("BEDROOM", "OFFICE", "STUDY", "BONUS", "W.I.C.", "CLOSET")
+
+
+def _zone(name):
+    if name.startswith("GARAGE"):
+        return "garage"
+    if any(k in name for k in WET):
+        return "wet"
+    if any(k in name for k in LIVING):
+        return "living"
+    return "bed"
+
+
+def plan_layout(house, r):
+    blocks = house["blocks"]
+    t_ext, t_int = r.uniform(0.55, 0.85), r.uniform(0.35, 0.5)
+    foot = unary_union([G.rect(b.x0, b.y0, b.x1, b.y1) for b in blocks])
+    inner_foot = foot.buffer(-t_ext, join_style=2)
+    cells, taken = [], None
+    for b in blocks:
+        R = G.rect(b.x0, b.y0, b.x1, b.y1)
+        reg = R if taken is None else R.difference(taken)
+        taken = R if taken is None else taken.union(R)
+        for q in G.polys_of(reg):
+            if q.area < 20:
+                continue
+            if b.kind == "garage":
+                cells.append((q, "garage"))
+                continue
+            bx = q.bounds
+            if q.area > 0.97 * (bx[2] - bx[0]) * (bx[3] - bx[1]):
+                for (x0, y0, x1, y1) in G.split_rooms(r, *bx):
+                    cells.append((G.rect(x0, y0, x1, y1), "room"))
+            else:
+                cells.append((q, "room"))
+    rooms = []
+    for (c, kind) in cells:
+        inner = c.buffer(-t_int / 2, join_style=2).intersection(inner_foot)
+        if inner.is_empty or inner.area < 8:
+            continue
+        inner = max(G.polys_of(inner), key=lambda q: q.area)
+        rooms.append({"cell": c, "inner": inner, "kind": kind})
+    # names by size / shape
+    free = sorted([k for k, rm in enumerate(rooms) if rm["kind"] != "garage"], key=lambda k: -rooms[k]["inner"].area)
+    names = {}
+    for k in [k for k, rm in enumerate(rooms) if rm["kind"] == "garage"]:
+        names[k] = r.choice(["GARAGE", "GARAGE", "2-CAR GARAGE"])
+    nb = 1
+    for rank, k in enumerate(free):
+        q = rooms[k]["inner"]
+        x0, y0, x1, y1 = q.bounds
+        w, h = x1 - x0, y1 - y0
+        a = q.area
+        if min(w, h) < 6.5 and max(w, h) / max(min(w, h), 1) > 2.3:
+            nm = "HALL"
+        elif rank == 0:
+            nm = r.choice(["LIVING ROOM", "GREAT ROOM", "LIVING / DINING"])
+        elif rank == 1:
+            nm = "KITCHEN"
+        elif a < 45:
+            nm = r.choice(["CLOSET", "W.I.C.", "PANTRY", "LINEN"])
+        elif a < 95:
+            nm = r.choice(["BATH", "BATH", "LAUNDRY", "POWDER", "MUDROOM", "UTILITY"])
+        elif rank == 2 and r.random() < 0.6:
+            nm = r.choice(["DINING", "FAMILY ROOM", "ENTRY"])
+        else:
+            nm = r.choice(["BEDROOM", "BEDROOM", "BEDROOM", "OFFICE", "PRIMARY BEDROOM"])
+            if nm == "BEDROOM":
+                nb += 1
+                nm = f"BEDROOM {nb}"
+        names[k] = nm
+    for k, rm in enumerate(rooms):
+        rm["name"] = names[k]
+        rm["zone"] = _zone(rm["name"])
+    # openings between rooms: a spanning tree first (every room reachable), then extras
+    pairs = []
+    for i in range(len(rooms)):
+        for j in range(i + 1, len(rooms)):
+            sh = rooms[i]["cell"].buffer(0.05).intersection(rooms[j]["cell"].buffer(0.05))
+            if sh.is_empty:
+                continue
+            x0, y0, x1, y1 = sh.bounds
+            L = max(x1 - x0, y1 - y0)
+            if L > 3.6:
+                pairs.append((i, j, (x0, y0, x1, y1), L))
+    r.shuffle(pairs)
+    parent = list(range(len(rooms)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    chosen = []
+    for pr in pairs:
+        a, b = find(pr[0]), find(pr[1])
+        if a != b:
+            parent[a] = b
+            chosen.append(pr)
+        elif r.random() < 0.25:
+            chosen.append(pr)
+    doors, openings = [], []
+    for (i, j, (x0, y0, x1, y1), L) in chosen:
+        vert = (y1 - y0) > (x1 - x0)
+        both_open = rooms[i]["zone"] == rooms[j]["zone"] == "living"
+        wide = both_open and r.random() < 0.6
+        w = min(L - 1.0, r.uniform(4, 9)) if wide else min(L - 1.0, r.choice([2.5, 2.67, 3.0]))
+        if vert:
+            c = r.uniform(y0 + 0.5 + w / 2, y1 - 0.5 - w / 2) if y1 - y0 > w + 1 else (y0 + y1) / 2
+            x = (x0 + x1) / 2
+            op = G.rect(x - t_int, c - w / 2, x + t_int, c + w / 2)
+            doors.append(("v", x, c, w, not wide))
+        else:
+            c = r.uniform(x0 + 0.5 + w / 2, x1 - 0.5 - w / 2) if x1 - x0 > w + 1 else (x0 + x1) / 2
+            y = (y0 + y1) / 2
+            op = G.rect(c - w / 2, y - t_int, c + w / 2, y + t_int)
+            doors.append(("h", y, c, w, not wide))
+        openings.append((i, j, op))
+    # front door + windows on the exterior
+    mb = blocks[0]
+    fx = mb.x0 + house["front_door_u"] * mb.w
+    doors.append(("h", mb.y0, fx, 3.0, True))
+    windows = []
+    edge = foot.boundary
+    for rm in rooms:
+        if rm["kind"] == "garage":
+            continue
+        for a, b in zip(list(rm["cell"].exterior.coords)[:-1], list(rm["cell"].exterior.coords)[1:]):
+            seg = LineString([a, b])
+            if seg.length < 5 or edge.distance(seg.interpolate(0.5, normalized=True)) > 0.05:
+                continue
+            n = max(0, int(seg.length / r.uniform(7, 13)))
+            for k in range(n):
+                t = (k + 0.5) / n
+                p = seg.interpolate(t, normalized=True)
+                ww = r.choice([2.5, 3.0, 4.0, 5.0])
+                if abs(a[1] - b[1]) < 1e-6:
+                    if abs(a[1] - mb.y0) < 1e-6 and abs(p.x - fx) < 4:
+                        continue
+                    windows.append(("h", a[1], p.x, ww))
+                else:
+                    windows.append(("v", a[0], p.y, ww))
+    cut = []
+    for (o, pos, c, w, *_) in doors + windows:
+        cut.append(G.rect(pos - 1.0, c - w / 2, pos + 1.0, c + w / 2) if o == "v" else
+                   G.rect(c - w / 2, pos - 1.0, c + w / 2, pos + 1.0))
+    walls_full = foot.difference(unary_union([rm["inner"] for rm in rooms]))
+    walls = walls_full.difference(unary_union(cut))
+    return {"rooms": rooms, "doors": doors, "windows": windows, "openings": openings, "walls": walls,
+            "walls_full": walls_full, "foot": foot, "t_ext": t_ext, "t_int": t_int}
+
+
+# ---- floor finishes (Gemini floor plans: finish per room group, labelled through doorways)
+def floor_material(kind, r, seed, colour, ang=None):
+    base = (255, 255, 255)
+    if colour and r.random() < 0.6:
+        base = r.choice([(232, 226, 214), (226, 214, 196), (214, 214, 210), (236, 232, 226), (220, 228, 236)])
+    line = (r.randint(80, 175),) * 3 if not colour else G.mix(base, (0, 0, 0), r.uniform(0.3, 0.5))
+    m = {"kind": kind, "base": base, "line": line, "seed": seed,
+         "ang": ang if ang is not None else r.choice([0, 90])}
+    if kind == "plank_lines":
+        m["sp"] = r.uniform(0.35, 0.75)
+    elif kind == "plank":
+        m["w"] = r.uniform(0.45, 0.8)
+    elif kind in ("tile", "diag_tile"):
+        m["sp"] = r.uniform(0.8, 2.2)
+    elif kind == "mosaic":
+        m["sp"] = r.uniform(0.3, 0.55)
+    elif kind in ("carpet", "concrete"):
+        m["density"] = r.uniform(1.2, 3.5)
+    elif kind == "dots":
+        m["sp"] = r.uniform(0.7, 1.6)
+        m["fill"] = r.random() < 0.6
+    elif kind == "basket":
+        m["sp"] = r.uniform(0.8, 1.4)
+    elif kind == "hatch45":
+        m["sp"] = r.uniform(0.5, 1.2)
+        m["ang"] = r.choice([45, -45])
+    elif kind == "joists":
+        m["sp"] = r.choice([1.333, 1.333, 2.0])
+    elif kind == "ashlar":
+        m["unit"] = r.uniform(0.9, 1.6)
+    return m
+
+
+def _mkey(m):
+    return (m["kind"],) + tuple(round(m[k], 2) if isinstance(m[k], float) else m[k]
+                                for k in sorted(m) if k not in ("kind", "seed"))
+
+
+def draw_floor(canvas, poly_px, m, S, W, H, lw):
+    if poly_px.is_empty:
+        return
+    minx, miny, maxx, maxy = poly_px.bounds
+    x0, y0 = max(0, int(math.floor(minx)) - 2), max(0, int(math.floor(miny)) - 2)
+    x1, y1 = min(W, int(math.ceil(maxx)) + 2), min(H, int(math.ceil(maxy)) + 2)
+    if x1 <= x0 or y1 <= y0:
+        return
+    layer = np.empty((y1 - y0, x1 - x0, 3), np.uint8)
+    layer[:] = G.bgr(m["base"])
+    k, c = m["kind"], m["line"]
+    if k in ("plank_lines", "joists", "hatch45"):
+        G._dlines(layer, x0, y0, S, m["sp"], m["ang"], c, lw)
+    elif k == "plank":
+        G._planks(layer, x0, y0, S, m["w"], c, lw, m["seed"], angle=m["ang"])
+    elif k in ("tile", "mosaic"):
+        G._hlines(layer, x0, y0, S, m["sp"], c, lw)
+        G._vlines(layer, x0, y0, S, m["sp"], c, lw)
+    elif k == "diag_tile":
+        G._dlines(layer, x0, y0, S, m["sp"], 45, c, lw)
+        G._dlines(layer, x0, y0, S, m["sp"], -45, c, lw)
+    elif k == "carpet":
+        G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
+    elif k == "concrete":
+        G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
+        G._stipple(layer, x0, y0, S, m["density"] * 0.15, c, m["seed"] + 1, r_px=2)
+    elif k == "dots":
+        _dotgrid(layer, x0, y0, S, m["sp"], max(1.2, 0.07 * S), c, m["fill"], lw)
+    elif k == "basket":
+        G._basketweave(layer, x0, y0, S, m["sp"], c, lw)
+    elif k == "ashlar":
+        G._ashlar(layer, x0, y0, S, m["unit"], c, lw, m["seed"])
+    mask = G.poly_mask(affinity.translate(poly_px, -x0, -y0), x1 - x0, y1 - y0)
+    G.blend_mask(canvas[y0:y1, x0:x1], layer, mask)
+
+
+LIVING_FIN = (["plank_lines", "plank", "tile", "diag_tile", "dots", "basket"], [40, 18, 18, 10, 7, 7])
+WET_FIN = (["tile", "mosaic", "diag_tile", "dots"], [50, 25, 15, 10])
+BED_FIN = (["carpet", "plank_lines", "plank", "dots"], [45, 30, 15, 10])
+GARAGE_FIN = (["concrete", "dots", "carpet"], [60, 25, 15])
+
+
 def compose_floor(image_id, seed, mode_weights):
     house = _house(image_id, seed, mode_weights)
     r = random.Random(seed * 1_000_003 + image_id * 191 + 61)
-    fp = G.build_floor_plan(house, random.Random(seed * 1_000_003 + image_id * 193 + 67))
+    lay = plan_layout(house, random.Random(seed * 1_000_003 + image_id * 193 + 67))
+    rooms, foot = lay["rooms"], lay["foot"]
     blocks = house["blocks"]
     mb = blocks[0]
-    foot = unary_union([G.rect(b.x0, b.y0, b.x1, b.y1) for b in blocks])
     ink = (r.randint(0, 30),) * 3
     colour = r.random() < 0.3
     fam_seed = r.randrange(1 << 30)
-
-    # ---- hardscape (the labelled family on real Revit floor plans: HF14 0 / 12)
-    hard_kind = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket"], weights=[26, 14, 16, 26, 8, 10])[0]
-    pieces = []
+    # three sheet types, in the proportions the Gemini + real floor plans show
+    sheet = r.choices(["finish", "rendered", "underfloor"], weights=[55, 22, 23])[0]
     x0f, y0f, x1f, y1f = foot.bounds
-    if r.random() < 0.8:                                          # rear patio / deck
-        pw = r.uniform(0.35, 1.0) * (x1f - x0f)
-        px = r.uniform(x0f, x1f - pw)
-        pieces.append(box(px, y1f, px + pw, y1f + r.uniform(7, 16)))
-    if r.random() < 0.6:                                          # front walk
-        fx = mb.x0 + house["front_door_u"] * mb.w
-        ww = r.uniform(3, 5.5)
-        pieces.append(box(fx - ww / 2, y0f - r.uniform(6, 16), fx + ww / 2, y0f))
-    if r.random() < 0.35:                                         # side deck / terrace
-        dd, dl = r.uniform(5, 10), r.uniform(10, 0.8 * (y1f - y0f) + 10)
-        yy = r.uniform(y0f, max(y0f, y1f - dl + 6))
-        pieces.append(box(x1f, yy, x1f + dd, yy + dl) if r.random() < 0.5 else box(x0f - dd, yy, x0f, yy + dl))
-    if not pieces:
-        pieces.append(box(x0f + 2, y1f, min(x1f, x0f + 22), y1f + r.uniform(8, 14)))
-    hard = unary_union(pieces).difference(foot.buffer(0.3, join_style=2))
-    hard_polys = [p for p in G.polys_of(hard) if p.area > 12]
-    two_hard = r.random() < 0.2 and len(hard_polys) >= 2
-    hard_kind2 = r.choice([k for k in ["ashlar", "grid", "plank", "concrete"] if k != hard_kind]) if two_hard else None
 
-    # ---- interior
-    wall_look = r.choices(["black", "grey", "hatched", "double"], weights=[45, 25, 10, 20])[0]
-    wall_fill = {"black": (r.randint(0, 35),) * 3, "grey": (r.randint(95, 175),) * 3,
-                 "hatched": (255, 255, 255), "double": (255, 255, 255)}[wall_look]
-    floor_look = r.choices(["plank", "none", "tile", "carpet"], weights=[40, 35, 13, 12])[0]
-    fl_base = (r.randint(214, 240),) * 3 if not colour else r.choice([(226, 214, 196), (214, 206, 200), (232, 226, 214)])
-    fl_line = G.mix(fl_base, (0, 0, 0), r.uniform(0.12, 0.3))
-    finish_lab = r.random() < 0.3
-    fin_kind = r.choice(["grid", "basket", "cross", "ashlar"]) if finish_lab else None
-    rugs = r.random() < 0.35
-    shadow_on = r.random() < 0.4 and wall_look in ("black", "grey")
-    mep = r.random() < 0.2
-    dims_on = r.random() < 0.75
-    grid_on = r.random() < 0.55
+    # ---- exterior hardscape (rendered sheets always, finish sheets sometimes)
+    hard_polys = []
+    if sheet == "rendered" or (sheet == "finish" and r.random() < 0.25):
+        pieces = []
+        if r.random() < 0.8:
+            pw = r.uniform(0.35, 1.0) * (x1f - x0f)
+            px = r.uniform(x0f, x1f - pw)
+            pieces.append(box(px, y1f, px + pw, y1f + r.uniform(7, 16)))
+        if r.random() < 0.6:
+            fx = mb.x0 + house["front_door_u"] * mb.w
+            ww = r.uniform(3, 5.5)
+            pieces.append(box(fx - ww / 2, y0f - r.uniform(6, 16), fx + ww / 2, y0f))
+        if r.random() < 0.35:
+            dd, dl = r.uniform(5, 10), r.uniform(10, 0.8 * (y1f - y0f) + 10)
+            yy = r.uniform(y0f, max(y0f, y1f - dl + 6))
+            pieces.append(box(x1f, yy, x1f + dd, yy + dl) if r.random() < 0.5 else box(x0f - dd, yy, x0f, yy + dl))
+        if not pieces:
+            pieces.append(box(x0f + 2, y1f, min(x1f, x0f + 22), y1f + r.uniform(8, 14)))
+        hard = unary_union(pieces).difference(foot.buffer(0.3, join_style=2))
+        hard_polys = [q for q in G.polys_of(hard) if q.area > 12]
+
+    # ---- finishes: one material per zone; identical materials are ONE family
+    zone_mat = {}
+    if sheet == "finish":
+        ang = r.choice([0, 90])
+        zone_mat["living"] = floor_material(r.choices(*LIVING_FIN)[0], r, fam_seed + 1, colour, ang)
+        zone_mat["wet"] = floor_material(r.choices(*WET_FIN)[0], r, fam_seed + 2, colour)
+        zone_mat["bed"] = zone_mat["living"] if r.random() < 0.35 else \
+            floor_material(r.choices(*BED_FIN)[0], r, fam_seed + 3, colour, ang)
+        zone_mat["garage"] = floor_material(r.choices(*GARAGE_FIN)[0], r, fam_seed + 4, colour)
+        for z in ("bed", "living", "wet", "garage"):          # some zones left blank, as Gemini does
+            if r.random() < {"bed": 0.3, "living": 0.2, "wet": 0.15, "garage": 0.25}[z]:
+                zone_mat[z] = None
+        if all(v is None for v in zone_mat.values()):
+            zone_mat["living"] = floor_material(r.choices(*LIVING_FIN)[0], r, fam_seed + 1, colour, ang)
+    elif sheet == "rendered":
+        fl = floor_material(r.choice(["plank", "plank_lines", "tile"]), r, fam_seed + 1, False, r.choice([0, 90]))
+        fl["base"] = (r.randint(222, 242),) * 3
+        fl["line"] = G.mix(fl["base"], (0, 0, 0), r.uniform(0.12, 0.25))
+        for z in ("living", "bed"):
+            zone_mat[z] = fl
+        zone_mat["wet"] = floor_material("tile", r, fam_seed + 2, False)
+        zone_mat["wet"]["base"], zone_mat["wet"]["line"] = fl["base"], fl["line"]
+        zone_mat["garage"] = floor_material("concrete", r, fam_seed + 4, False) if r.random() < 0.6 else None
+    label_rendered_floor = False
 
     # ---- layout
-    allg = unary_union([foot] + hard_polys + ([fp["patio"]] if fp["patio"] is not None else []))
+    allg = unary_union([foot] + hard_polys)
     ex0, ey0, ex1, ey1 = allg.bounds
+    grid_on = r.random() < (0.55 if sheet != "finish" else 0.35)
+    dims_on = r.random() < 0.75
     pad = r.uniform(9, 13) if (grid_on or dims_on) else r.uniform(3, 6)
     bot = r.uniform(7, 10)
     total_w, total_h = (ex1 - ex0) + 2 * pad, (ey1 - ey0) + pad + bot + 2
@@ -889,156 +1158,194 @@ def compose_floor(image_id, seed, mode_weights):
     size = max(12, max(W, H) * r.uniform(0.004, 0.0065))
     lw_thin = max(1.0, S * r.uniform(0.009, 0.015))
     lw_heavy = max(1.6, S * r.uniform(0.02, 0.032))
+    lw_pat = max(0.8, lw_thin * r.uniform(0.55, 0.8))
     app = {"ink": ink, "text_px": size, "outline_lw": lw_thin}
     labelled = []
 
-    # hardscape
-    hs = _hard_style(hard_kind, r, lw_thin * 0.8, fam_seed + 1, colour)
-    hs2 = _hard_style(hard_kind2, r, lw_thin * 0.8, fam_seed + 2, colour) if two_hard else None
-    for i, p in enumerate(hard_polys):
-        st = hs2 if (two_hard and i == len(hard_polys) - 1) else hs
-        fam = "hardscape2" if st is hs2 else "hardscape"
-        if st.kind == "hatch":                                   # deck boards run the long way of each piece
-            bx = p.bounds
-            st = G.Style("hatch", st.base, st.line, st.lw,
-                         {"sp": st.params["sp"], "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90}, st.seed, fam)
-        _fill(canvas, V.geom(p), st, S, W, H)
-        G.cv_outline(canvas, V.geom(p), ink, lw_thin)
-        labelled.append((fam, V.geom(p)))
-    if fp["patio"] is not None and not fp["patio"].intersects(hard):
-        G.cv_outline(canvas, V.geom(fp["patio"]), ink, lw_thin)
+    # ---- hardscape
+    if hard_polys:
+        hk = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket"], weights=[26, 14, 16, 26, 8, 10])[0]
+        hs = _hard_style(hk, r, lw_pat, fam_seed + 11, colour)
+        for p in hard_polys:
+            st = hs
+            if st.kind == "hatch":                               # deck boards run the long way of each piece
+                bx = p.bounds
+                st = G.Style("hatch", st.base, st.line, st.lw,
+                             {"sp": st.params["sp"], "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90},
+                             st.seed, "hardscape")
+            _fill(canvas, V.geom(p), st, S, W, H)
+            G.cv_outline(canvas, V.geom(p), ink, lw_thin)
+            labelled.append(("hardscape", V.geom(p)))
 
-    # interior floors
-    for i, (rm, name, rp) in enumerate(zip(fp["rooms"], fp["names"], fp["room_polys"])):
-        wet = any(k in name for k in ("BATH", "LAUNDRY", "MUD", "ENTRY"))
-        if floor_look == "none":
-            continue
-        kind = "grid" if (wet or floor_look == "tile") else ("stipple" if floor_look == "carpet" else "plank")
-        params = {"sp": r.uniform(1.0, 2.0)} if kind == "grid" else \
-            {"density": r.uniform(0.8, 2.0)} if kind == "stipple" else {"w": r.uniform(0.4, 0.8), "angle": 0}
-        G.draw_fill(canvas, V.geom(rp), G.Style(kind, fl_base, fl_line, max(0.8, lw_thin * 0.6), params,
-                                                fam_seed + 3 + (kind == "grid"), "floor"), S, W, H)
-    if fp["garage"] is not None and r.random() < 0.6:
-        G.draw_fill(canvas, V.geom(fp["garage"]), G.Style("concrete", (250, 250, 250), (150, 150, 150), 1,
-                                                          {"density": r.uniform(1.0, 2.5)}, fam_seed + 5, "garage"), S, W, H)
-    if finish_lab:
-        cand = [rp for rp in fp["room_polys"] if rp.area > 60]
-        if cand:
-            k = r.randint(1, min(3, len(cand)))
-            chosen = r.sample(cand, k)
-            st = _hard_style({"grid": "grid", "basket": "basket", "cross": "grid", "ashlar": "ashlar"}[fin_kind], r,
-                             lw_thin * 0.7, fam_seed + 6, colour)
-            if fin_kind == "cross":
-                st = G.Style("cross", st.base, st.line, st.lw, {"sp": r.uniform(1.0, 2.0)}, st.seed, "finish")
-            for rp in chosen:
-                _fill(canvas, V.geom(rp), st, S, W, H)
-                labelled.append(("finish", V.geom(rp)))
-    if rugs:
-        for (rm, name, rp) in zip(fp["rooms"], fp["names"], fp["room_polys"]):
-            if ("LIVING" in name or "BED" in name or "FAMILY" in name) and rp.area > 120 and r.random() < 0.6:
-                c = rp.representative_point()
-                rw, rd = r.uniform(5, 9), r.uniform(4, 7)
-                rug = box(c.x - rw / 2, c.y - rd / 2, c.x + rw / 2, c.y + rd / 2).intersection(rp.buffer(-1))
-                if not rug.is_empty:
-                    rk = r.choice(["stipple", "cross", "grid"])
-                    G.draw_fill(canvas, V.geom(rug), G.Style(rk, (248, 248, 246), (170, 170, 170), 1,
-                                                             {"density": 3.0, "sp": r.uniform(0.3, 0.7)},
-                                                             fam_seed + 8, "rug"), S, W, H)
-                    G.cv_outline(canvas, V.geom(rug), ink, lw_thin * 0.8)
+    # ---- floors: regions = rooms of a material + the openings between two such rooms
+    if sheet in ("finish", "rendered"):
+        fams = {}
+        for k, rm in enumerate(rooms):
+            m = zone_mat.get(rm["zone"])
+            if m is None:
+                continue
+            fams.setdefault(_mkey(m), (m, []))[1].append(rm["inner"])
+        for (i, j, op) in lay["openings"]:
+            mi, mj = zone_mat.get(rooms[i]["zone"]), zone_mat.get(rooms[j]["zone"])
+            if mi is not None and mj is not None and _mkey(mi) == _mkey(mj):
+                fams[_mkey(mi)][1].append(op)
+        for n, (key, (m, polys)) in enumerate(sorted(fams.items(), key=lambda kv: str(kv[0]))):
+            reg = unary_union(polys)
+            draw_floor(canvas, V.geom(reg), m, S, W, H, lw_pat)
+            if sheet == "finish":                        # patterned finish => always labelled
+                labelled.append((f"floor{n}", V.geom(reg)))
+    elif sheet == "underfloor":
+        # crawlspace / slab / framing plan (real HF14 7, Gemini under-floor sheets)
+        slab_rooms = [rm["inner"] for rm in rooms if rm["zone"] == "garage"]
+        crawl = foot.buffer(-lay["t_ext"], join_style=2)
+        if slab_rooms:
+            crawl = crawl.difference(unary_union([rm["cell"] for rm in rooms if rm["zone"] == "garage"]).buffer(lay["t_ext"]))
+        ck = r.choices(["hatch45", "joists", "dots", "basket", "carpet", "blank"], weights=[25, 25, 12, 12, 11, 15])[0]
+        if ck == "blank" and not slab_rooms:
+            ck = "hatch45"
+        # piers on a grid (holes in the crawlspace label, like skylights in a roof)
+        px0, py0, px1, py1 = crawl.bounds
+        sp_p = r.uniform(5, 8)
+        pier_rows, piers = [], []
+        yy = py0 + sp_p
+        while yy < py1 - 1:
+            pier_rows.append(yy)
+            xx = px0 + sp_p
+            while xx < px1 - 1:
+                q = box(xx - 0.6, yy - 0.6, xx + 0.6, yy + 0.6)
+                if crawl.buffer(-0.3).contains(q):
+                    piers.append(q)
+                xx += sp_p
+            yy += sp_p
+        if ck != "blank":
+            cm = floor_material(ck, r, fam_seed + 21, colour, r.choice([0, 90]))
+            draw_floor(canvas, V.geom(crawl), cm, S, W, H, lw_pat)
+            lab = crawl.difference(unary_union(piers)) if piers else crawl
+            labelled.append(("crawl", V.geom(lab)))
+        if slab_rooms:
+            sm = floor_material(r.choice(["concrete", "concrete", "dots"]), r, fam_seed + 22, colour)
+            reg = unary_union(slab_rooms)
+            draw_floor(canvas, V.geom(reg), sm, S, W, H, lw_pat)
+            if ck == "blank" or r.random() < 0.85:
+                labelled.append(("slab", V.geom(reg)))
+        # girders dashed through the pier rows (clipped to the crawlspace), then the piers
+        gcol = G.mix(ink, (255, 255, 255), 0.3)
+        for yy in pier_rows:
+            for seg in G.lines_of(LineString([(px0, yy), (px1, yy)]).intersection(crawl)):
+                c = list(seg.coords)
+                _dash_line(canvas, V.px(*c[0]), V.px(*c[-1]), gcol, lw_thin, [(0.8 * S, 0.3 * S)])
+        for q in piers:
+            G.cv_fill(canvas, V.geom(q), (255, 255, 255))
+            G.cv_outline(canvas, V.geom(q), ink, lw_thin)
+    if not labelled and sheet != "underfloor":
+        # every sheet must ask something: label the largest patterned region
+        pass
 
-    # wall drop shadow (rendered Revit plan, HF14 0)
-    if shadow_on:
-        off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
-        sh = affinity.translate(fp["walls_full"].union(foot.boundary.buffer(0.2)), *off).difference(fp["walls_full"])
-        _shade(canvas, V.geom(sh), r.uniform(0.7, 0.85), W, H)
-
-    # walls
-    wg = V.geom(fp["walls"])
-    if wall_look in ("black", "grey"):
-        G.cv_fill(canvas, wg, wall_fill)
-        G.cv_outline(canvas, wg, ink, lw_thin * (1.0 if wall_look == "black" else 1.3))
-    elif wall_look == "hatched":
-        G.draw_fill(canvas, wg, G.Style("hatch", (255, 255, 255), (90, 90, 90), max(0.8, lw_thin * 0.6),
-                                        {"sp": 0.25, "angle": 45}, fam_seed + 4, "walls"), S, W, H)
-        G.cv_outline(canvas, wg, ink, lw_heavy)
+    # ---- walls
+    if sheet == "underfloor":
+        wg = V.geom(lay["walls_full"].difference(unary_union([rm["inner"] for rm in rooms]).buffer(0)))
+        ring = foot.difference(foot.buffer(-lay["t_ext"], join_style=2))
+        _mfill(canvas, V.geom(ring), (255, 255, 255), W, H)
+        G.cv_outline(canvas, V.geom(ring), ink, lw_heavy)
+        _dash_poly(canvas, V.geom(foot.buffer(0.9, join_style=2)), G.mix(ink, (255, 255, 255), 0.4), lw_thin,
+                   [(0.6 * S, 0.3 * S)])                          # footing below
     else:
-        G.cv_fill(canvas, wg, (255, 255, 255))
-        G.cv_outline(canvas, wg, ink, lw_thin * 1.2)
+        wall_look = r.choices(["grey", "black", "double"], weights=[50, 30, 20])[0]
+        if sheet == "rendered" and r.random() < 0.45:
+            off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
+            sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
+            _shade(canvas, V.geom(sh), r.uniform(0.7, 0.85), W, H)
+        wg = V.geom(lay["walls"])
+        if wall_look == "grey":
+            _mfill(canvas, wg, (r.randint(80, 150),) * 3, W, H)
+            G.cv_outline(canvas, wg, ink, lw_thin)
+        elif wall_look == "black":
+            _mfill(canvas, wg, (r.randint(0, 35),) * 3, W, H)
+        else:
+            _mfill(canvas, wg, (255, 255, 255), W, H)
+            G.cv_outline(canvas, wg, ink, lw_thin * 1.2)
+        t = lay["t_ext"]
+        for (o, pos, c, w) in lay["windows"]:
+            for kk in (-0.5, 0, 0.5):
+                if o == "h":
+                    G.cv_line(canvas, V.px(c - w / 2, pos + kk * t * 0.8), V.px(c + w / 2, pos + kk * t * 0.8), ink, lw_thin)
+                else:
+                    G.cv_line(canvas, V.px(pos + kk * t * 0.8, c - w / 2), V.px(pos + kk * t * 0.8, c + w / 2), ink, lw_thin)
+        for (o, pos, c, w, leaf) in lay["doors"]:
+            if not leaf:
+                continue
+            sgn = r.choice([-1, 1])
+            if o == "h":
+                hinge = (c - w / 2, pos)
+                G.cv_line(canvas, V.px(*hinge), V.px(hinge[0], pos + sgn * w), ink, lw_thin * 1.3)
+                a0, a1 = (0, 90) if sgn > 0 else (270, 360)
+            else:
+                hinge = (pos, c - w / 2)
+                G.cv_line(canvas, V.px(*hinge), V.px(pos + sgn * w, hinge[1]), ink, lw_thin * 1.3)
+                a0, a1 = (0, 90) if sgn > 0 else (90, 180)
+            cv2.ellipse(canvas, G._pt(V.px(*hinge)), (int(w * S * G.SCALE), int(w * S * G.SCALE)), 0, a0, a1,
+                        G.bgr(ink), max(1, int(lw_thin * 0.8)), cv2.LINE_AA, G.SHIFT)
     if grid_on:
-        xs = _merge_close([v for b in blocks for v in (b.x0, b.x1)] + [rr[0] for rr in fp["rooms"]], 4.0)
+        xs = _merge_close([v for b in blocks for v in (b.x0, b.x1)], 4.0)
         ys = _merge_close([v for b in blocks for v in (b.y0, b.y1)], 4.0)
         _grid(canvas, tq, V, xs, ys, (ex0 - pad + 2.2, ey0 - pad + 2.2, ex1 + pad - 2.2, ey1 + pad * 0.5),
               ink, lw_thin * 0.9, size, S, r)
 
-    # windows / doors (v6 conventions)
-    t = fp["t_ext"]
-    for (o, pos, c, w) in fp["windows"]:
-        for k in (-0.5, 0, 0.5):
-            if o == "h":
-                G.cv_line(canvas, V.px(c - w / 2, pos + k * t * 0.8), V.px(c + w / 2, pos + k * t * 0.8), ink, lw_thin)
-            else:
-                G.cv_line(canvas, V.px(pos + k * t * 0.8, c - w / 2), V.px(pos + k * t * 0.8, c + w / 2), ink, lw_thin)
-    for (o, pos, c, w) in fp["doors"]:
-        sgn = r.choice([-1, 1])
-        if o == "h":
-            hinge = (c - w / 2, pos)
-            G.cv_line(canvas, V.px(*hinge), V.px(hinge[0], pos + sgn * w), ink, lw_thin * 1.3)
-            a0, a1 = (0, 90) if sgn > 0 else (270, 360)
-        else:
-            hinge = (pos, c - w / 2)
-            G.cv_line(canvas, V.px(*hinge), V.px(pos + sgn * w, hinge[1]), ink, lw_thin * 1.3)
-            a0, a1 = (0, 90) if sgn > 0 else (90, 180)
-        cv2.ellipse(canvas, G._pt(V.px(*hinge)), (int(w * S * G.SCALE), int(w * S * G.SCALE)), 0, a0, a1,
-                    G.bgr(ink), max(1, int(lw_thin * 0.8)), cv2.LINE_AA, G.SHIFT)
-    # fixtures, room tags
-    for (rm, name, rp) in zip(fp["rooms"], fp["names"], fp["room_polys"]):
-        G.draw_fixtures(canvas, V, name, rm, ink, lw_thin, S, r)
-        c = V.px((rm[0] + rm[2]) / 2, (rm[1] + rm[3]) / 2)
-        tq.add(c, name, size * 0.95, ink, bold=True, anchor="mm")
-        if r.random() < 0.7:
-            tq.add((c[0], c[1] + size * 1.15), f"{G.ft_label(rm[2] - rm[0])} x {G.ft_label(rm[3] - rm[1])}",
-                   size * 0.75, ink, anchor="mm")
-    if fp["garage"] is not None:
-        c = fp["garage"].representative_point()
-        tq.add(V.px(c.x, c.y), r.choice(["GARAGE", "(E) GARAGE", "2-CAR GARAGE"]), size, ink, bold=True, anchor="mm")
+    # ---- fixtures, tags, text
+    sf = r.random() < 0.5
+    for rm in rooms:
+        x0, y0, x1, y1 = rm["inner"].bounds
+        if sheet != "underfloor":
+            G.draw_fixtures(canvas, V, rm["name"], (x0, y0, x1, y1), ink, lw_thin, S, r)
+            c = V.px((x0 + x1) / 2, (y0 + y1) / 2)
+            if rm["inner"].area > 30:
+                tq.add(c, rm["name"], size * 0.95, ink, bold=True, anchor="mm")
+                if r.random() < 0.7:
+                    sub = f"{int(rm['inner'].area)} SF" if sf else f"{G.ft_label(x1 - x0)} x {G.ft_label(y1 - y0)}"
+                    tq.add((c[0], c[1] + size * 1.15), sub, size * 0.75, ink, anchor="mm")
+    if sheet == "underfloor":
+        cxy = foot.representative_point()
+        tq.add(V.px(cxy.x, cxy.y), r.choice(["CRAWLSPACE", "CRAWL SPACE", "UNDER FLOOR", "(E) CRAWLSPACE"]), size * 1.2,
+               ink, bold=True, anchor="mm")
+        for rm in rooms:
+            if rm["zone"] == "garage":
+                c = rm["inner"].representative_point()
+                tq.add(V.px(c.x, c.y), r.choice(['4" CONC. SLAB', "GARAGE SLAB ON GRADE", "CONCRETE SLAB"]), size, ink,
+                       bold=True, anchor="mm")
+        q = foot.buffer(-2).representative_point()
+        G.draw_leader(canvas, tq, V, (q.x, q.y), r.choice(['2x10 FLOOR JOISTS @ 16" O.C.', "4x6 GIRDER ON PIERS",
+                                                           'PIER BLOCK, TYP.', "6 MIL VAPOR BARRIER"]), app, S, 1)
+        if r.random() < 0.6:
+            _notes(tq, W * r.uniform(0.7, 0.78), H * r.uniform(0.05, 0.12), "NOTES:",
+                   r.sample(["1. ALL STRUCTURAL CONCRETE TO BE 2500 PSI MIN.", "2. PROVIDE CROSS VENTILATION.",
+                             "3. VERIFY ALL DIMENSIONS IN FIELD.", "4. SEE STRUCTURAL FOR FRAMING."], 3), ink, size * 0.8)
     for p in hard_polys[:2]:
         if p.area > 80 and r.random() < 0.5:
             c = p.representative_point()
             tq.add(V.px(c.x, c.y), r.choice(["COVERED PATIO", "PATIO", "DECK", "TERRACE", "(N) DECK"]), size, ink,
                    anchor="mm")
-    if hard_polys and r.random() < 0.6:
-        q = hard_polys[0].representative_point()
-        G.draw_leader(canvas, tq, V, (q.x, q.y), r.choice(HARD_NOTES[hard_kind]), app, S,
-                      1 if q.x > (ex0 + ex1) / 2 else -1)
-    # MEP overlay (HF14 12)
-    if mep:
+    if sheet != "underfloor" and r.random() < 0.15:           # MEP overlay (HF14 12)
         mcol = (r.randint(20, 90),) * 3
         for _ in range(r.randint(4, 10)):
-            rm = r.choice(fp["rooms"])
-            cx, cy = r.uniform(rm[0] + 1, rm[2] - 1), r.uniform(rm[1] + 1, rm[3] - 1)
+            rm = r.choice(rooms)
+            x0, y0, x1, y1 = rm["inner"].bounds
+            cx, cy = r.uniform(x0, x1), r.uniform(y0, y1)
             rad = r.uniform(1.5, 4.5) * S
             for a in range(0, 360, 24):
                 cv2.ellipse(canvas, G._pt(V.px(cx, cy)), (int(rad * G.SCALE), int(rad * 0.7 * G.SCALE)), 0, a, a + 13,
                             G.bgr(mcol), max(1, int(lw_thin)), cv2.LINE_AA, G.SHIFT)
-            for _ in range(r.randint(1, 4)):
-                p = V.px(cx + r.uniform(-2, 2), cy + r.uniform(-2, 2))
-                tq.add(p, r.choice(["$", "B1", "A1", "SD", "F", "$D", "B1(g)"]), size * 0.8, mcol, anchor="mm")
-        for _ in range(r.randint(2, 5)):
-            rm = r.choice(fp["rooms"])
-            G.draw_leader(canvas, tq, V, (r.uniform(rm[0] + 1, rm[2] - 1), r.uniform(rm[1] + 1, rm[3] - 1)),
-                          r.choice(MEP_NOTES), app, S, r.choice([-1, 1]))
-    # dims: exterior chains
+            tq.add(V.px(cx, cy), r.choice(["$", "B1", "A1", "SD", "F", "$D"]), size * 0.8, mcol, anchor="mm")
     if dims_on:
-        xs = [v for rm in fp["rooms"] for v in (rm[0], rm[2])] + [x0f, x1f]
+        xs = [v for rm in rooms for v in (rm["cell"].bounds[0], rm["cell"].bounds[2])]
         _dim_chain(canvas, tq, xs, "x", ey0 - r.uniform(2.5, 4), V, ink, lw_thin * 0.8, size * 0.8, S)
         if r.random() < 0.6:
             _dim_chain(canvas, tq, [x0f, x1f], "x", ey0 - r.uniform(5, 6.5), V, ink, lw_thin * 0.8, size * 0.8, S)
-        ys = [v for rm in fp["rooms"] for v in (rm[1], rm[3])]
+        ys = [v for rm in rooms for v in (rm["cell"].bounds[1], rm["cell"].bounds[3])]
         _dim_chain(canvas, tq, ys, "y", ex0 - r.uniform(2.5, 4), V, ink, lw_thin * 0.8, size * 0.8, S)
-    if r.random() < 0.4:
+    if r.random() < 0.35:
         for _ in range(r.randint(1, 3)):
-            side = r.choice(["S", "E", "W"])
             rad = size * r.uniform(1.0, 1.3)
+            side = r.choice(["S", "E", "W"])
             if side == "S":
                 c, d = V.px(r.uniform(ex0, ex1), ey1 + pad * 0.4), (0, -1)
             else:
@@ -1046,11 +1353,13 @@ def compose_floor(image_id, seed, mode_weights):
                 d = (1 if side == "W" else -1, 0)
             _section_head(canvas, tq, c, rad, d, str(r.randint(1, 4)), r.choice(["A3-1", "A4-1", "A4-2", "A5.1"]),
                           ink, lw_thin, size * 0.75)
-    if r.random() < 0.45:
+    if r.random() < 0.4:
         _north(canvas, tq, V.px(ex0 - pad * 0.3, ey0 - pad * 0.3), size * 1.3, ink, lw_thin, size)
-    _title(canvas, tq, V, ex0, ey1 + bot * 0.55, ex0 + (ex1 - ex0) * r.uniform(0.3, 0.6),
-           r.choice(["FLOOR PLAN", "FIRST FLOOR PLAN", "PROPOSED FLOOR PLAN", "MAIN LEVEL PLAN", "SITE / FLOOR PLAN"]),
-           r, ink, lw_thin, size)
+    title = {"finish": ["FLOOR PLAN", "FIRST FLOOR PLAN", "PROPOSED FLOOR PLAN", "FLOOR FINISH PLAN", "MAIN LEVEL PLAN"],
+             "rendered": ["FLOOR PLAN", "SITE / FLOOR PLAN", "PROPOSED FLOOR PLAN"],
+             "underfloor": ["UNDER-FLOOR FRAMING PLAN", "FOUNDATION PLAN", "GARAGE UNDER-FLOOR PLAN", "CRAWLSPACE PLAN"]}[sheet]
+    _title(canvas, tq, V, ex0, ey1 + bot * 0.55, ex0 + (ex1 - ex0) * r.uniform(0.3, 0.6), r.choice(title), r, ink,
+           lw_thin, size)
     if not labelled:
         raise RuntimeError("no labelled region")
     canvas = _finish(canvas, tq, r)
