@@ -205,24 +205,29 @@ def _realism_degrade(img_uint8, rng):
     gap without touching real-eval (which is already 'degraded'). Kept gentle so
     the hatch texture the matching head relies on survives.
     """
-    img = img_uint8
-    # brightness / contrast jitter
-    if rng.random() < 0.7:
-        a = rng.uniform(0.85, 1.15)
-        b = rng.uniform(-12, 12)
-        img = np.clip(img.astype(np.float32) * a + b, 0, 255).astype(np.uint8)
-    # rasterization softness
-    if rng.random() < 0.5:
-        sigma = rng.uniform(0.4, 1.2)
+    return _realism_apply(img_uint8, _realism_params(rng))
+
+
+def _realism_params(rng):
+    """Draw one set of _realism_degrade settings (None = that step skipped), in the
+    historical draw order, so the sheet and its references can share them."""
+    bc = (rng.uniform(0.85, 1.15), rng.uniform(-12, 12)) if rng.random() < 0.7 else None
+    sigma = rng.uniform(0.4, 1.2) if rng.random() < 0.5 else None
+    std = rng.uniform(2.0, 8.0) if rng.random() < 0.5 else None
+    q = int(rng.uniform(40, 90)) if rng.random() < 0.7 else None
+    return bc, sigma, std, q
+
+
+def _realism_apply(img, params):
+    bc, sigma, std, q = params
+    if bc is not None:          # brightness / contrast jitter
+        img = np.clip(img.astype(np.float32) * bc[0] + bc[1], 0, 255).astype(np.uint8)
+    if sigma is not None:       # rasterization softness
         img = cv2.GaussianBlur(img, (0, 0), sigma)
-    # sensor / scan noise
-    if rng.random() < 0.5:
-        std = rng.uniform(2.0, 8.0)
+    if std is not None:         # sensor / scan noise (fresh per pixel, same strength)
         noise = np.random.normal(0, std, img.shape).astype(np.float32)
         img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
-    # JPEG compression artifacts
-    if rng.random() < 0.7:
-        q = int(rng.uniform(40, 90))
+    if q is not None:           # JPEG compression artifacts
         ok, enc = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), q])
         if ok:
             img = cv2.imdecode(enc, cv2.IMREAD_COLOR)
@@ -478,9 +483,17 @@ class InstanceSegDataset(Dataset):
 
             if self.realism_aug:
                 # Train-time only: push synth toward real PDF-export appearance.
-                # Independent draws so scene and reference aren't identically degraded.
-                image_r = _realism_degrade(image_r, random)
-                refs_r = [_realism_degrade(r, random) for r in refs_r]
+                # One set of settings for the sheet and its references (since
+                # 2026-09-29): at inference both come from one image, so an
+                # independent tone/blur/JPEG draw per reference trained a mismatch
+                # that never occurs. --legacy-ref-jitter restores independent draws.
+                if self.legacy_ref_jitter:
+                    image_r = _realism_degrade(image_r, random)
+                    refs_r = [_realism_degrade(r, random) for r in refs_r]
+                else:
+                    params = _realism_params(random)
+                    image_r = _realism_apply(image_r, params)
+                    refs_r = [_realism_apply(r, params) for r in refs_r]
 
             if self.domain_random:
                 # Domain randomization (sim2real): random DOWNSCALE so the model sees

@@ -17,7 +17,10 @@ matters; "The reference-box fix" below has the mechanism and its effect.
 (x0.75-1.25, +-18) used to reach the sheet only: the reference is cropped before it,
 so in training the correct target could look up to ~20 L* lighter or darker than the
 reference, while at inference both come from one image. It now applies the same jitter
-to the reference (no extra RNG draws; sheet and masks unchanged). **Every run before
+to the reference (no extra RNG draws; sheet and masks unchanged). `--realism-aug` now
+also draws one set of tone/blur/noise-strength/JPEG settings for the sheet and all its
+references instead of one per image (fewer RNG draws, so realism-aug runs are not
+byte-comparable to older ones). **Every run before
 2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
 `train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
 

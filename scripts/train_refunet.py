@@ -107,8 +107,9 @@ def parse_args():
     p.add_argument("--small-ref-prob", type=float, default=0.0,
                    help="probability a training reference is a deliberately tiny box (16-96 px)")
     p.add_argument("--legacy-ref-jitter", action="store_true",
-                   help="--domain-random brightness/contrast jitter on the sheet only, not the "
-                        "reference (every run before 2026-09-29); default applies the same jitter to both")
+                   help="pre-2026-09-29 augmentation: --domain-random brightness/contrast on the "
+                        "sheet only, and --realism-aug drawn independently per reference. Default "
+                        "gives the sheet and its references the same photometric augmentation")
     p.add_argument("--ref-min-side", type=int, default=0,
                    help="training references come only from instances that fit a square this "
                         "wide (px) when the family has one; slivers stay in the target. 0 = off")
