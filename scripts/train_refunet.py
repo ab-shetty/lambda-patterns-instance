@@ -234,7 +234,7 @@ def main():
     if args.refs_per_image > 0 and (not args.model.startswith("swin") or args.compile
                                     or args.rank_weight > 0 or args.anchor):
         raise SystemExit("--refs-per-image: swin models, eager, no rank loss / anchor")
-    device = torch.device("cuda")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   # CPU: smoke tests only
     records = load_local_records(args.local_data)
     train_ds, val_ds = build_datasets(
         records, image_max_size=args.image_max_size, ref_size=args.ref_size,
@@ -251,7 +251,7 @@ def main():
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
-        num_workers=args.num_workers, pin_memory=True, collate_fn=collate,
+        num_workers=args.num_workers, pin_memory=device.type == "cuda", collate_fn=collate,
         generator=generator, **loader_options)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
@@ -347,7 +347,7 @@ def main():
                 # families than K) are dropped before the loss.
                 k = batch["refs_per_image"]
                 keep = batch["q_valid"].to(device) > 0.5
-                with torch.autocast("cuda", dtype=torch.bfloat16):
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
                     logits = model.forward_multi(
                         images, references, k,
                         boxes=(batch["ref_boxes_multi"].to(device, non_blocking=True)
@@ -364,7 +364,7 @@ def main():
                                          bce=f"{float(bce):.3f}",
                                          dice=f"{float(dice):.3f}")
                 continue
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
                 ref_boxes = (batch["ref_boxes"].to(device, non_blocking=True)
                              if args.anchor or args.roi_ref else None)
                 auxiliary = None
@@ -406,7 +406,7 @@ def main():
                 references = batch["references"].to(device)
                 valid = batch["pixel_mask"].to(device)[:, None].float()
                 targets = union_targets(batch, device)
-                with torch.autocast("cuda", dtype=torch.bfloat16):
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
                     logits = model(images, references,
                                    ref_box=(batch["ref_boxes"].to(device)
                                             if args.anchor or args.roi_ref else None))

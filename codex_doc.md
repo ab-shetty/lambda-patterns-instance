@@ -7,6 +7,31 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-09-30, CPU session -- read this first)
+
+Detail: `synth_progress.md` Log "2026-09-30 (CPU session)". Goal for now: 0.90 on
+HF14 with synthetic-only training (best: `revit10k-roi-e5`, 0.8126 @4096).
+
+- **Half of that model's HF14 loss is the colour-markup sheets** (18, 23, 24, 25, 27:
+  line drawings with see-through paint on top, labels by texture). The Revit pool has
+  no such sheets, and painting markup onto fresh synthetic sheets (same drawings, same
+  labels) drops the 10k model from 0.881 to 0.730 (187 worse / 32 better, p=3e-33).
+  `generate_synthetic_fc.py --markup P` draws them (0 = byte-identical pools).
+- **Inference levers are exhausted** (threshold, 2048+4096, synthetic-only ensembles,
+  shipped+10k ensemble): none helps on val or HF14. 0.90 needs training changes.
+- **GPU runbook, in order** (one seed, paired vs the published control):
+  1. `EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitmk50roi` -- 2k screen,
+     control `revit2k-roi-e8`. Read HF14 markup sheets and fresh painted sheets.
+  2. If it helps: `EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7
+     revit10kmk50roi` -- the 10k pool with markup, control `revit10k-roi-e5`.
+  3. `--roi-ref-mode replace` on the 2k screen (line-only look-alikes, item 3 below).
+  4. `SYN=v6fix ./run_revit_mix.sh 7` (+ stage 2 as in the script header) -- does v6d's
+     real-mix edge on line-only survive fixing its labels (no trim questions)?
+  5. 4096 training for thin features (12's L band, 14's eave band under-selected).
+- CPU tooling: `evaluate_refunet_selection.py --save-probs / --local-pool`,
+  `ensemble_selection.py`, `failure_panels.py`; `train_refunet.py` falls back to CPU
+  (smoke tests / tiny fine-tunes only, ~10 s/step at 1024).
+
 ## Pick up here (2026-09-30)
 
 Detail: `synth_progress.md` Log 2026-09-29/30. Goal is still 0.90 on HF14; shipped
