@@ -526,3 +526,11 @@ one epoch of 156 steps, batch 2, 1024, ROI add, domain-random: (A) 317 mixed she
 1.0 vs the same unpainted, lr 1e-4: fresh painted (147 q) 0.773 vs 0.778 (p=0.63). Loss
 fell ~1.0 -> ~0.1 in both, but nothing moved at 2048 inference: too few steps at the
 wrong resolution. Needs the 2048 GPU recipe.
+
+**The 10k model underfits multi-family sheets (seen vs fresh, 2048, HF14 protocol).** 32
+sheets from its own training pool (ids 0-399) vs 32 fresh (ids 600000+), 8 per labelled-
+family count: all 0.807 seen vs 0.868 fresh; 1 family 0.933 / 0.984, 2: 0.889 / 0.895,
+3: 0.757 / 0.834, 4+: 0.794 / 0.864 (seen 4+: 17% of questions over-selected). Training
+sheets score no better than fresh ones, so the limit is fit, not data: grouping several
+families on one sheet. Width and `selfattn` lost before; swin_b only ever lost at 744
+steps at 1024 (v6d). Untested at this scale: longer 10k training and swin_s / swin_b.

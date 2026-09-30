@@ -19,7 +19,12 @@ HF14 with synthetic-only training (best: `revit10k-roi-e5`, 0.8126 @4096).
   `generate_synthetic_fc.py --markup P` draws them (0 = byte-identical pools).
 - **Inference levers are exhausted** (threshold, 2048+4096, synthetic-only ensembles,
   shipped+10k ensemble): none helps on val or HF14. 0.90 needs training changes.
+- **The 10k model underfits multi-family sheets**: its own training sheets score no better
+  than fresh ones (0.807 vs 0.868; 3+ families 0.76-0.79 seen). Fit, not data, is the limit.
 - **GPU runbook, in order** (one seed, paired vs the published control):
+  0. Fit checks on the 10k ROI recipe: 1+10 epochs instead of 1+5, then `--model swin_s` /
+     `swin_b`; score seen (pool ids 0-399) and fresh sheets by family count
+     (`evaluate_refunet_selection.py --local-pool`).
   1. `EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitmk50roi` -- 2k screen,
      control `revit2k-roi-e8`. Read HF14 markup sheets and fresh painted sheets.
   2. If it helps: `EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7
