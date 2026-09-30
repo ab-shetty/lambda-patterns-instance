@@ -128,6 +128,52 @@ def plant_colour_pair(styles, shaded, app, fam_seed, S_guess, has_chimney):
     return fam
 
 
+# ---- colour markup (G.MARKUP, --markup P): 5 of HF14's 14 sheets are line drawings with
+# flat see-through colour painted over them (lavender, green, pink...). Real labels follow the
+# TEXTURE, not the paint: a painted plain stucco wall is not a question (HF14 20, 23), an
+# unpainted vertical siding is (25, 27), and one paint colour can cover two families. So the
+# paint is an overlay the model must see through; labels are unchanged. Own RNG stream.
+MARKUP_PALETTE = [(186, 182, 226), (200, 196, 236), (168, 160, 220), (122, 196, 104), (150, 212, 128),
+                  (236, 170, 204), (246, 214, 120), (160, 200, 236), (240, 190, 140), (140, 210, 200)]
+
+
+def markup_plan(styles, mr):
+    """Which families get paint, and how, for the whole sheet (one colour per family)."""
+    cols = {}
+    for f in [f for f in PRIORITY if f in styles]:
+        if mr.random() < (0.75 if f == "main" else 0.5):
+            used = list(cols.values())
+            cols[f] = mr.choice(used) if used and mr.random() < 0.15 else \
+                mr.choice([c for c in MARKUP_PALETTE if c not in used] or MARKUP_PALETTE)
+    if not cols:
+        cols["main"] = mr.choice(MARKUP_PALETTE)
+    return {"cols": cols, "alpha": mr.uniform(0.55, 0.95), "skip_open": mr.random() < 0.8,
+            "skip_trim": mr.random() < 0.6, "partial": mr.random() < 0.3, "rng": mr}
+
+
+def apply_markup(canvas, V, e, plan, opening_polys, W, H):
+    """Multiply-blend the plan's paint over one finished view: ink stays dark, white takes the colour."""
+    rr = plan["rng"]
+    trims = unary_union(e["trims"]) if e["trims"] else None
+    for f, c in plan["cols"].items():
+        polys = [p for (fam, p, _, _) in e["surfaces"] if fam == f]
+        if not polys:
+            continue
+        if plan["partial"] and len(polys) > 1:
+            polys = [p for p in polys if rr.random() < 0.6] or polys[:1]
+        g = unary_union(polys)
+        if plan["skip_open"] and opening_polys is not None:
+            g = g.difference(opening_polys)
+        if plan["skip_trim"] and trims is not None:
+            g = g.difference(trims)
+        m = np.zeros((H, W), np.uint8)
+        for q in G.polys_of(g):
+            m = np.maximum(m, G.poly_mask(V.geom(q), W, H))
+        a = (m.astype(np.float32) / 255 * plan["alpha"])[..., None]
+        tint = np.array(G.bgr(c), np.float32) / 255
+        canvas[:] = (canvas.astype(np.float32) * (1 - a + a * tint)).round().clip(0, 255).astype(np.uint8)
+
+
 def install(g, fc, plans=False):
     global G, FC, _ORIG_COMPOSE
     G, FC = g, fc
@@ -307,6 +353,11 @@ def compose_revit(image_id, seed, mode_weights):
     if pair_fam:                # the planted pair is always a question
         label_fams |= {pair_fam, "roof"}
     hole_mode = r.random() < G.WINDOW_HOLE_PROB
+    mk = None
+    if getattr(G, "MARKUP", 0) > 0 and not shaded:
+        mr = random.Random(seed * 1_000_003 + image_id * 191 + 53)
+        if mr.random() < G.MARKUP:
+            mk = markup_plan(styles, mr)
 
     # ---- views
     nviews = r.choices([1, 2, 4], weights=[30, 40, 30])[0]
@@ -424,6 +475,8 @@ def compose_revit(image_id, seed, mode_weights):
         sil = unary_union([p for (_, p, _, _) in e["surfaces"]] + list(e["trims"])).buffer(0.02)
         for p in G.polys_of(sil):
             G.cv_polyline(canvas, list(V.geom(p).exterior.coords), ink, lw_heavy, closed=True)
+        if mk is not None:
+            apply_markup(canvas, V, e, mk, opening_polys, W, H)
         # ground line
         ga, gb = V.px(x0 - r.uniform(1, 4), 0), V.px(x1 + r.uniform(1, 4), 0)
         G.cv_line(canvas, ga, gb, ink, lw_ground)
@@ -493,5 +546,5 @@ def compose_revit(image_id, seed, mode_weights):
                          "bbox": [round(bx0, 1), round(by0, 1), round(bx1 - bx0, 1), round(by1 - by0, 1)],
                          "area": round(q.area, 1)})
     return canvas, {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
-                    "mode": "elevation", "appearance": "colour" if shaded else "mono_normal",
+                    "mode": "elevation", "appearance": "colour" if shaded else "markup" if mk is not None else "mono_normal",
                     "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}

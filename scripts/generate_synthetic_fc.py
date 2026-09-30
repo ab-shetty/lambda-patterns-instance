@@ -508,6 +508,9 @@ def main():
     ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
                     help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
                          "family (default); 0 = pre-2026-09-29 pools")
+    ap.add_argument("--markup", type=float, default=0.0,
+                    help="Revit line-only elevations: probability of colour markup (flat see-through fills "
+                         "over the finished drawing, labels unchanged); 0 = off")
     ap.add_argument("--colour-pairs", type=float, default=0.0,
                     help="Revit colour elevations: probability of planting a labelled same-texture pair at matched "
                          "lightness but a different hue (brick band under an asphalt roof); 0 = off")
@@ -532,6 +535,8 @@ def main():
     flags["distinct_looks"] = bool(args.distinct_looks)
     if args.colour_pairs > 0:
         flags["colour_pairs"] = args.colour_pairs
+    if args.markup > 0:
+        flags["markup"] = args.markup
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))
