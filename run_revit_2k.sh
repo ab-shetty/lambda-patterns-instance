@@ -21,6 +21,12 @@
 # (run with EXTRA="--roi-ref --roi-ref-mode add", the shipped conditioning): the fixed-
 # jitter new pool, and the same pool with --colour-pairs 0.5.
 # revit10kroi: 10,000 sheets (ids 0-9999, same recipe as revitnew), ROI, P2=5.
+# revitmk50roi / revit10kmk50roi (2026-09-30, built here if missing): revitnew / the 10k pool
+# with --markup 0.5 (colour markup painted over half the line-only elevations, labels
+# unchanged). Same drawings and labels as revitnew; paired control revitnewroi / revit10kroi
+# (published abshetty/floz-refunet-swint-revit2k-roi-e8 / -revit10k-roi-e5). Run with
+#   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitmk50roi
+#   EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 revit10kmk50roi
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 SEED=${1:-7}
@@ -37,7 +43,10 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitnewroi]=data/synthetic/revitnew_train2000
                  [revitcp50roi]=data/synthetic/revitcp50_train2000
                  [revitcp100roi]=data/synthetic/revitcp100_train2000
-                 [revit10kroi]=data/synthetic/revitnew_train10000)
+                 [revit10kroi]=data/synthetic/revitnew_train10000
+                 [revitmk50roi]=data/synthetic/revitmk50_train2000
+                 [revit10kmk50roi]=data/synthetic/revitmk50_train10000)
+declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 E=data/evaluations/revit2k; mkdir -p logs $E
@@ -68,6 +77,11 @@ fi
 
 for A in $ARMS; do
   CK=data/runs/ck_2k_${A}_r2048_s$SEED
+  if [ -n "${BUILD[$A]:-}" ] && [ ! -f ${POOL[$A]}/generation_manifest.json ]; then
+    set -- ${BUILD[$A]}; N=$1; shift
+    python3 scripts/generate_synthetic_fc.py --out ${POOL[$A]} --n $N --seed 6 --revit --revit-plans \
+      --shaped --workers 64 --mode-weights 66,16,18 "$@" > logs/gen_$(basename ${POOL[$A]}).log 2>&1
+  fi
   [ -f $CK/epoch_0.pth ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data ${POOL[$A]} \
     --checkpoint-dir $CK --epochs 1 --schedule-epochs 10 $COMMON > logs/2k_${A}_s${SEED}_p1.log 2>&1
   [ -f $CK/epoch_$P2.pth ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data ${POOL[$A]} \

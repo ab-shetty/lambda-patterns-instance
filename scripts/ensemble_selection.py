@@ -39,6 +39,10 @@ def score(probs, weights, indices, records, thresh):
         union = {c: np.logical_or.reduce([m for m, cc in zip(masks, cats) if cc == c]) for c in set(cats)}
         for q, c in enumerate(cats):
             maps = [np.load(Path(d) / f"{i:03d}_{q:03d}.npz")["prob"].astype(np.float32) / 255 for d in probs]
+            # different --image-max-size runs (multi-scale): bring every map to the largest
+            big = max(maps, key=lambda m: m.size).shape
+            maps = [m if m.shape == big else cv2.resize(m, (big[1], big[0]), interpolation=cv2.INTER_LINEAR)
+                    for m in maps]
             p = sum(w * m for w, m in zip(weights, maps)) / sum(weights)
             pred = cv2.resize((p > thresh).astype(np.uint8), (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
             t = union[c]

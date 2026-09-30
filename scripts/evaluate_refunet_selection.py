@@ -179,15 +179,28 @@ def main():
     parser.add_argument("--metrics-out", required=True)
     parser.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8),
                         help="dihedral test-time augmentation views to average")
+    parser.add_argument("--local-pool", default="",
+                        help="score a local synthetic pool (images/ + annotations/) instead of the "
+                             "real-world test set; --indices then indexes its sorted sheets "
+                             "('all' = every sheet)")
     parser.add_argument("--save-probs", default="",
                         help="directory: write each question's probability map "
                              "(uint8, inference resolution) as <image>_<question>.npz")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
-    records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
-                                   config="real-world-test", split="test")
-    indices = [int(value) for value in args.indices.split(",") if value.strip()]
+    if args.local_pool:
+        pool = Path(args.local_pool)
+        records = []
+        for f in sorted((pool / "annotations").glob("*.json")):
+            ann = json.loads(f.read_text())
+            records.append({"image": (pool / "images" / ann["image"]["file_name"]).read_bytes(),
+                            "annotations": ann["annotations"]})
+    else:
+        records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
+                                       config="real-world-test", split="test")
+    indices = (list(range(len(records))) if args.indices == "all" else
+               [int(value) for value in args.indices.split(",") if value.strip()])
     ckpt_args = checkpoint.get("args", {}) or {}
     if args.save_probs:
         Path(args.save_probs).mkdir(parents=True, exist_ok=True)
