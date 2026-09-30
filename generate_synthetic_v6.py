@@ -241,6 +241,12 @@ NEUTRAL_PALETTE = False
 # regions per image vs Gemini's 1.7 / 6.4). Unlabelled families stay drawn.
 REAL_LABELLING = False
 REAL_LABEL_KEEP = {"trim": 0.05, "chimney": 0.15, "foundation": 0.25, "roof": 0.6}
+# Probability an elevation keeps its "trim" family as a question (2026-09-30). Trim is a
+# thin blank white frame (casings, corner boards, fascia); real annotators never label it,
+# yet v6 labels it on ~35% of elevations (~11% of questions), and --trim-cut only cuts it
+# out of the wall labels. Drawn either way; own RNG, so images and all other labels are
+# byte-identical. 1.0 = every pool before 2026-09-30 (v6d included).
+TRIM_LABEL_PROB = 1.0
 NEUTRAL_WALL = [(242, 236, 222), (234, 226, 208), (226, 226, 222), (246, 242, 232), (216, 208, 196),
                 (202, 197, 187), (218, 222, 208), (208, 206, 220), (212, 218, 224), (236, 232, 226),
                 (196, 188, 178), (182, 176, 170)]
@@ -2777,10 +2783,12 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
     global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
+    global TRIM_LABEL_PROB
+    TRIM_LABEL_PROB = trim_label_prob
     COLOUR_PAIRS = colour_pairs
     TRIM_CUT = trim_cut
     DISTINCT_LOOKS = distinct_looks
@@ -2848,9 +2856,14 @@ def _job(image_id):
         canvas, ann = compose(image_id, _CFG["seed"], _CFG["mw"])
         if TIGHT_CROP:
             canvas, ann = tight_crop(canvas, ann, random.Random(_CFG["seed"] * 1_000_003 + image_id * 97 + 13))
+        keep = {}
         if REAL_LABELLING and ann["mode"] == "elevation":
             lr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 73 + 31)
             keep = {f: lr.random() < p for f, p in REAL_LABEL_KEEP.items()}
+        if TRIM_LABEL_PROB < 1.0 and ann["mode"] == "elevation":
+            keep["trim"] = keep.get("trim", True) and \
+                random.Random(_CFG["seed"] * 1_000_003 + image_id * 79 + 37).random() < TRIM_LABEL_PROB
+        if REAL_LABELLING or not all(keep.values()):
             anns = [a for a in ann["annotations"] if keep.get(a["family"], True)]
             ids = {}
             for a in anns:
@@ -2931,6 +2944,9 @@ def main():
                     help="muted palettes + dark-ink fill lines at v6's colour share; no colour on floor plans")
     ap.add_argument("--neutral-palette", action="store_true",
                     help="low-chroma BIM material colours (tinted whites, brown-grey roofs), 10%% vivid; no colour on floor plans")
+    ap.add_argument("--trim-label-prob", type=float, default=1.0,
+                    help="elevations: probability the trim family stays a question (drawn either way); "
+                         "1.0 = pools before 2026-09-30, 0 = never (real annotators never label trim)")
     ap.add_argument("--real-labelling", action="store_true",
                     help="elevations: label walls, mostly not trim/chimney/foundation (real annotator practice)")
     args = ap.parse_args()
@@ -2952,7 +2968,8 @@ def main():
               initargs=(args.out, args.seed, mw, vcw, args.max_label_fams,
                         args.same_fill_new_colour, args.same_fill_subtle,
                         args.hardscape_plan, args.mottle, args.vocab2, args.gemini_colour, args.val_fills, args.fill_scale, args.tight_crop, args.val_details, args.res_degrade, args.material_mix, args.muted_palette, args.neutral_palette, args.real_labelling,
-                        args.window_hole_prob, bool(args.casing_holes), bool(args.trim_cut))) as pool:
+                        args.window_hole_prob, bool(args.casing_holes), bool(args.trim_cut), True, 0.0,
+                        args.trim_label_prob)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
@@ -2964,7 +2981,8 @@ def main():
         json.dump({"generator": "generate_synthetic_v6.py", "n": args.n, "seed": args.seed, "start": args.start,
                    "ok": ok, "modes": modes, "mode_weights": mw,
                    "view_count_weights": vcw or VIEW_COUNT_WEIGHTS,
-                   "max_label_fams": args.max_label_fams}, f, indent=2)
+                   "max_label_fams": args.max_label_fams,
+                   **({"trim_label_prob": args.trim_label_prob} if args.trim_label_prob < 1.0 else {})}, f, indent=2)
 
 
 if __name__ == "__main__":
