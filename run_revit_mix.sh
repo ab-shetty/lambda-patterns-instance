@@ -9,11 +9,20 @@
 #     CK=data/runs/ck_revitmix_roiadd CMP=<shipped hf14 json> ./run_restart_swa.sh
 # Trained after 728def3, so the reference also gets --domain-random's jitter.
 #   ./run_revit_mix.sh [seed]
+# SYN=v6fix (2026-09-30): the synthetic slot is v6 with today's label fixes instead of
+# Revit -- same generator, seed and ids as v6d_1600 (so the same drawings), but casing
+# and trim cut out of wall labels (defaults) and trim never a question
+# (--trim-label-prob 0). Tests whether v6d's edge on real line-only elevations survives
+# fixing its labels.   SYN=v6fix ./run_revit_mix.sh 7
 set -euo pipefail
 SEED=${1:-7}
 SIZE=2048
-DATA=data/mixed/revitmix_plus_r4
-CK=data/runs/ck_swint_revitmix_r4_res${SIZE}_seed${SEED}
+SYN=${SYN:-revit}
+case $SYN in
+  revit) DATA=data/mixed/revitmix_plus_r4; CK=data/runs/ck_swint_revitmix_r4_res${SIZE}_seed${SEED} ;;
+  v6fix) DATA=data/mixed/v6fixmix_plus_r4; CK=data/runs/ck_swint_v6fixmix_r4_res${SIZE}_seed${SEED} ;;
+  *) echo "SYN must be revit or v6fix"; exit 1 ;;
+esac
 TAG=$(basename $CK)
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
@@ -72,7 +81,21 @@ done
   $RF/floz-gen-gemini-r3-clean $RF/floz-gen-gemini-r4-clean > /dev/null
 # revit_1600 = the first 1,600 sheets (sorted ids) of the 10k Revit pool
 V6=data/synthetic/revit_1600
-if [ ! -d $V6 ]; then
+if [ $SYN = v6fix ]; then
+  # v6fix_1600 = the first 1,600 sheets of a 4,000-sheet v6 pool built like v6d_4000
+  # (run_synth_v6.sh build_pool) but with the label fixes on
+  V6=data/synthetic/v6fix_1600
+  P=data/synthetic/v6fix_4000
+  [ -f $P/generation_manifest.json ] || python3 generate_synthetic_v6.py --n 4000 --out $P \
+    --seed 6 --workers 40 --window-hole-prob 0.8 --trim-label-prob 0 > logs/gen_v6fix_4000.log 2>&1
+  if [ ! -d $V6 ]; then
+    mkdir -p $V6/images $V6/annotations
+    ls $P/annotations | sort | head -1600 | while read -r f; do
+      ln $P/annotations/$f $V6/annotations/$f
+      ln $P/images/${f%.json}.png $V6/images/${f%.json}.png
+    done
+  fi
+elif [ ! -d $V6 ]; then
   mkdir -p $V6/images $V6/annotations
   ls data/synthetic/revitnew_train10000/annotations | sort | head -1600 | while read -r f; do
     ln data/synthetic/revitnew_train10000/annotations/$f $V6/annotations/$f

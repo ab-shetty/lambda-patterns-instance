@@ -89,7 +89,8 @@ def load_refunet(checkpoint_path, device):
 
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
-                   mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1):
+                   mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1,
+                   save_probs=None):
     """`tta` averages sigmoid maps over dihedral views of image AND reference
     (the reference crop is a piece of the same image, so it turns with it)."""
     device = device or next(model.parameters()).device
@@ -145,6 +146,12 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                         prob = _dihedral_inv(prob_t.float(), hf, k)[0, 0]
                         acc = prob if acc is None else acc + prob
                     probability = acc / len(transforms)
+                if save_probs:
+                    # Inference-resolution probability, quantised to uint8, for offline
+                    # ensembling / threshold sweeps (scripts/ensemble_selection.py).
+                    np.savez_compressed(
+                        Path(save_probs) / f"{image_idx:03d}_{ref_idx:03d}.npz",
+                        prob=(probability.float().cpu().numpy() * 255).round().astype(np.uint8))
                 pred_small = probability > mask_thresh
                 prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
                                         (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
@@ -172,6 +179,9 @@ def main():
     parser.add_argument("--metrics-out", required=True)
     parser.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8),
                         help="dihedral test-time augmentation views to average")
+    parser.add_argument("--save-probs", default="",
+                        help="directory: write each question's probability map "
+                             "(uint8, inference resolution) as <image>_<question>.npz")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
@@ -179,10 +189,12 @@ def main():
                                    config="real-world-test", split="test")
     indices = [int(value) for value in args.indices.split(",") if value.strip()]
     ckpt_args = checkpoint.get("args", {}) or {}
+    if args.save_probs:
+        Path(args.save_probs).mkdir(parents=True, exist_ok=True)
     rows = evaluate_model(model, records, indices, args.image_max_size,
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
-                          tta=args.tta)
+                          tta=args.tta, save_probs=args.save_probs or None)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
