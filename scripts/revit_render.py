@@ -148,7 +148,34 @@ def markup_plan(styles, mr):
     if not cols:
         cols["main"] = mr.choice(MARKUP_PALETTE)
     return {"cols": cols, "alpha": mr.uniform(0.55, 0.95), "skip_open": mr.random() < 0.8,
-            "skip_trim": mr.random() < 0.6, "partial": mr.random() < 0.3, "rng": mr}
+            "skip_trim": mr.random() < 0.6, "partial": mr.random() < 0.3, "rng": mr,
+            "grid": mr.random() < 0.35, "work_box": mr.random() < 0.4}
+
+
+def markup_sheet_extras(canvas, plan, S):
+    """Whole-sheet markup furniture seen on HF14: engineering-grid paper under the drawing
+    (18, 19) and dashed blue-grey 'work area' boxes over part of a view (25-27)."""
+    rr = plan["rng"]
+    H, W = canvas.shape[:2]
+    if plan["grid"]:
+        step = max(6, int(S * rr.uniform(0.5, 1.2)))
+        g = np.zeros((H, W), bool)
+        g[::step, :] = True
+        g[:, ::step] = True
+        paper = canvas.min(axis=2) >= 250
+        canvas[g & paper] = rr.randint(215, 235)
+    if plan["work_box"]:
+        col = rr.choice([(150, 110, 70), (170, 150, 120), (160, 160, 160)])   # BGR blue-grey
+        for _ in range(rr.randint(1, 2)):
+            x0, y0 = rr.randint(0, W // 2), rr.randint(0, H // 2)
+            x1, y1 = rr.randint(x0 + W // 5, W - 1), rr.randint(y0 + H // 5, H - 1)
+            dash, lw = max(8, int(S * 0.6)), max(1, int(S * 0.03))
+            for (a, b) in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))):
+                n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / (2 * dash)))
+                for k in range(n):
+                    t0, t1 = 2 * k / (2 * n), (2 * k + 1) / (2 * n)
+                    cv2.line(canvas, (int(a[0] + (b[0] - a[0]) * t0), int(a[1] + (b[1] - a[1]) * t0)),
+                             (int(a[0] + (b[0] - a[0]) * t1), int(a[1] + (b[1] - a[1]) * t1)), col, lw)
 
 
 def apply_markup(canvas, V, e, plan, opening_polys, W, H):
@@ -522,6 +549,8 @@ def compose_revit(image_id, seed, mode_weights):
                app["text_px"] * 0.75, ink, anchor="la")
         num += 1
     canvas = tq.flush(canvas)
+    if mk is not None:
+        markup_sheet_extras(canvas, mk, S)
     if r.random() < G.JPEG_PROB:
         ok, buf = cv2.imencode(".jpg", canvas, [cv2.IMWRITE_JPEG_QUALITY, r.randint(60, 92)])
         if ok:
