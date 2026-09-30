@@ -156,6 +156,9 @@ def parse_args():
     p.add_argument("--roi-min-cells", type=float, default=0.0,
                    help="with --roi-ref: per level, weight the ROI term by box "
                         "coverage in feature cells / this (0 = off).")
+    p.add_argument("--no-pretrained", action="store_true",
+                   help="random backbone init instead of ImageNet weights (smoke tests where the "
+                        "weights cannot be downloaded; never for a real run)")
     p.add_argument("--init-from")
     p.add_argument("--reset-optimizer", action="store_true",
                    help="On continuation, load model weights and epoch only, then "
@@ -256,17 +259,17 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
     if args.model == "crossattn":
-        model = RefCrossAttnUNet(args.width, pretrained=args.init_from is None,
+        model = RefCrossAttnUNet(args.width, pretrained=args.init_from is None and not args.no_pretrained,
                                  num_heads=args.attn_heads).to(device)
     elif args.model in DINO_BACKBONES:
         # Plain self-supervised ViT + simple-FPN adapter. See
         # ref_dino_unet.py; the decoder is swin_t's, unchanged.
-        model = RefDinoUNet(args.width, pretrained=args.init_from is None,
+        model = RefDinoUNet(args.width, pretrained=args.init_from is None and not args.no_pretrained,
                               backbone=args.model,
                               corr_grid=args.corr_grid).to(device)
     elif args.model.startswith("swin"):
         # Vision-transformer backbone, same decoder. See ref_swin_unet.py.
-        model = RefSwinUNet(args.width, pretrained=args.init_from is None,
+        model = RefSwinUNet(args.width, pretrained=args.init_from is None and not args.no_pretrained,
                             backbone=args.model,
                             corr_grid=args.corr_grid,
                             decoder=args.swin_decoder,
@@ -274,7 +277,7 @@ def main():
                             roi_mode=args.roi_ref_mode,
                             roi_min_cells=args.roi_min_cells).to(device)
     else:
-        model = RefUNet(args.width, pretrained=args.init_from is None,
+        model = RefUNet(args.width, pretrained=args.init_from is None and not args.no_pretrained,
                         corr_grid=args.corr_grid,
                         metric_dim=(args.metric_dim if args.rank_weight > 0 else 0),
                         anchor=args.anchor,
