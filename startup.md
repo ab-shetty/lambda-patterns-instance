@@ -24,7 +24,7 @@ byte-comparable to older ones). **Every run before
 2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
 `train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
 
-## Current best (2026-09-28): HF14 0.8440
+## Current best (2026-09-28, unchanged 2026-09-30): HF14 0.8440
 
 swin_t, 282-source mix (`v6dmix_plus_r4`), trained at 2048, **inference at
 4096**, with the image-box reference (`--roi-ref --roi-ref-mode add`: the
@@ -592,6 +592,9 @@ resolution column says otherwise. The sampler column is load-bearing.
 | swin_t, v6d 8k / 16k (5 / 4 epochs) | 2048 | 1 | 0.7367 / 0.7294 |
 | swin_t, v6d 2k, `--refs-per-image 6` | 2048 | 1 | 0.7190 epoch 8 (vs 0.7066 one-question) |
 | **swin_t, Revit 2k, `--refs-per-image 6`, 1+4 epochs** | 2048 | 1 | **0.7607** (val 0.7816) — best synthetic-only (2026-09-27) |
+| swin_t, Revit 2k new pool (`--revit --revit-plans --shaped`) + ref-jitter fix + `--roi-ref add` | 2048 | 1 | 0.7855 / 0.7970 @2048/4096, epoch 8 (2026-09-30) -- screen control `revit2k-roi-e8` |
+| **swin_t, Revit 10k + ROI, 1+5 ep** (`revit10k-roi-e5`) | 2048 | 1 | **0.7868 / 0.8126** @2048/4096; val **0.8861** @4096 -- best synthetic-only, best val of any model (2026-09-30) |
+| swin_t, `v6dmix_plus_r4` with v6d_1600 -> Revit 1,600, ref-jitter fix, + ROI restart (`revitmix-roiadd-e10`) | 2048 | 1 | 0.8367 val-sel @4096 (val 0.7843) -- **null/negative vs 0.8440** (-0.007, p=0.58), not adopted (2026-09-30) |
 | v6d-only 12,000 | 2048 | 1 | 0.6934 |
 | v6d-only 1,600 | 2048 | 1 | 0.6400 |
 
