@@ -481,19 +481,26 @@ sheet types; `scripts/failure_panels.py` draws them):
 
 | HF14 sheet type | n | shipped | 10k | share of 10k's loss |
 |---|---:|---:|---:|---:|
-| colour-markup elevations (18, 23, 24, 25, 27) | 24 | 0.837 | 0.796 | **51%** |
+| colour-markup elevations (18, 23, 24, 25, 27) | 24 | 0.837 | 0.796 | 51% |
 | floor plans (0, 7, 11, 12) | 8 | 0.661 | 0.741 | 21% |
 | line-only elevation (14) | 9 | 0.919 | 0.816 | 17% |
 | rendered elevations (2, 3) | 8 | 0.916 | 0.885 | 9% |
 | roof plans (1, 16) | 3 | 0.977 | 0.963 | 1% |
 
+The markup row is roughly proportional (24 of 52 questions = 46%), not an outsized
+share, and it is three sheets: 18 (19% of the loss), 27 (18%), 25 (12%); 24 and 23 score
+0.96 / 0.94. Line-only 14 (17%) and plan 12 (14%) lose as much as 27 or 25.
 Over-selection is 43% of the loss. Worst questions: 25/27 merge the UNPAINTED vertical
 siding with an unpainted roof drawn in horizontal lines (and the reverse) while the
 green-painted lap siding stays separate; 18 q08/q09 small dark-grey roof pieces pick up
 the red brick band; 14 (faint line-only) thin eave band and small chimney; 12 thin L band
 under-selected (0.5x); 0 patio vs interior floors (10k 0.66 vs shipped 0.32).
+**The markup-sheet failures are look-alike textures, not paint:** on 25/27 both confused
+regions are unpainted and the painted siding is handled; on 18 two coursed textures of
+similar darkness are confused, and the shipped model fails the same way (0.16 / 0.29).
 
-**Markup sheets have no synthetic counterpart.** HF14 18-27 and val 17-26 are line
+**Markup sheets have no synthetic counterpart** (option built, NOT recommended -- see the
+correction below). HF14 18-27 and val 17-26 are line
 drawings with flat see-through colour painted on top. Their labels follow the TEXTURE,
 not the paint (painted plain stucco walls are not questions on 20/23; unpainted vertical
 siding is on 25/27; one colour can span two families). New `--markup P`
@@ -515,9 +522,12 @@ rebuilt with the label fixes and no trim questions); `record_family_styles.py`;
 **Markup breaks the best synthetic-only model (fresh sheets, HF14 protocol, 2048).** 32
 fresh Revit elevations (ids 300000+) rendered twice, identical drawings and labels, with
 and without `--markup 1.0` paint: `revit10k-roi-e5` 0.881 -> **0.730** (366 questions,
-187 worse / 32 better, p=3e-33; share below 0.5 3.3% -> 18.9%). The model groups by
-paint, the 25/27 failure mode. Training with `--markup` is the next GPU screen
-(`run_revit_2k.sh ... revitmk50roi`, then the 10k pool).
+187 worse / 32 better, p=3e-33; share below 0.5 3.3% -> 18.9%). So synthetic paint throws
+the model off. **Correction (same day):** this was first written up as "the model groups by
+paint, the 25/27 failure mode" and markup training was put at the top of the GPU runbook.
+That does not follow: the HF14 markup-sheet failures are between UNPAINTED look-alike
+textures (above), so there is no evidence that paint costs anything on HF14. Markup
+training is dropped from the runbook; `--markup` stays in the code, off by default.
 
 **CPU fine-tunes cannot answer it (inconclusive, not negative).** From `revit10k-roi-e5`,
 one epoch of 156 steps, batch 2, 1024, ROI add, domain-random: (A) 317 mixed sheets,

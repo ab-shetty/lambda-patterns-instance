@@ -21,6 +21,8 @@
 # (run with EXTRA="--roi-ref --roi-ref-mode add", the shipped conditioning): the fixed-
 # jitter new pool, and the same pool with --colour-pairs 0.5.
 # revit10kroi: 10,000 sheets (ids 0-9999, same recipe as revitnew), ROI, P2=5.
+# NOT RECOMMENDED (2026-09-30 correction: HF14's markup-sheet failures are look-alike
+# textures, not paint; see synth_progress.md). Kept for reference:
 # revitmk50roi / revit10kmk50roi (2026-09-30, built here if missing): revitnew / the 10k pool
 # with --markup 0.5 (colour markup painted over half the line-only elevations, labels
 # unchanged). Same drawings and labels as revitnew; paired control revitnewroi / revit10kroi
