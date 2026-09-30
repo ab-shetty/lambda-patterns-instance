@@ -7,20 +7,44 @@
 # Scored at epoch 8 (no selection), 2048 and 4096 inference, val + HF14.
 # Later arms: revitRL (revit + --real-labelling only: identical images, fewer
 # labels) and fcplain (FreeCAD massing, v6 drawing, no renderer, no r8).
+# revitnew (2026-09-29): --revit --revit-plans --shaped with the 2026-09-29 label
+# defaults (casing holes, trim cut, distinct looks), same ids/seed/view mix. The
+# revit control is the published abshetty/floz-refunet-swint-revit2k-e8 when
+# the revit arm is not trained here.
+# Ablation of revitnew: revitplans = --revit --revit-plans with the pre-09-29 label
+# flags (elevations byte-identical to revit); revitshaped = --revit --shaped with
+# the 09-29 label defaults, no --revit-plans. revitlocal = the revit pool rebuilt
+# and retrained on this machine (same-machine control; val 17 swings 0.2-0.5/epoch).
+# revitnewfix = revitnew retrained after 728def3 (reference gets the sheet jitter);
+# revitnew itself was trained with the old sheet-only jitter.
+# EXTRA="..." appends train flags to every arm of the call. revitnewroi / revitcp50roi
+# (run with EXTRA="--roi-ref --roi-ref-mode add", the shipped conditioning): the fixed-
+# jitter new pool, and the same pool with --colour-pairs 0.5.
+# revit10kroi: 10,000 sheets (ids 0-9999, same recipe as revitnew), ROI, P2=5.
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 SEED=${1:-7}
+P2=${P2:-8}          # phase-2 epochs (the documented recipe: 8 of a planned 9)
 ARMS=${2:-"r8 revit r8revit"}
 declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_train2000
                  [r8revit]=data/synthetic/r8revit_train2000
-                 [revitRL]=data/synthetic/revitRL_train2000 [fcplain]=data/synthetic/fcplain_train2000)
+                 [revitRL]=data/synthetic/revitRL_train2000 [fcplain]=data/synthetic/fcplain_train2000
+                 [revitnew]=data/synthetic/revitnew_train2000
+                 [revitplans]=data/synthetic/revitplans_train2000
+                 [revitshaped]=data/synthetic/revitshaped_train2000
+                 [revitlocal]=data/synthetic/revit_train2000
+                 [revitnewfix]=data/synthetic/revitnew_train2000
+                 [revitnewroi]=data/synthetic/revitnew_train2000
+                 [revitcp50roi]=data/synthetic/revitcp50_train2000
+                 [revitcp100roi]=data/synthetic/revitcp100_train2000
+                 [revit10kroi]=data/synthetic/revitnew_train10000)
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 E=data/evaluations/revit2k; mkdir -p logs $E
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 COMMON="--batch-size 8 --num-workers 16 --prefetch-factor 4 --image-max-size 2048 \
   --ref-size 224 --width 128 --model swin_t --lr 2e-4 --backbone-lr-mult 0.1 \
-  --train-split 0.99 --domain-random --mask-thresh 0.35 --seed $SEED --pad-grid 512"
+  --train-split 0.99 --domain-random --mask-thresh 0.35 --seed $SEED --pad-grid 512 ${EXTRA:-}"
 
 score() {   # tag checkpoint
   for I in 2048 4096; do for split in val hf14; do IDX=$VAL; [ $split = hf14 ] && IDX=$HF14
@@ -35,15 +59,21 @@ CTRL=data/runs/ck_swint_v6d2k_pub/epoch_8.pth
 [ -f $CTRL ] || PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py \
   --repo abshetty/floz-refunet-swint-v6d-e8 --out $CTRL
 score v6d_s7 $CTRL
+RCTRL=data/runs/ck_pub/revit2k-e8.pth
+if [[ " $ARMS " != *" revit "* ]]; then
+  [ -f $RCTRL ] || PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py \
+    --repo abshetty/floz-refunet-swint-revit2k-e8 --out $RCTRL
+  score revit_s$SEED $RCTRL
+fi
 
 for A in $ARMS; do
   CK=data/runs/ck_2k_${A}_r2048_s$SEED
   [ -f $CK/epoch_0.pth ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data ${POOL[$A]} \
     --checkpoint-dir $CK --epochs 1 --schedule-epochs 10 $COMMON > logs/2k_${A}_s${SEED}_p1.log 2>&1
-  [ -f $CK/epoch_8.pth ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data ${POOL[$A]} \
-    --checkpoint-dir $CK --epochs 8 --schedule-epochs 9 $COMMON --reset-optimizer \
+  [ -f $CK/epoch_$P2.pth ] || PYTHONPATH=. python3 scripts/train_refunet.py --local-data ${POOL[$A]} \
+    --checkpoint-dir $CK --epochs $P2 --schedule-epochs $((P2 + 1)) $COMMON --reset-optimizer \
     --init-from $CK/epoch_0.pth > logs/2k_${A}_s${SEED}_p2.log 2>&1
-  score ${A}_s$SEED $CK/epoch_8.pth
+  score ${A}_s$SEED $CK/epoch_$P2.pth
   echo "== done $A"
 done
 

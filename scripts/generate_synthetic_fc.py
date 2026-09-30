@@ -508,6 +508,9 @@ def main():
     ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
                     help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
                          "family (default); 0 = pre-2026-09-29 pools")
+    ap.add_argument("--colour-pairs", type=float, default=0.0,
+                    help="Revit colour elevations: probability of planting a labelled same-texture pair at matched "
+                         "lightness but a different hue (brick band under an asphalt roof); 0 = off")
     ap.add_argument("--shaped", action="store_true",
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
@@ -527,6 +530,8 @@ def main():
     flags["casing_holes"] = bool(args.casing_holes)
     flags["trim_cut"] = bool(args.trim_cut)
     flags["distinct_looks"] = bool(args.distinct_looks)
+    if args.colour_pairs > 0:
+        flags["colour_pairs"] = args.colour_pairs
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

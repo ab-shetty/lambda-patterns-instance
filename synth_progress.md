@@ -5,7 +5,17 @@ in `synth_progress_archive.md`, Part 1, under its original heading; other docs'
 references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
-## Current state (2026-09-28)
+## Current state (2026-09-30)
+
+- **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
+  mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).
+- **Best synthetic-only: 10k Revit + ROI** (`abshetty/floz-refunet-swint-revit10k-roi-e5`,
+  private): val 0.8150 / **0.8861**, HF14 0.7868 / 0.8126 @2048 / 4096 -- the best
+  validation of any model, real-trained included. Fresh unseen Revit plans 0.872.
+- **Reference jitter fix is the default since 728def3** (reference gets the sheet's
+  `--domain-random` brightness/contrast); `--legacy-ref-jitter` = every earlier run.
+- **Screens now use ROI** (`EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 <arm>`);
+  control: `abshetty/floz-refunet-swint-revit2k-roi-e8` (private, HF14 0.7855 / 0.7970).
 
 - **Best model:** `abshetty/floz-refunet-swint-mixr4-roiadd-swa15`, the
   restart recipe (`run_restart_swa.sh` from `mixr4-e8`) plus `--roi-ref
@@ -219,11 +229,19 @@ default. Gemini labels trace the middle of the outline (half the line inside), a
 
 ## Open
 
-- **`--revit --revit-plans` synth-only screen** vs the published Revit 2k
-  (`run_revit_2k.sh` recipe, one seed): does it recover roof / floor plans
-  without losing elevations? Read with `scripts/per_question_breakdown.py`.
-- **Revit in the real + Gemini mix** (swap for v6d_1600 in `v6dmix_plus_r4`):
-  the only test of whether it helps the shipped model.
+- **ROI replace mode on the 2k screen** (`EXTRA="--roi-ref --roi-ref-mode replace"`,
+  KEEP `--domain-random`), paired vs `revit2k-roi-e8`: ROI add beat no-ROI on
+  line-only look-alikes (0.606 -> 0.695); replace, or feeding the box's true size,
+  is the next step on that axis.
+- **Line-only look-alikes are the synthetic weak spot** (fresh 10k: 0.77, 17% fail;
+  colour look-alikes with dE >= 10 are solved, 0.94). On real, the shipped model is
+  0.96-0.99 on line-only sheets 13/14 where synthetic-only is 0.53-0.95.
+- **Hard negatives:** `--distinct-looks` (default) redraws look-alike pairs; real
+  failures are look-alike regions next to the target (sheet 0 patio vs interior
+  floors, 25/27 roof vs lap siding, 18 grey roof vs grey foundation). Untested arm:
+  the new pool with `--distinct-looks 0`.
+- **Revit mix, other ratios / ROI from stage 1:** only the 1,600-sheet swap with a
+  no-ROI stage 1 was run; the 10k pool and ROI-from-the-start are untried in the mix.
 - **The ~0.74 grouping wall is not mainly step budget** (2026-09-27): one
   fresh 9-epoch cosine on the six-question model (2x steps, epoch 17,
   `abshetty/floz-refunet-swint-v6d2k-sixq-restart-e17`) moved own-plan fit
@@ -395,3 +413,55 @@ Published `swint-revit2k-e8` vs `swint-v6d-e8`, 2048, re-scored on CPU
   12 (0.44 -> 0.36). Those pool sheets are still v6-drawn (34% of the pool,
   same as v6d), so the loss is elevation-heavy training, not worse plan data.
   Generator next: Revit-style roof and floor plans from the same houses.
+
+
+### 2026-09-29/30 -- Revit plans, ref-jitter fix, ROI screens, 10k, Revit in the mix
+
+One seed (7) throughout, swin_t @2048, `run_revit_2k.sh` (env `EXTRA`, `P2`) unless
+noted. Pools: `generate_synthetic_fc.py --revit --revit-plans --shaped --mode-weights
+66,16,18 --seed 6` (ids 0-1999 / 0-9999; fresh 200000+), default 09-29 label rules.
+
+**The new pool (plans + shaped + label fixes) vs old Revit, synth-only, no ROI:** HF14
+0.7721 vs 0.7564 published (0.7425 retrained here); plans recover (roof 0.81 -> 0.96,
+floor 0.56 -> 0.68 on real, 5/0 and 7/0). Ablation (plans only / shaped+labels only)
+puts the plan gain on `--revit-plans`. The apparent colour-markup "regression" was
+val 17 noise: the old pool retrained HERE scores val 17 brick 0.08 at e4-e6 (paints
+the roof) and 0.39 at e7-e8; the published 0.699 was a lucky draw. Read val 17 over
+epochs 4-8, never one epoch.
+
+**Reference jitter (728def3, bbf5259 for --realism-aug):** new pool, fix vs no fix:
+HF14 +0.020 / +0.035 @2048 / 4096 (n.s.), line-only real elevations 0.761 -> 0.864
+@4096 (21 better / 3 worse).
+
+**ROI on the screen (add mode):** new pool + fix + ROI = `revit2k-roi-e8`, HF14 0.7855 /
+0.7970. **Colour pairs** (`--colour-pairs`, off by default): 0.5 gave HF14 +0.032
+@4096 (p=0.01) and val 17 brick 0.46, but 1.0 did not reproduce it -- run noise,
+not adopted.
+
+**10k pool + ROI, 1+5 epochs** (`revit10k-roi-e5`): vs 2k ROI val +0.069 / +0.128
+(p<0.001, val 17 brick 0.10 -> 0.89 @4096), HF14 +0.001 / +0.016 (n.s.). Fresh unseen
+plans 0.810 -> 0.872 (1,901 better / 404 worse). Volume transfers to val's sheets,
+not HF14's (as v6d 8k/16k).
+
+**Where the remaining error is (fresh plans, 10k @4096):** the top-similarity quarter
+(greyscale descriptor >= 0.908, `question_difficulty.py`) scores 0.78 (15% < 0.5).
+Split by sheet appearance: line-only 0.766 (684 q), colour with pair dE < 10 0.657
+(39), dE >= 10 0.942 (98, no failures). Line-only by pair type (styles from
+`record_family_styles.py`): different kinds in one look class (lap vs asphalt rows)
+309 q, no-ROI 0.606 / ROI 0.695 / 10k ROI 0.837; same kind near 1.4x spacing: only 2 q.
+
+**Real HF14 error budget (shipped 0.8440 @4096):** 37 questions at 0.944 hold 25% of
+the loss; 15 below 0.85 hold 75%; five sheets (18, 0, 12, 27, 25) ~75%. Over-selection
+47%. Failure types: grey roof vs grey foundation (18), paver patio vs interior floors
+(0), roof lines vs lap siding (25, 27), under-selected thin L band (12). The greyscale
+look-alike score does not flag them: they are confusions with UNLABELLED regions or
+colour differences.
+
+**Revit in the real mix** (`run_revit_mix.sh` then `run_restart_swa.sh` with START=9:
+the restart from a local epoch_8 numbers its epochs 9-16): v6d_1600 -> first 1,600 of
+the Revit pool, 6,676 records, jitter fix on, stage 1 without ROI. Val chose restart
+e10 @4096 (0.7843 vs shipped 0.8150); **HF14 0.8367 vs 0.8440** (-0.007, 12 better /
+18 worse). Floor plans gain (HF14 12 +0.141, 0 +0.095); roof plans (val 15 -0.124,
+HF14 1 -0.108), line-only (val 9/10/13) and rendered elevations lose. Published
+`abshetty/floz-refunet-swint-revitmix-roiadd-e10` (private); not adopted.
+

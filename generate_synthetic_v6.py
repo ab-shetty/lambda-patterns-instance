@@ -103,6 +103,10 @@ TRIM_CUT = True
 # class, spacing within 1.4x, colour within CIELAB dE 8) and no label on a plain, patternless
 # family (e.g. a flat-colour TPO roof). --distinct-looks 0 = the pre-2026-09-29 pools.
 DISTINCT_LOOKS = True
+# Revit colour elevations (scripts/revit_render.py): probability a sheet gets a planted
+# same-texture, different-colour labelled pair at matched lightness (val 17's red brick band
+# under a grey asphalt roof). 0 = off, byte-identical pools.
+COLOUR_PAIRS = 0.0
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -2773,10 +2777,11 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
-    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS
+    global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
+    COLOUR_PAIRS = colour_pairs
     TRIM_CUT = trim_cut
     DISTINCT_LOOKS = distinct_looks
     WINDOW_HOLE_PROB = window_hole_prob

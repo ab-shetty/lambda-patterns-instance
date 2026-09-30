@@ -1,11 +1,31 @@
 # Handoff
 
-Last updated: 2026-09-28
+Last updated: 2026-09-30
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-09-30)
+
+Detail: `synth_progress.md` Log 2026-09-29/30. Goal is still 0.90 on HF14; shipped
+is still 0.8440. The VM is gone; models are on the Hub (all private):
+`...-revit10k-roi-e5` (best synthetic-only, val 0.886 @4096), `...-revit2k-roi-e8`
+(screen control), `...-revitmix-roiadd-e10` (Revit in the real mix: HF14 0.8367,
+not adopted). Pools rebuild byte-identically from the committed generator.
+
+1. **Reference-jitter fix is the default** (728def3): the reference gets the
+   sheet's `--domain-random` brightness/contrast. Old runs: `--legacy-ref-jitter`.
+2. **Revit synthetic helps synthetic-only a lot but not the real mix** at a
+   1,600-sheet swap (floor plans up, roof plans and line-only elevations down).
+   Untried: more Revit sheets in the mix, ROI from stage 1.
+3. **Next lever: the reference path on line-only look-alikes.** ROI (add) beat the
+   crop-only model on those questions (0.606 -> 0.695 on fresh plans); try
+   `--roi-ref-mode replace` on the 2k screen (keep `--domain-random`).
+4. Screen hygiene learned the hard way: read val 17 over epochs 4-8; one-seed
+   synthetic screens swing ~0.05-0.07 on HF14; never run GPU evals beside training
+   (OOM); launch long chains with `setsid nohup`.
 
 ## Pick up here (2026-09-28)
 

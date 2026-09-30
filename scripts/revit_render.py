@@ -86,6 +86,48 @@ def distinct_looks(styles, shaded, app, fam_seed, S_guess):
             _finish_style(styles[fb], shaded, app)
 
 
+# ---- colour pairs (G.COLOUR_PAIRS, --colour-pairs P): val 17's failure is a red brick band
+# under a grey asphalt roof -- the same coursed texture at the same lightness, told apart only
+# by hue. Every Revit-trained model selects the roof too at some epochs, and only ~3% of
+# labelled pairs in the pool are like it. With probability P a colour sheet gets one: the accent
+# (else the chimney) is re-drawn as a coursed kind unlike the roof's, at the roof's lightness
+# (dL* <= 6) with a clearly different hue (dE >= 25), and both are labelled. Without an accent
+# the chimney takes it if the house has one, else the foundation band.
+# RESULT (2026-09-30, 2k ROI screens, seed 7): not adopted. 0.5 looked like a win (HF14 @4096
+# +0.032 p=0.01, val 17 brick 0.09 -> 0.46) but 1.0 did not reproduce it (HF14 +0.011, brick
+# 0.09-0.15), so it was run noise; the 10k pool fixed val 17's brick (0.89 @4096) without it.
+COURSED = {"asphalt": ["brick", "block", "shingle", "lap"], "shingle": ["brick", "block", "lap"],
+           "tile_roof": ["brick", "block", "shingle", "lap"], "seam": ["bb", "vertical"]}
+
+
+def _rgb_from_lab(L, a, b):
+    px = np.uint8([[[round(L * 255 / 100), round(a + 128), round(b + 128)]]])
+    return tuple(int(v) for v in cv2.cvtColor(px, cv2.COLOR_LAB2BGR)[0, 0][::-1])
+
+
+def plant_colour_pair(styles, shaded, app, fam_seed, S_guess, has_chimney):
+    rr = random.Random(fam_seed * 131 + 7)       # own stream: the sheet's RNG is untouched
+    if not shaded or rr.random() >= G.COLOUR_PAIRS or styles["roof"].kind not in COURSED:
+        return None
+    # the accent zone if the house has one, else a drawn chimney, else the foundation band
+    fam = "accent" if "accent" in styles else "chimney" if has_chimney else "foundation"
+    L0, a0, b0 = _lab(styles["roof"].base)
+    for _ in range(30):
+        h, C = rr.uniform(0, 2 * math.pi), rr.uniform(25, 50)
+        rgb = _rgb_from_lab(min(90, max(20, L0 + rr.uniform(-6, 6))), C * math.cos(h), C * math.sin(h))
+        lab = _lab(rgb)
+        if abs(lab[0] - L0) <= 6 and math.dist(lab, (L0, a0, b0)) >= 25 and \
+                all(math.dist(lab, _lab(styles[f].base)) >= 15 for f in styles if f not in (fam, "roof")):
+            break
+    else:
+        return None
+    st = G.make_style(rr, rr.choice(COURSED[styles["roof"].kind]), app, fam_seed + 77, S_guess, fam,
+                      base_override=rgb)
+    _finish_style(st, shaded, app)
+    styles[fam] = st
+    return fam
+
+
 def install(g, fc, plans=False):
     global G, FC, _ORIG_COMPOSE
     G, FC = g, fc
@@ -243,6 +285,8 @@ def compose_revit(image_id, seed, mode_weights):
         st.params.pop("grad", None)
     if G.DISTINCT_LOOKS:
         distinct_looks(styles, shaded, app, fam_seed, S_guess)
+    pair_fam = plant_colour_pair(styles, shaded, app, fam_seed, S_guess, bool(spec.get("chimney"))) \
+        if G.COLOUR_PAIRS > 0 else None
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):
@@ -260,6 +304,8 @@ def compose_revit(image_id, seed, mode_weights):
         label_fams.add("foundation")
     if G.DISTINCT_LOOKS:        # plain colour, no pattern: drawn, never a pattern question
         label_fams = {f for f in label_fams if styles.get(f) is None or styles[f].kind != "flat"}
+    if pair_fam:                # the planted pair is always a question
+        label_fams |= {pair_fam, "roof"}
     hole_mode = r.random() < G.WINDOW_HOLE_PROB
 
     # ---- views
