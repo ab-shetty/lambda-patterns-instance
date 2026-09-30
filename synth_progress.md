@@ -511,3 +511,18 @@ Also: `generate_synthetic_v6.py --trim-label-prob` (v6 asks about blank trim on 
 elevations; default 1.0 byte-identical); `run_revit_mix.sh SYN=v6fix` (the v6d slot
 rebuilt with the label fixes and no trim questions); `record_family_styles.py`;
 `evaluate_refunet_selection.py --local-pool` (HF14 protocol on a synthetic pool).
+
+**Markup breaks the best synthetic-only model (fresh sheets, HF14 protocol, 2048).** 32
+fresh Revit elevations (ids 300000+) rendered twice, identical drawings and labels, with
+and without `--markup 1.0` paint: `revit10k-roi-e5` 0.881 -> **0.730** (366 questions,
+187 worse / 32 better, p=3e-33; share below 0.5 3.3% -> 18.9%). The model groups by
+paint, the 25/27 failure mode. Training with `--markup` is the next GPU screen
+(`run_revit_2k.sh ... revitmk50roi`, then the 10k pool).
+
+**CPU fine-tunes cannot answer it (inconclusive, not negative).** From `revit10k-roi-e5`,
+one epoch of 156 steps, batch 2, 1024, ROI add, domain-random: (A) 317 mixed sheets,
+`--markup 0.5`, lr 5e-5: HF14 @4096 0.8146 -> 0.8108 (13/16, p=0.15), markup sheets
+0.796 -> 0.794, fresh painted 0.780 -> 0.777. (C/D) 317 elevation-only sheets, markup
+1.0 vs the same unpainted, lr 1e-4: fresh painted (147 q) 0.773 vs 0.778 (p=0.63). Loss
+fell ~1.0 -> ~0.1 in both, but nothing moved at 2048 inference: too few steps at the
+wrong resolution. Needs the 2048 GPU recipe.
