@@ -465,3 +465,49 @@ e10 @4096 (0.7843 vs shipped 0.8150); **HF14 0.8367 vs 0.8440** (-0.007, 12 bett
 HF14 1 -0.108), line-only (val 9/10/13) and rendered elevations lose. Published
 `abshetty/floz-refunet-swint-revitmix-roiadd-e10` (private); not adopted.
 
+
+### 2026-09-30 (CPU session, no GPU) -- error budget, markup mode, inference levers
+
+The GPU VM was gone; everything below ran on a 4-core CPU container. Models pulled from
+the Hub (`scripts/hf_ckpt_to_pth.py`, private repos download through the proxy) and
+re-scored on all 28 real sheets with `--save-probs`, so ensembles, multi-scale and
+thresholds are recomputed offline (`scripts/ensemble_selection.py`, reproduces the
+evaluator to 4e-5). CPU fp32 reproduces the GPU numbers: shipped HF14 0.8444 / val
+0.8156 @4096 (published 0.8440 / 0.8150); `revit10k-roi-e5` 0.8146 / 0.8870 (0.8126 /
+0.8861). ~25 s per question at 4096, ~5 s at 2048.
+
+**Where the best synthetic-only model (10k ROI @4096) loses HF14** (`per_question_breakdown`
+sheet types; `scripts/failure_panels.py` draws them):
+
+| HF14 sheet type | n | shipped | 10k | share of 10k's loss |
+|---|---:|---:|---:|---:|
+| colour-markup elevations (18, 23, 24, 25, 27) | 24 | 0.837 | 0.796 | **51%** |
+| floor plans (0, 7, 11, 12) | 8 | 0.661 | 0.741 | 21% |
+| line-only elevation (14) | 9 | 0.919 | 0.816 | 17% |
+| rendered elevations (2, 3) | 8 | 0.916 | 0.885 | 9% |
+| roof plans (1, 16) | 3 | 0.977 | 0.963 | 1% |
+
+Over-selection is 43% of the loss. Worst questions: 25/27 merge the UNPAINTED vertical
+siding with an unpainted roof drawn in horizontal lines (and the reverse) while the
+green-painted lap siding stays separate; 18 q08/q09 small dark-grey roof pieces pick up
+the red brick band; 14 (faint line-only) thin eave band and small chimney; 12 thin L band
+under-selected (0.5x); 0 patio vs interior floors (10k 0.66 vs shipped 0.32).
+
+**Markup sheets have no synthetic counterpart.** HF14 18-27 and val 17-26 are line
+drawings with flat see-through colour painted on top. Their labels follow the TEXTURE,
+not the paint (painted plain stucco walls are not questions on 20/23; unpainted vertical
+siding is on 25/27; one colour can span two families). New `--markup P`
+(`generate_synthetic_fc.py`, `revit_render.py`): P of the line-only Revit elevations get
+paint (own RNG: family painted 75% main / 50% others, 15% shared colours, partial faces
+30%, openings/trims usually skipped, multiply blend), plus grid paper (35%) and dashed
+work-area boxes (40%). Labels unchanged (40/40 sheets); P=0 byte-identical to HEAD.
+
+**Inference levers (10k ROI), chosen on val, not adopted:** threshold 0.25-0.55 flat
+(val 0.885-0.887); multi-scale 2048+4096 best +0.0015 val (w=0.3), not read on HF14;
+shipped + 10k ensemble (w=0.7 on val, 0.892 because val 17 flips) reads HF14 **0.8258**
+vs 0.8444 (-0.019, 20/20, p=0.40): val and HF14 disagree.
+
+Also: `generate_synthetic_v6.py --trim-label-prob` (v6 asks about blank trim on ~35% of
+elevations; default 1.0 byte-identical); `run_revit_mix.sh SYN=v6fix` (the v6d slot
+rebuilt with the label fixes and no trim questions); `record_family_styles.py`;
+`evaluate_refunet_selection.py --local-pool` (HF14 protocol on a synthetic pool).
