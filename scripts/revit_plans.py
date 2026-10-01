@@ -525,7 +525,9 @@ def flat_material(r, seed):
             "tile": r.uniform(*TILES[kind][3]) if kind in TILES else 0.0}
 
 
-def _dotgrid(layer, ox, oy, S, sp, rpx, colour, filled, lw):
+def _dotgrid(layer, ox, oy, S, sp, rpx, colour, filled, lw, jit=0.0, seed=0):
+    """Staggered dot grid; jit > 0 (plan v3) moves each dot up to jit*spacing and varies its size,
+    hashed on its grid cell so neighbouring regions with the same material line up."""
     h, w = layer.shape[:2]
     step = sp * S
     if step < 3:
@@ -536,7 +538,12 @@ def _dotgrid(layer, ox, oy, S, sp, rpx, colour, filled, lw):
         i0, i1 = int(math.floor((ox - off) / step)) - 1, int(math.ceil((ox + w - off) / step)) + 1
         for i in range(i0, i1):
             c = (i * step + off - ox, j * step - oy)
-            cv2.circle(layer, G._pt(c), int(rpx * G.SCALE), G.bgr(colour), -1 if filled else max(1, int(lw)),
+            rr = rpx
+            if jit > 0:
+                hr = random.Random(hash((i, j, seed)) & 0xFFFFFFFF)
+                c = (c[0] + hr.uniform(-jit, jit) * step, c[1] + hr.uniform(-jit, jit) * step)
+                rr = rpx * hr.uniform(0.6, 1.4)
+            cv2.circle(layer, G._pt(c), int(rr * G.SCALE), G.bgr(colour), -1 if filled else max(1, int(lw)),
                        cv2.LINE_AA, G.SHIFT)
 
 
@@ -1627,7 +1634,7 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
         G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
         G._stipple(layer, x0, y0, S, m["density"] * 0.15, c, m["seed"] + 1, r_px=2)
     elif k == "dots":
-        _dotgrid(layer, x0, y0, S, m["sp"], max(1.2, 0.07 * S), c, m["fill"], lw)
+        _dotgrid(layer, x0, y0, S, m["sp"], max(1.2, 0.07 * S), c, m["fill"], lw, m.get("jit", 0.0), m["seed"])
     elif k == "basket":
         G._basketweave(layer, x0, y0, S, m["sp"], c, lw)
     elif k == "ashlar":
@@ -1703,15 +1710,33 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
     fx, fy = pr.random() < 0.5, pr.random() < 0.5
     out = []
 
-    def R(a, b, c, d, kind="item"):                  # rectangle in room-local feet, flips applied
-        a, c = (w - c, w - a) if fx else (a, c)
-        b, d = (h - d, h - b) if fy else (b, d)
-        out.append((box(x0 + a, y0 + b, x0 + c, y0 + d), kind))
+    def tr(a, b):                                    # room-local feet -> sheet feet, flips applied
+        return (x0 + (w - a if fx else a), y0 + (h - b if fy else b))
+
+    def P(pts, kind="item"):
+        out.append((Polygon([tr(a, b) for a, b in pts]), kind))
+
+    def R(a, b, c, d, kind="item", rad=0.0):
+        (ax, ay), (cx_, cy_) = tr(a, b), tr(c, d)
+        q = box(min(ax, cx_), min(ay, cy_), max(ax, cx_), max(ay, cy_))
+        if rad > 0 and min(c - a, d - b) > 2.2 * rad:
+            q = q.buffer(-rad).buffer(rad, 8)
+        out.append((q, kind))
 
     def E(cx, cy, rx, ry, kind="item"):
-        cx = w - cx if fx else cx
-        cy = h - cy if fy else cy
-        out.append((_ell(x0 + cx, y0 + cy, rx, ry), kind))
+        out.append((_ell(*tr(cx, cy), rx, ry), kind))
+
+    def toilet(cx, wall_y, d=1):                     # tank against the wall, bowl + rim out from it
+        R(cx - 0.85, wall_y, cx + 0.85, wall_y + d * 0.75) if d > 0 else R(cx - 0.85, wall_y - 0.75, cx + 0.85, wall_y)
+        E(cx, wall_y + d * 1.55, 0.62, 0.85)
+        E(cx, wall_y + d * 1.6, 0.45, 0.62, "line")
+
+    def basin(cx, cy, rx=0.7, ry=0.5):
+        E(cx, cy, rx, ry, "line"); E(cx, cy, rx * 0.72, ry * 0.68, "line"); E(cx, cy, 0.07, 0.07, "line")
+
+    def chair(cx, cy, back_dy):
+        R(cx - 0.75, cy - 0.7, cx + 0.75, cy + 0.7, rad=0.15)
+        R(cx - 0.75, cy + back_dy * 0.7 - 0.12, cx + 0.75, cy + back_dy * 0.7 + 0.12, "line")
 
     if "BED" in name and w > 8 and h > 7.1:
         bw = 6.3 if "PRIMARY" in name else pr.choice([4.8, 5.0, 5.0, 6.3])
@@ -1719,90 +1744,109 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
         cx = w / 2 + pr.uniform(-0.15, 0.15) * w
         if pr.random() < 0.6:
             R(cx - bw / 2 - 1.5, 1.2, cx + bw / 2 + 1.5, bl + 2.5, "rug")
-        R(cx - bw / 2, 0.3, cx + bw / 2, 0.3 + bl)                         # bed
-        R(cx - bw / 2 + 0.3, 0.7, cx - 0.2, 1.9); R(cx + 0.2, 0.7, cx + bw / 2 - 0.3, 1.9)   # pillows
-        R(cx - bw / 2, 2.4, cx + bw / 2, 2.4 + 0.25 * bl, "line")           # turned-down sheet
+        R(cx - bw / 2, 0.3, cx + bw / 2, 0.3 + bl, rad=0.25)                         # mattress
+        R(cx - bw / 2 - 0.1, 0.15, cx + bw / 2 + 0.1, 0.45, "line")                   # headboard
+        R(cx - bw / 2 + 0.3, 0.7, cx - 0.15, 1.9, "line", rad=0.3)                    # pillows
+        R(cx + 0.15, 0.7, cx + bw / 2 - 0.3, 1.9, "line", rad=0.3)
+        fold = 0.3 + bl * pr.uniform(0.32, 0.42)
+        P([(cx - bw / 2, fold), (cx + bw / 2, fold), (cx + bw / 2, fold + 0.6), (cx - bw / 2, fold + 0.6)], "line")
+        P([(cx + bw / 2 - 1.6, 0.3 + bl), (cx + bw / 2, 0.3 + bl - 1.6), (cx + bw / 2, 0.3 + bl)], "line")   # turned corner
         for sx in (-1, 1):
             nx = cx + sx * (bw / 2 + 1.0)
-            R(nx - 0.8, 0.3, nx + 0.8, 1.8)                                  # nightstands
+            R(nx - 0.8, 0.3, nx + 0.8, 1.8); E(nx, 1.05, 0.35, 0.35, "line")           # nightstand + lamp
         if h > 12 and pr.random() < 0.7:
-            R(w / 2 - 2.5, h - 2.0, w / 2 + 2.5, h - 0.3)                    # dresser
+            R(w / 2 - 2.5, h - 2.0, w / 2 + 2.5, h - 0.3)
+            for k in range(1, 3):
+                R(w / 2 - 2.5 + k * 5 / 3, h - 2.0, w / 2 - 2.5 + k * 5 / 3 + 0.01, h - 0.3, "line")
     elif any(k in name for k in ("LIVING", "GREAT", "FAMILY", "DEN", "BONUS")) and w > 9 and h > 8:
         cx, cy = w * pr.uniform(0.4, 0.6), h / 2 + pr.uniform(-0.1, 0.1) * max(0, h - 9.5)
         if h > 10:
             R(cx - 5, cy - 4, cx + 5, cy + 4, "rug")
-        R(cx - 3.8, cy + 1.6, cx + 3.8, cy + 4.6)                            # sofa
-        R(cx - 3.8, cy + 3.8, cx + 3.8, cy + 4.6, "line")
-        for k in range(1, 3):
-            R(cx - 3.8 + k * 7.6 / 3, cy + 1.6, cx - 3.8 + k * 7.6 / 3 + 0.01, cy + 3.8, "line")
+        R(cx - 3.9, cy + 1.6, cx + 3.9, cy + 4.6, rad=0.2)                             # sofa
+        R(cx - 3.9, cy + 3.8, cx + 3.9, cy + 4.6, "line")                              # back
+        R(cx - 3.9, cy + 1.6, cx - 3.2, cy + 3.8, "line"); R(cx + 3.2, cy + 1.6, cx + 3.9, cy + 3.8, "line")   # arms
+        for k in range(3):
+            R(cx - 3.2 + k * 6.4 / 3 + 0.05, cy + 1.75, cx - 3.2 + (k + 1) * 6.4 / 3 - 0.05, cy + 3.75, "line", rad=0.15)
         if pr.random() < 0.5:
-            R(cx + 3.8, cy - 2.0, cx + 6.6, cy + 4.6)                        # L return
+            R(cx + 3.9, cy - 2.0, cx + 6.7, cy + 4.6, rad=0.2)                         # L return
+            R(cx + 5.9, cy - 2.0, cx + 6.7, cy + 4.6, "line")
         for sx in (-1, 1):
-            R(cx + sx * 2.4 - 1.4, cy - 4.2, cx + sx * 2.4 + 1.4, cy - 1.6)  # armchairs
+            ax = cx + sx * 2.4
+            R(ax - 1.45, cy - 4.2, ax + 1.45, cy - 1.5, rad=0.2)                       # armchairs
+            R(ax - 1.45, cy - 4.2, ax + 1.45, cy - 3.5, "line")
+            R(ax - 1.45, cy - 3.5, ax - 0.95, cy - 1.5, "line"); R(ax + 0.95, cy - 3.5, ax + 1.45, cy - 1.5, "line")
         if pr.random() < 0.6:
-            R(cx - 2.0, cy - 1.0, cx + 2.0, cy + 1.0)                        # coffee table
+            R(cx - 2.0, cy - 1.0, cx + 2.0, cy + 1.0, rad=0.1)
         else:
             E(cx, cy, 1.6, 1.6)
         if "DINING" in name or "GREAT" in name:
             dx = w * 0.18 if cx > w / 2 else w * 0.82
             if 3.5 < dx < w - 3.5:
-                for q in _dining(x0 + dx, y0 + h * 0.5, pr):
-                    out.append(q)
+                out.extend(_dining(*tr(dx, h * 0.5), pr))
     elif "DINING" in name and w > 8 and h > 8:
         out.extend(_dining(x0 + w / 2, y0 + h / 2, pr))
     elif "KITCHEN" in name and w > 8 and h > 8:
-        R(0, 0, w, 2.1); R(0, 2.1, 2.1, h * pr.uniform(0.5, 0.9))           # L counter
+        R(0, 0, w, 2.1); R(0, 2.1, 2.1, h * pr.uniform(0.5, 0.9))                      # L counter
+        R(0, 0, w, 2.1, "line"); R(0.05, 1.95, w - 0.05, 2.1, "line")                  # nosing
         sx = w * pr.uniform(0.3, 0.6)
-        R(sx, 0.35, sx + 2.6, 1.6); R(sx + 1.35, 0.35, sx + 1.36, 1.6, "line")   # double sink
+        R(sx, 0.35, sx + 1.25, 1.65, "line", rad=0.15); R(sx + 1.35, 0.35, sx + 2.6, 1.65, "line", rad=0.15)
+        E(sx + 1.3, 0.22, 0.08, 0.08, "line")
         rx = min(w - 3.2, sx + 4.5)
         if rx > sx + 3:
+            R(rx + 0.1, 0.15, rx + 2.4, 1.95, "line")
             for dx, dy in [(0.7, 0.6), (1.7, 0.6), (0.7, 1.5), (1.7, 1.5)]:
-                E(rx + dx, dy, 0.32, 0.32)                                   # range
-        R(w - 3.2, 0, w - 0.2, 2.6)                                          # fridge
+                E(rx + dx, dy, 0.36, 0.36, "line"); E(rx + dx, dy, 0.2, 0.2, "line")
+        R(w - 3.2, 0, w - 0.2, 2.6)                                                      # fridge
+        R(w - 3.2, 2.35, w - 0.2, 2.6, "line")                                          # fridge door
         if w > 12 and h > 11:
             ix, iy = w * 0.55, h * 0.6
-            R(ix - 3.5, iy - 1.5, ix + 3.5, iy + 1.5)                        # island
+            R(ix - 3.5, iy - 1.5, ix + 3.5, iy + 1.5)
+            R(ix - 3.3, iy - 1.3, ix + 3.3, iy + 1.3, "line")
             for k in range(3):
-                E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.6, 0.6)                    # stools
+                E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.6, 0.6); E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.35, 0.35, "line")
     elif any(k in name for k in ("BATH", "POWDER")) and w > 4.5 and h > 4.5:
         vw = min(w - 0.6, pr.choice([3.0, 5.0, 6.0]))
-        R(0.2, 0.2, 0.2 + vw, 2.0)                                           # vanity
-        for k in range(1 if vw < 4.5 else 2):
-            E(0.2 + vw * (k + 0.5) / (1 if vw < 4.5 else 2), 1.0, 0.65, 0.45)
-        R(w - 2.0, h - 0.9, w - 0.4, h - 0.2)                                # toilet tank
-        E(w - 1.2, h - 1.9, 0.7, 1.0)
+        R(0.2, 0.2, 0.2 + vw, 2.0)                                                       # vanity
+        nb = 1 if vw < 4.5 else 2
+        for k in range(nb):
+            basin(0.2 + vw * (k + 0.5) / nb, 1.05)
+        toilet(w - 1.3, h - 0.2, -1)
         if "POWDER" not in name and h > 7:
             if pr.random() < 0.55 and w > 6:
-                R(0.2, h - 2.7, 5.2, h - 0.2); E(2.7, h - 1.45, 2.0, 0.9)   # tub
+                R(0.2, h - 2.7, 5.2, h - 0.2)                                               # tub
+                R(0.5, h - 2.4, 4.9, h - 0.5, "line", rad=0.6)
+                E(4.4, h - 1.45, 0.1, 0.1, "line")
             else:
-                R(0.2, h - 3.4, 3.4, h - 0.2)                                # shower
-                R(0.2, h - 3.4, 3.4, h - 0.2, "line")
-                out.append((LineString([(0, 0), (1, 1)]), "skip"))
+                R(0.2, h - 3.4, 3.4, h - 0.2)                                               # shower
+                P([(0.2, h - 3.4), (3.4, h - 0.2), (0.2, h - 0.2)], "line")
+                E(1.8, h - 1.8, 0.12, 0.12, "line")
     elif any(k in name for k in ("OFFICE", "STUDY")) and w > 7 and h > 7:
-        R(w * 0.3, 0.2, w * 0.3 + 5, 2.6); E(w * 0.3 + 2.5, 3.5, 0.9, 0.9)
+        R(w * 0.3, 0.2, w * 0.3 + 5, 2.6); chair(w * 0.3 + 2.5, 3.5, 1)
         R(0.2, h * 0.3, 1.4, h * 0.3 + 5)
+        for k in range(1, 4):
+            R(0.2, h * 0.3 + k * 1.25, 1.4, h * 0.3 + k * 1.25 + 0.01, "line")
     elif name.startswith("GARAGE") and w > 10 and h > 16:
         for k in range(1 if w < 20 else 2):
             cx = w * (k + 0.5) / (1 if w < 20 else 2)
-            car = box(x0 + cx - 3.0, y0 + 1.5, x0 + cx + 3.0, y0 + 16.0).buffer(-1.0).buffer(1.0, 16)
-            out.append((car, "item"))
-            out.append((Polygon([(x0 + cx - 2.6, y0 + 5.0), (x0 + cx + 2.6, y0 + 5.0), (x0 + cx + 2.2, y0 + 6.6),
-                                 (x0 + cx - 2.2, y0 + 6.6)]), "line"))              # windshield
-            R(cx - 2.2, 6.6, cx + 2.2, 11.6, "line")                                # roof
-            out.append((Polygon([(x0 + cx - 2.2, y0 + 11.6), (x0 + cx + 2.2, y0 + 11.6), (x0 + cx + 2.5, y0 + 12.8),
-                                 (x0 + cx - 2.5, y0 + 12.8)]), "line"))             # rear window
+            R(cx - 3.0, 1.5, cx + 3.0, 16.0, rad=1.0)
+            P([(cx - 2.6, 5.0), (cx + 2.6, 5.0), (cx + 2.2, 6.6), (cx - 2.2, 6.6)], "line")
+            R(cx - 2.2, 6.6, cx + 2.2, 11.6, "line")
+            P([(cx - 2.2, 11.6), (cx + 2.2, 11.6), (cx + 2.5, 12.8), (cx - 2.5, 12.8)], "line")
             for sx in (-1, 1):
-                R(cx + sx * 3.0 - 0.35, 4.4, cx + sx * 3.0 + 0.35, 5.0, "line")       # mirrors
+                R(cx + sx * 3.0 - 0.35, 4.4, cx + sx * 3.0 + 0.35, 5.0, "line")
     elif any(k in name for k in ("MUD", "ENTRY", "FOYER")) and w > 5 and h > 4:
-        R(0.2, 0.2, min(w - 0.2, 5.5), 1.6)                                  # bench / lockers
+        R(0.2, 0.2, min(w - 0.2, 5.5), 1.6)
         for k in range(int(min(w - 0.4, 5.3) // 1.3)):
             R(0.2 + 1.3 * (k + 1), 0.2, 0.2 + 1.3 * (k + 1) + 0.01, 1.6, "line")
     elif "LAUNDRY" in name and w > 5 and h > 4:
         for k in range(2):
-            R(0.3 + 2.6 * k, 0.2, 2.6 + 2.6 * k, 2.6); E(1.45 + 2.6 * k, 1.4, 0.8, 0.8)
+            R(0.3 + 2.6 * k, 0.2, 2.6 + 2.6 * k, 2.6, rad=0.15)
+            E(1.45 + 2.6 * k, 1.5, 0.85, 0.85, "line"); E(1.45 + 2.6 * k, 1.5, 0.55, 0.55, "line")
     elif any(k in name for k in ("CLOSET", "W.I.C.")) and min(w, h) > 3:
         R(0, 0, w, 1.8, "line"); R(0, 0.9, w, 0.95, "line")
-    return [q for q in out if q[1] != "skip"]
+        for k in range(int(w / 0.6)):
+            R(0.3 + 0.6 * k, 0.3, 0.3 + 0.6 * k + 0.01, 1.55, "line")                   # hangers
+    return out
 
 
 def _dining(cx, cy, pr):
@@ -1820,15 +1864,19 @@ def _dining(cx, cy, pr):
         x = cx - tw / 2 + (k + 0.5) * tw / n
         for sy in (-1, 1):
             y = cy + sy * (th / 2 + 0.85)
-            out.append((box(x - 0.75, y - 0.7, x + 0.75, y + 0.7), "item"))
+            out.append((box(x - 0.75, y - 0.7, x + 0.75, y + 0.7).buffer(-0.15).buffer(0.15, 6), "item"))
+            out.append((box(x - 0.75, y + sy * 0.7 - 0.12, x + 0.75, y + sy * 0.7 + 0.12), "line"))   # back
     return out
 
 
 def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
     """solid: furniture blocks filled white with a soft drop shadow (rendered sheets, HF14 0);
     otherwise outlines only, so the floor pattern shows through."""
+    skip = False
     for q, kind in pieces:
-        if clip is not None and not q.within(clip):
+        if kind == "item":              # an item's detail lines follow it: drop them with it
+            skip = clip is not None and not q.within(clip)
+        if skip and kind == "line" or clip is not None and not q.within(clip):
             continue
         g = V.geom(q)
         if kind == "rug":
@@ -1837,8 +1885,9 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
             G.cv_outline(canvas, g, ink, lw * 0.8)
         else:
             if solid:
-                d = 0.25 * V.S
-                _shade(canvas, affinity.translate(g, d, d).difference(g), 0.82, W, H)
+                if solid == "shadow":
+                    d = 0.25 * V.S
+                    _shade(canvas, affinity.translate(g, d, d).difference(g), 0.82, W, H)
                 G.cv_fill(canvas, g, (pr.randint(246, 255),) * 3)
             G.cv_outline(canvas, g, ink, lw)
 
@@ -1966,6 +2015,18 @@ def compose_floor(image_id, seed, mode_weights):
         zone_mat["wet"]["base"], zone_mat["wet"]["line"] = fl["base"], fl["line"]
         zone_mat["garage"] = floor_material("concrete", r, fam_seed + 4, False) if r.random() < 0.6 else None
     floor_fams = _separate_all([zone_mat.get(z) for z in ("living", "bed", "wet", "garage")])
+    if v3:
+        # herringbone / basket / wood-grain tiles at material scale (planks ~0.3-0.5 ft, not 2 ft), and
+        # floor linework a lighter pen than the walls; one factor for all, so families stay apart
+        k_t, k_l = p3.uniform(0.3, 0.5), p3.uniform(0.15, 0.45)
+        for m in {id(m): m for m in zone_mat.values() if m is not None}.values():
+            if m["kind"] in TILES and m["kind"] not in ("t_earth", "t_aggregate"):
+                m["sp"] *= k_t
+            elif m["kind"] == "basket":
+                m["sp"] *= 0.7
+            elif m["kind"] == "dots" and p3.random() < 0.7:
+                m["jit"] = p3.uniform(0.12, 0.35)
+            m["line"] = G.mix(m["line"], m["base"], k_l)
 
     # ---- layout
     allg = unary_union([foot] + hard_polys + ([soffit] if soffit is not None else []))
@@ -2059,43 +2120,100 @@ def compose_floor(image_id, seed, mode_weights):
                         "t_aluminium"], weights=[18, 20, 9, 8, 8, 12, 10, 5, 5, 5])[0]
         if ck == "blank" and not slab_rooms:
             ck = "hatch45"
+        fin_rooms = []
+        if v3 and len(rooms) >= 3 and p3.random() < 0.45:
+            # part of the level is finished rooms, the rest crawlspace (HF14 7: rec room beside the under-floor)
+            ys_ = sorted(rm["cell"].centroid.y for rm in rooms)
+            cut = ys_[len(ys_) // 2]
+            side = p3.random() < 0.5
+            fin_rooms = [rm for rm in rooms if (rm["cell"].centroid.y >= cut) == side and rm["zone"] != "garage"]
+            if fin_rooms and len(fin_rooms) < len(rooms):
+                crawl = crawl.difference(unary_union([rm["cell"] for rm in fin_rooms]).buffer(lay["t_int"]))
+                crawl = unary_union([q for q in G.polys_of(crawl) if q.area > 40])
+            else:
+                fin_rooms = []
         # piers on a grid (holes in the crawlspace label, like skylights in a roof)
         px0, py0, px1, py1 = crawl.bounds
         sp_p = r.uniform(5, 8)
         pier_rows, piers = [], []
-        yy = py0 + sp_p
-        while yy < py1 - 1:
-            pier_rows.append(yy)
-            xx = px0 + sp_p
-            while xx < px1 - 1:
-                q = box(xx - 0.6, yy - 0.6, xx + 0.6, yy + 0.6)
-                if crawl.buffer(-0.3).contains(q):
-                    piers.append(q)
-                xx += sp_p
-            yy += sp_p
+        if v3:      # girder spacing and pier spacing differ, spans uneven, footing + post (round or square)
+            spx, foot_r = p3.uniform(4.5, 8.5), p3.uniform(0.6, 1.1)
+            rows_y, yy = [], py0 + p3.uniform(0.6, 1.0) * sp_p
+            while yy < py1 - 1:
+                rows_y.append(yy)
+                yy += sp_p * p3.uniform(0.75, 1.3)
+            round_p = p3.random() < 0.3
+            for yy in rows_y:
+                pier_rows.append(yy)
+                sx_row = spx * p3.uniform(0.85, 1.2)
+                xx = px0 + p3.uniform(0.4, 1.0) * sx_row
+                while xx < px1 - 1:
+                    fr = foot_r * p3.choice([1.0, 1.0, 1.0, 1.35])          # bigger footings under point loads
+                    q = Point(xx, yy).buffer(fr, 20) if round_p else box(xx - fr, yy - fr, xx + fr, yy + fr)
+                    if crawl.buffer(-0.3).contains(q):
+                        piers.append(q)
+                    xx += sx_row * p3.uniform(0.9, 1.1)
+        else:
+            yy = py0 + sp_p
+            while yy < py1 - 1:
+                pier_rows.append(yy)
+                xx = px0 + sp_p
+                while xx < px1 - 1:
+                    q = box(xx - 0.6, yy - 0.6, xx + 0.6, yy + 0.6)
+                    if crawl.buffer(-0.3).contains(q):
+                        piers.append(q)
+                    xx += sp_p
+                yy += sp_p
         if ck != "blank":
             cm = floor_material(ck, r, fam_seed + 21, colour, r.choice([0, 90]))
+            if v3 and ck == "dots" and p3.random() < 0.7:
+                cm["jit"] = p3.uniform(0.12, 0.35)
             draw_floor(canvas, V.geom(crawl), cm, S, W, H, lw_pat)
             lab = crawl.difference(unary_union(piers)) if piers else crawl
             labelled.append(("crawl", V.geom(lab)))
         if slab_rooms:
             sm = floor_material(r.choice(["concrete", "concrete", "dots", "t_aggregate", "t_aggregate"]), r,
                                 fam_seed + 22, colour)
+            if v3 and ck != "blank" and sm["kind"] == cm["kind"]:     # never the crawlspace's pattern in a new tint
+                sm = floor_material(p3.choice([k for k in ("concrete", "t_aggregate", "dots") if k != cm["kind"]]), p3,
+                                    fam_seed + 23, colour)
             if ck != "blank":
                 _separate(sm["kind"], sm, sm["base"], [(cm["kind"], cm, cm["base"])])
             reg = unary_union(slab_rooms)
             draw_floor(canvas, V.geom(reg), sm, S, W, H, lw_pat)
+            if v3:
+                G.cv_outline(canvas, V.geom(reg), ink, lw_thin)                # slab edge
             if ck == "blank" or r.random() < 0.85:
                 labelled.append(("slab", V.geom(reg)))
         # girders dashed through the pier rows (clipped to the crawlspace), then the piers
         gcol = G.mix(ink, (255, 255, 255), 0.3)
+        dbl = v3 and p3.random() < 0.45
         for yy in pier_rows:
             for seg in G.lines_of(LineString([(px0, yy), (px1, yy)]).intersection(crawl)):
                 c = list(seg.coords)
-                _dash_line(canvas, V.px(*c[0]), V.px(*c[-1]), gcol, lw_thin, [(0.8 * S, 0.3 * S)])
+                if dbl:         # girder drawn as its width, hidden
+                    for dy in (-0.25, 0.25):
+                        _dash_line(canvas, V.px(c[0][0], c[0][1] + dy), V.px(c[-1][0], c[-1][1] + dy), gcol, lw_thin,
+                                   [(0.8 * S, 0.3 * S)])
+                else:
+                    _dash_line(canvas, V.px(*c[0]), V.px(*c[-1]), gcol, lw_thin, [(0.8 * S, 0.3 * S)])
         for q in piers:
             G.cv_fill(canvas, V.geom(q), (255, 255, 255))
             G.cv_outline(canvas, V.geom(q), ink, lw_thin)
+            if v3:                                                            # post on the footing
+                c = q.centroid
+                G.cv_outline(canvas, V.geom(box(c.x - 0.25, c.y - 0.25, c.x + 0.25, c.y + 0.25)), ink, lw_thin)
+        if v3 and not crawl.is_empty:
+            # joist span arrows across the girders
+            for _ in range(p3.randint(1, 3)):
+                c = crawl.buffer(-2).representative_point() if not crawl.buffer(-2).is_empty else crawl.representative_point()
+                L = p3.uniform(4, 9)
+                a, b = V.px(c.x, c.y - L / 2), V.px(c.x, c.y + L / 2)
+                G.cv_line(canvas, a, b, ink, lw_thin)
+                for (pt, d) in ((a, 1), (b, -1)):
+                    G.cv_line(canvas, pt, (pt[0] - 0.35 * S, pt[1] + d * 0.7 * S), ink, lw_thin)
+                    G.cv_line(canvas, pt, (pt[0] + 0.35 * S, pt[1] + d * 0.7 * S), ink, lw_thin)
+                G.cv_line(canvas, (a[0] - 0.8 * S, (a[1] + b[1]) / 2), (a[0] + 0.8 * S, (a[1] + b[1]) / 2), ink, lw_thin)
     if not labelled and sheet != "underfloor":
         # every sheet must ask something: label the largest patterned region
         pass
@@ -2106,12 +2224,21 @@ def compose_floor(image_id, seed, mode_weights):
     if sheet == "underfloor":
         wg = V.geom(lay["walls_full"].difference(unary_union([rm["inner"] for rm in rooms]).buffer(0)))
         ring = foot.difference(foot.buffer(-lay["t_ext"], join_style=2))
-        _mfill(canvas, V.geom(ring), (255, 255, 255), W, H)
+        if v3 and fin_rooms:            # the finished rooms' walls and doors, as on a floor plan
+            fz = unary_union([rm["cell"] for rm in fin_rooms]).buffer(0.3, join_style=2)
+            fw = unary_union([q for q in G.polys_of(lay["walls"].intersection(fz)) if q.area > 6 * lay["t_int"] ** 2 + 2])
+            fw_look = p3.random() < 0.5
+            _mfill(canvas, V.geom(fw), (p3.randint(0, 120),) * 3 if fw_look else (255, 255, 255), W, H)
+            G.cv_outline(canvas, V.geom(fw), ink, lw_thin if fw_look else lw_heavy * 0.8)
+        poche = v3 and p3.random() < 0.6
+        _mfill(canvas, V.geom(ring), (255, 255, 255) if not poche else (p3.randint(150, 215),) * 3, W, H)
         G.cv_outline(canvas, V.geom(ring), ink, lw_heavy)
         _dash_poly(canvas, V.geom(foot.buffer(0.9, join_style=2)), G.mix(ink, (255, 255, 255), 0.4), lw_thin,
                    [(0.6 * S, 0.3 * S)])                          # footing below
     else:
         wall_look = r.choices(["grey", "black", "double"], weights=[50, 30, 20])[0]
+        if v3 and wall_look == "double" and p3.random() < 0.75:     # cut walls read heavier than everything else
+            wall_look = p3.choice(["grey", "black", "hatch"])
         if sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)):
             off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
             sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
@@ -2122,9 +2249,20 @@ def compose_floor(image_id, seed, mode_weights):
             G.cv_outline(canvas, wg, ink, lw_thin)
         elif wall_look == "black":
             _mfill(canvas, wg, (r.randint(0, 35),) * 3, W, H)
+        elif wall_look == "hatch":                  # v3: diagonal poché hatch, heavy outline
+            _mfill(canvas, wg, (255, 255, 255), W, H)
+            hl = np.full((H, W, 3), 255, np.uint8)
+            sp_px = max(3, int(p3.uniform(0.25, 0.45) * S))
+            for c0 in range(-H, W, sp_px):
+                cv2.line(hl, (c0, H), (c0 + H, 0), (60, 60, 60), max(1, int(lw_thin * 0.7)), cv2.LINE_AA)
+            m_ = np.zeros((H, W), np.uint8)
+            for q in G.polys_of(wg):
+                m_ = np.maximum(m_, G.poly_mask(q, W, H))
+            canvas[m_ > 0] = hl[m_ > 0]
+            G.cv_outline(canvas, wg, ink, lw_heavy)
         else:
             _mfill(canvas, wg, (255, 255, 255), W, H)
-            G.cv_outline(canvas, wg, ink, lw_thin * 1.2)
+            G.cv_outline(canvas, wg, ink, lw_heavy * 0.8 if v3 else lw_thin * 1.2)
         t = lay["t_ext"]
         win_style = r.choices(["3line", "2line", "sill"], weights=[45, 30, 25])[0]
         for (o, pos, c, w) in lay["windows"]:
@@ -2150,8 +2288,9 @@ def compose_floor(image_id, seed, mode_weights):
                 _draw_furniture(canvas, V, [q for q in pieces if q[1] != "rug"],
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
             elif p3.random() < 0.9:
-                _draw_furniture(canvas, V, pieces, ink, lw_thin, sheet == "rendered" and p3.random() < 0.75, W, H, p3,
-                                clip=clip)
+                _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
+                                "shadow" if sheet == "rendered" and p3.random() < 0.75 else p3.random() < 0.8,
+                                W, H, p3, clip=clip)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
                     not (stair_u is not None and rm["inner"].intersects(stair_u)):   # rectangles, no stair
