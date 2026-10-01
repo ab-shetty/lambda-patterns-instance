@@ -2478,6 +2478,8 @@ def compose_floor(image_id, seed, mode_weights):
                 G.cv_outline(canvas, ag, ink, lw_thin)
         t = lay["t_ext"]
         win_style = r.choices(["3line", "2line", "sill"], weights=[45, 30, 25])[0]
+        if v3 and win_style == "sill":           # judges: projecting sills read as boxes stuck on the wall
+            win_style = p3.choice(["3line", "2line"])
         for (o, pos, c, w) in lay["windows"]:
             _draw_window(canvas, V, o, pos, c, w, t, win_style, ink, lw_thin)
         for d in lay["doors"]:
