@@ -2198,6 +2198,8 @@ def compose_floor(image_id, seed, mode_weights):
     if hard_polys:
         hk = r.choices(["ashlar", "stone", "grid", "plank", "concrete", "basket", "t_brick", "t_hbone", "t_aggregate"],
                        weights=[22, 12, 13, 22, 5, 7, 8, 6, 5])[0]
+        if v3 and hk == "grid" and p3.random() < 0.65:          # real patios: irregular stone (HF14 0)
+            hk = p3.choice(["ashlar", "stone"])
         hs = _hard_style(hk, r, lw_pat, fam_seed + 11, colour)
         _separate(hs.kind, hs.params, hs.base, floor_fams)
         if v2 and sheet == "rendered" and pr.random() < 0.5:
@@ -2458,8 +2460,9 @@ def compose_floor(image_id, seed, mode_weights):
             G.cv_outline(canvas, wg, ink, lw_heavy * 0.8 if v3 else lw_thin * 1.2)
         if v3 and len(rooms) >= 3 and p3.random() < 0.4:
             # existing vs new construction: some rooms' walls in a second rendering (HF14 12 mixes them)
-            sub = p3.sample(rooms, max(1, len(rooms) // p3.randint(2, 4)))
-            alt = lay["walls"].intersection(unary_union([rm["cell"] for rm in sub]).buffer(0.3, join_style=2))
+            # by wall class, so a run never switches style part way: the interior partitions or the shell
+            shell = foot.difference(foot.buffer(-lay["t_ext"] - 0.05, join_style=2))
+            alt = lay["walls"].difference(shell) if p3.random() < 0.6 else lay["walls"].intersection(shell)
             ag = V.geom(alt)
             if wall_look in ("grey", "black", "hatch"):
                 _mfill(canvas, ag, (255, 255, 255), W, H)
