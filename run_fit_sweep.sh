@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# PREMISE WITHDRAWN (2026-10-01): the "underfitting" below was the evaluator's per-instance,
+# sliver-heavy questions; training-style questions on the same sheets score 0.948. Kept for
+# reference -- if run, score with per-family questions, not per instance.
 # Is the synthetic-only ceiling a capacity limit? (2026-09-30)
 #
 # The 10k Revit ROI model scores its own training sheets no better than fresh ones

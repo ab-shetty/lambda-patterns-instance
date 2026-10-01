@@ -20,10 +20,11 @@ HF14 with synthetic-only training (best: `revit10k-roi-e5`, 0.8126 @4096).
   `--markup` exists, off by default, not recommended.)
 - **Inference levers are exhausted** (threshold, 2048+4096, synthetic-only ensembles,
   shipped+10k ensemble): none helps on val or HF14. 0.90 needs training changes.
-- **The 10k model underfits multi-family sheets**: its own training sheets score no better
-  than fresh ones (0.807 vs 0.868; 3+ families 0.76-0.79 seen). Fit, not data, is the limit.
+- ~~The 10k model underfits multi-family sheets~~ -- **wrong (2026-10-01)**: on training-style
+  questions it scores 0.948 on its own sheets. The gap was the evaluator asking once per
+  piece (Revit families are split into many slivers). HF14 has ~1 piece per family.
 - **GPU runbook, in order** (one seed, paired vs the published control):
-  0. Fit checks on the 10k ROI recipe: 1+10 epochs instead of 1+5, then `--model swin_s` /
+  0. (Premise withdrawn 2026-10-01; `run_fit_sweep.sh` not needed as written.) Fit checks on the 10k ROI recipe: 1+10 epochs instead of 1+5, then `--model swin_s` /
      `swin_b`; score seen (pool ids 0-399) and fresh sheets by family count
      (`evaluate_refunet_selection.py --local-pool`).
   1. `--roi-ref-mode replace` on the 2k screen (line-only look-alikes, item 3 below).

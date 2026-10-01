@@ -544,3 +544,12 @@ family count: all 0.807 seen vs 0.868 fresh; 1 family 0.933 / 0.984, 2: 0.889 / 
 sheets score no better than fresh ones, so the limit is fit, not data: grouping several
 families on one sheet. Width and `selfattn` lost before; swin_b only ever lost at 744
 steps at 1024 (v6d). Untested at this scale: longer 10k training and swin_s / swin_b.
+**Correction (2026-10-01, GPU check):** this is an evaluation artifact, not underfitting. On
+the same 40 seen sheets, questions drawn the way TRAINING draws them (one family, a random
+instance's box) score 0.948 (1.9% below 0.5; loss 0.076 vs logged 0.069). The evaluator
+asks once per INSTANCE with that instance's box: Revit families split into many pieces
+(>= 5 pieces: 64% of questions, 0.836), slivers give tiny boxes (29% under 32 px at input
+vs 18% in training; under 12 px 0.56), and native-res scoring caps at 0.950. One question
+per family gives 0.886. HF14 is not like that: median 1 piece per family, 7% of families
+>= 5 pieces, no box under 12 px, 77% of boxes >= 64 px at 2048. So the synthetic per-
+instance score is not a proxy for HF14, and the fit sweep's premise is gone.
