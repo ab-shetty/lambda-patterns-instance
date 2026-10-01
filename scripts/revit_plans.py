@@ -2212,7 +2212,7 @@ def compose_floor(image_id, seed, mode_weights):
                     m["base"] = (tone,) * 3
         for m in mats:
             if m["kind"] in TILES and m["kind"] not in ("t_earth", "t_aggregate"):
-                m["sp"] *= k_t
+                m["sp"] *= k_t * (0.6 if m["kind"] in ("t_hbone", "t_woodgrain") else 1.0)
             elif m["kind"] == "basket":
                 m["sp"] *= p3.uniform(0.45, 0.65)
             elif m["kind"] == "dots" and p3.random() < 0.7:
