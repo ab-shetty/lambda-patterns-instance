@@ -2151,12 +2151,17 @@ def compose_floor(image_id, seed, mode_weights):
     if soffit is not None:
         sp = pr.uniform(0.25, 0.45)
         sline = (pr.randint(90, 160),) * 3
+        if v3 and hard_polys and hs.kind == "hatch" and abs(hs.params.get("sp", 0) - sp) < 0.15:
+            sp = hs.params["sp"] + p3.choice([-1, 1]) * p3.uniform(0.15, 0.3)    # soffit boards != deck boards
+            sp = max(0.2, sp)
         for q in G.polys_of(soffit):
             bx = q.bounds
             st = G.Style("hatch", (255, 255, 255), sline, lw_pat,
                          {"sp": sp, "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90}, fam_seed + 31, "soffit")
             _fill(canvas, V.geom(q), st, S, W, H)
             G.cv_outline(canvas, V.geom(q), ink, lw_thin)
+            if v3 and p3.random() < 0.6:                  # fascia / trim line along the edge
+                G.cv_outline(canvas, V.geom(q.buffer(-p3.uniform(0.25, 0.5), join_style=2)), sline, lw_thin * 0.8)
             labelled.append(("soffit", V.geom(q)))
 
     stairs = plan_stairs(rooms, r) if sheet in ("finish", "rendered") and r.random() < 0.45 else []
