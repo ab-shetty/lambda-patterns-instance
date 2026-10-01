@@ -262,8 +262,15 @@ class InstanceSegDataset(Dataset):
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
                  repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0,
-                 legacy_ref_jitter=False):
+                 legacy_ref_jitter=False, ref_sample="family"):
         self.records = records
+        # "instance" (training only): draw the reference instance uniformly over ALL
+        # labelled instances and ask for its family -- the HF14 protocol's question mix,
+        # which asks once per instance, so a wall in 16 pieces is 16 questions, most of
+        # them from slivers. "family" (default, byte-identical) picks a family uniformly
+        # and then one of its instances: on the 500-sheet fit pool the model scored 0.948
+        # on those questions and 0.862 on the protocol's (2026-10-01).
+        self.ref_sample = ref_sample if augment else "family"
         # --domain-random's brightness/contrast jitter used to reach the sheet only: the
         # reference is cropped before it, so in training the right target could look up to
         # ~20 L* lighter or darker than the reference, while at inference both come from one
@@ -371,13 +378,17 @@ class InstanceSegDataset(Dataset):
             _rc = ref_rng if ref_rng is not None else random
             unique_cats = list(dict.fromkeys(cats))
             repeated_cats = [c for c in unique_cats if cats.count(c) >= 2]
-            if (self.augment and repeated_cats and
-                    _rc.random() < self.repeat_reference_prob):
-                target_cat = _rc.choice(repeated_cats)
+            if self.ref_sample == "instance":
+                ref_idx = _rc.randrange(len(cats))
+                target_cat = cats[ref_idx]
             else:
-                target_cat = _rc.choice(unique_cats)
-            cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat], masks)
-            ref_idx = _rc.choice(cand)
+                if (self.augment and repeated_cats and
+                        _rc.random() < self.repeat_reference_prob):
+                    target_cat = _rc.choice(repeated_cats)
+                else:
+                    target_cat = _rc.choice(unique_cats)
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat], masks)
+                ref_idx = _rc.choice(cand)
             if self.augment and self.small_ref_prob > 0 and random.random() < self.small_ref_prob:
                 # Tiny user rectangles are where real plans fail (2026-09-24):
                 # the upscaled crop is blurry and the model matches it by TONE
@@ -693,7 +704,7 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
                    small_ref_prob=0.0, refs_per_image=0, ref_min_side=0,
-                   legacy_ref_jitter=False):
+                   legacy_ref_jitter=False, ref_sample="family"):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -711,7 +722,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   repeat_reference_prob=repeat_reference_prob,
                                   refs_per_image=refs_per_image,
                                   ref_min_side=ref_min_side,
-                                  legacy_ref_jitter=legacy_ref_jitter)
+                                  legacy_ref_jitter=legacy_ref_jitter,
+                                  ref_sample=ref_sample)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,

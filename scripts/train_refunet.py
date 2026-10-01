@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 from refmask2former import build_datasets, collate_fn, load_local_records, load_parquet_records
@@ -113,6 +113,11 @@ def parse_args():
     p.add_argument("--ref-min-side", type=int, default=0,
                    help="training references come only from instances that fit a square this "
                         "wide (px) when the family has one; slivers stay in the target. 0 = off")
+    p.add_argument("--ref-sample", choices=["family", "instance"], default="family",
+                   help="training question: 'family' picks a family, then one of its instances "
+                        "(historical); 'instance' picks any labelled instance uniformly and asks "
+                        "for its family, the HF14 protocol's mix (fragmented families and sliver "
+                        "references weighted as the evaluator weights them)")
     p.add_argument("--early-stop-patience", type=int, default=0,
                    help="stop when the monitored metric has not improved for N "
                         "epochs (0 = off). Saves the tail of a long schedule "
@@ -237,6 +242,8 @@ def main():
     if args.refs_per_image > 0 and (not args.model.startswith("swin") or args.compile
                                     or args.rank_weight > 0 or args.anchor):
         raise SystemExit("--refs-per-image: swin models, eager, no rank loss / anchor")
+    if args.refs_per_image > 0 and args.ref_sample != "family":
+        raise SystemExit("--ref-sample instance applies to the one-question sampler only")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   # CPU: smoke tests only
     records = load_local_records(args.local_data)
     train_ds, val_ds = build_datasets(
@@ -245,17 +252,27 @@ def main():
         domain_random=args.domain_random, realism_aug=args.realism_aug,
         scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
         small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image,
-        ref_min_side=args.ref_min_side, legacy_ref_jitter=args.legacy_ref_jitter)
+        ref_min_side=args.ref_min_side, legacy_ref_jitter=args.legacy_ref_jitter,
+        ref_sample=args.ref_sample)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,
                        "prefetch_factor": args.prefetch_factor}
                       if args.num_workers else {})
     generator = torch.Generator().manual_seed(args.seed)
+    # --ref-sample instance: every labelled instance in the pool equally likely, so sheets
+    # are drawn in proportion to their instance count (the evaluator asks once per
+    # instance); the dataset then picks one of the sheet's instances uniformly.
+    sampler = None
+    if args.ref_sample == "instance":
+        counts = [len(records[j]["annotations"] if not isinstance(records[j]["annotations"], str)
+                      else json.loads(records[j]["annotations"])) for j in train_ds.indices]
+        sampler = WeightedRandomSampler([max(c, 1) for c in counts], num_samples=len(counts),
+                                        replacement=True, generator=generator)
     train_loader = DataLoader(
-        train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
-        num_workers=args.num_workers, pin_memory=device.type == "cuda", collate_fn=collate,
-        generator=generator, **loader_options)
+        train_ds, batch_size=args.batch_size, shuffle=sampler is None, sampler=sampler,
+        drop_last=True, num_workers=args.num_workers, pin_memory=device.type == "cuda",
+        collate_fn=collate, generator=generator, **loader_options)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                             num_workers=0, collate_fn=collate)
     if args.model == "crossattn":
