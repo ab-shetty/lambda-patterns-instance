@@ -413,6 +413,24 @@ def _shade(canvas, geom_px, k, W, H):
     canvas[:] = (canvas.astype(np.float32) * (1.0 - a)).astype(np.uint8)
 
 
+def _shade_soft(canvas, geom_px, k, W, H, blur_px):
+    """_shade with a blurred edge, worked on the shape's bounding box only."""
+    if geom_px.is_empty:
+        return
+    bx0, by0, bx1, by1 = geom_px.bounds
+    x0, y0 = max(0, int(bx0) - 3 * blur_px - 2), max(0, int(by0) - 3 * blur_px - 2)
+    x1, y1 = min(W, int(bx1) + 3 * blur_px + 2), min(H, int(by1) + 3 * blur_px + 2)
+    if x1 <= x0 or y1 <= y0:
+        return
+    m = np.zeros((y1 - y0, x1 - x0), np.uint8)
+    for q in G.polys_of(affinity.translate(geom_px, -x0, -y0)):
+        m = np.maximum(m, G.poly_mask(q, x1 - x0, y1 - y0))
+    ks = 2 * blur_px + 1
+    a = (cv2.GaussianBlur(m, (ks, ks), 0).astype(np.float32) / 255.0 * (1.0 - k))[..., None]
+    sub = canvas[y0:y1, x0:x1]
+    sub[:] = (sub.astype(np.float32) * (1.0 - a)).astype(np.uint8)
+
+
 def _annotations(labelled, S, W, H, image_id, mode, colour):
     fam_ids, anns = {}, []
     min_area = max(400, (0.02 * S) ** 2 * 100)
@@ -1692,9 +1710,24 @@ def _ell(cx, cy, rx, ry):
     return affinity.scale(Point(cx, cy).buffer(1.0, 24), rx, ry)
 
 
-def _room_furniture(name, x0, y0, x1, y1, pr):
+def _room_furniture(name, x0, y0, x1, y1, pr, clip=None):
     """Furniture of one room in plan, as (polygon in ft, 'rug' | 'item' | 'line') pieces, in a frame
-    flipped at random so pieces sit against different walls; laid along whichever axis fits."""
+    flipped at random so pieces sit against different walls; laid along whichever axis fits. With
+    `clip` (the room, less stairs), the best of a few random layouts by how many items fit."""
+    if clip is None:
+        return _room_furniture0(name, x0, y0, x1, y1, pr)
+    best, best_n = [], -1
+    for _ in range(5):
+        out = _room_furniture0(name, x0, y0, x1, y1, pr)
+        n = sum(1 for q, k in out if k == "item" and q.within(clip))
+        if n > best_n:
+            best, best_n = out, n
+        if out and n == sum(1 for q, k in out if k == "item"):
+            break
+    return best
+
+
+def _room_furniture0(name, x0, y0, x1, y1, pr):
     w, h = x1 - x0, y1 - y0
     if pr.random() < 0.5:
         out = _room_furniture1(name, x0, y0, x1, y1, pr)
@@ -1746,14 +1779,32 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
             R(cx - bw / 2 - 1.5, 1.2, cx + bw / 2 + 1.5, bl + 2.5, "rug")
         R(cx - bw / 2, 0.3, cx + bw / 2, 0.3 + bl, rad=0.25)                         # mattress
         R(cx - bw / 2 - 0.1, 0.15, cx + bw / 2 + 0.1, 0.45, "line")                   # headboard
-        R(cx - bw / 2 + 0.3, 0.7, cx - 0.15, 1.9, "line", rad=0.3)                    # pillows
-        R(cx + 0.15, 0.7, cx + bw / 2 - 0.3, 1.9, "line", rad=0.3)
+        npil = 3 if bw > 6 and pr.random() < 0.4 else 2                               # pillows
+        pw_ = (bw - 0.6) / npil
+        for k in range(npil):
+            R(cx - bw / 2 + 0.3 + k * pw_ + 0.08, 0.7, cx - bw / 2 + 0.3 + (k + 1) * pw_ - 0.08,
+              pr.uniform(1.6, 2.0), "line", rad=pr.choice([0.15, 0.3]))
         fold = 0.3 + bl * pr.uniform(0.32, 0.42)
-        P([(cx - bw / 2, fold), (cx + bw / 2, fold), (cx + bw / 2, fold + 0.6), (cx - bw / 2, fold + 0.6)], "line")
-        P([(cx + bw / 2 - 1.6, 0.3 + bl), (cx + bw / 2, 0.3 + bl - 1.6), (cx + bw / 2, 0.3 + bl)], "line")   # turned corner
+        if pr.random() < 0.8:
+            P([(cx - bw / 2, fold), (cx + bw / 2, fold), (cx + bw / 2, fold + 0.6), (cx - bw / 2, fold + 0.6)], "line")
+        cs = pr.random()
+        if cs < 0.45:
+            P([(cx + bw / 2 - 1.6, 0.3 + bl), (cx + bw / 2, 0.3 + bl - 1.6), (cx + bw / 2, 0.3 + bl)], "line")   # turned corner
+        elif cs < 0.7:                                                                  # quilt stitching
+            for k in range(1, 4):
+                R(cx - bw / 2, fold + 0.6 + k * (bl - fold) / 4, cx + bw / 2, fold + 0.6 + k * (bl - fold) / 4 + 0.01, "line")
+        elif cs < 0.85:                                                                 # throw across the foot
+            R(cx - bw / 2 - 0.1, bl - 1.2, cx + bw / 2 + 0.1, bl - 0.3, "line")
+        ns = pr.uniform(1.3, 2.0)
+        nst = pr.random()
         for sx in (-1, 1):
-            nx = cx + sx * (bw / 2 + 1.0)
-            R(nx - 0.8, 0.3, nx + 0.8, 1.8); E(nx, 1.05, 0.35, 0.35, "line")           # nightstand + lamp
+            nx = cx + sx * (bw / 2 + 0.15 + ns / 2)
+            R(nx - ns / 2, 0.3, nx + ns / 2, 0.3 + ns * pr.uniform(0.8, 1.0))          # nightstand
+            if nst < 0.5:
+                E(nx, 0.3 + ns / 2, 0.3, 0.3, "line")                                    # lamp
+            elif nst < 0.75:
+                P([(nx - 0.3, 0.3 + ns / 2 - 0.3), (nx + 0.3, 0.3 + ns / 2 + 0.3), (nx, 0.3 + ns / 2),
+                   (nx - 0.3, 0.3 + ns / 2 + 0.3), (nx + 0.3, 0.3 + ns / 2 - 0.3), (nx, 0.3 + ns / 2)], "line")
         if h > 12 and pr.random() < 0.7:
             R(w / 2 - 2.5, h - 2.0, w / 2 + 2.5, h - 0.3)
             for k in range(1, 3):
@@ -1778,7 +1829,7 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
         if pr.random() < 0.6:
             R(cx - 2.0, cy - 1.0, cx + 2.0, cy + 1.0, rad=0.1)
         else:
-            E(cx, cy, 1.6, 1.6)
+            E(cx, cy, 1.2, 1.2)
         if "DINING" in name or "GREAT" in name:
             dx = w * 0.18 if cx > w / 2 else w * 0.82
             if 3.5 < dx < w - 3.5:
@@ -1825,7 +1876,7 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
         R(0.2, h * 0.3, 1.4, h * 0.3 + 5)
         for k in range(1, 4):
             R(0.2, h * 0.3 + k * 1.25, 1.4, h * 0.3 + k * 1.25 + 0.01, "line")
-    elif name.startswith("GARAGE") and w > 10 and h > 16:
+    elif "GARAGE" in name and w > 10 and h > 16:
         for k in range(1 if w < 20 else 2):
             cx = w * (k + 0.5) / (1 if w < 20 else 2)
             R(cx - 3.0, 1.5, cx + 3.0, 16.0, rad=1.0)
@@ -1879,15 +1930,18 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
         if skip and kind == "line" or clip is not None and not q.within(clip):
             continue
         g = V.geom(q)
-        if kind == "rug":
+        if kind == "rug":           # a rug covers the floor pattern: light fill, border band
+            if solid:
+                G.cv_fill(canvas, g, (pr.randint(236, 250),) * 3)
+                G.cv_outline(canvas, V.geom(q.buffer(-0.35, join_style=2)), G.mix(ink, (255, 255, 255), 0.55), lw * 0.6)
             G.cv_outline(canvas, g, G.mix(ink, (255, 255, 255), 0.35), lw * 0.8)
         elif kind == "line":
             G.cv_outline(canvas, g, ink, lw * 0.8)
         else:
             if solid:
                 if solid == "shadow":
-                    d = 0.25 * V.S
-                    _shade(canvas, affinity.translate(g, d, d).difference(g), 0.82, W, H)
+                    d = 0.2 * V.S
+                    _shade_soft(canvas, affinity.translate(g, d, d).difference(g), 0.85, W, H, max(1, int(0.12 * V.S)))
                 G.cv_fill(canvas, g, (pr.randint(246, 255),) * 3)
             G.cv_outline(canvas, g, ink, lw)
 
@@ -1947,6 +2001,8 @@ def compose_floor(image_id, seed, mode_weights):
                 nm = p3.choice(opts) if opts and nm != "BATH" else f"{nm} {k}"
             seen.add(nm)
             rm["name"] = nm
+            if "GARAGE" in nm:          # "2-CAR GARAGE" was zoned a bedroom and took the bedroom finish
+                rm["zone"] = "garage"
     if v2 and pr.random() < 0.15:
         sheet = "ceiling"                       # reflected ceiling / electrical plan (HF14 12)
 
@@ -1962,6 +2018,11 @@ def compose_floor(image_id, seed, mode_weights):
             fx = mb.x0 + house["front_door_u"] * mb.w
             ww = r.uniform(3, 5.5)
             pieces.append(box(fx - ww / 2, y0f - r.uniform(6, 16), fx + ww / 2, y0f))
+            if v3:      # run the walk on to the wall where the footprint is notched (no floating strip)
+                bridge = box(fx - ww / 2, y0f - 0.1, fx + ww / 2, y1f).difference(foot)
+                top = [q for q in G.polys_of(bridge) if q.bounds[1] <= y0f]
+                if top:
+                    pieces.append(top[0])
         if r.random() < 0.35:
             dd, dl = r.uniform(5, 10), r.uniform(10, 0.8 * (y1f - y0f) + 10)
             yy = r.uniform(y0f, max(y0f, y1f - dl + 6))
@@ -2068,6 +2129,8 @@ def compose_floor(image_id, seed, mode_weights):
                              st.seed, "hardscape")
             _fill(canvas, V.geom(p), st, S, W, H)
             G.cv_outline(canvas, V.geom(p), ink, lw_thin)
+            if v3 and st.kind == "hatch" and p3.random() < 0.7:          # rim / edge board
+                G.cv_outline(canvas, V.geom(p.buffer(-0.6, join_style=2)), ink, lw_thin * 0.8)
             labelled.append(("hardscape", V.geom(p)))
         if v3:      # patio furniture on the paving (HF14 0), inside the label as annotators draw it
             for p in hard_polys:
@@ -2242,7 +2305,13 @@ def compose_floor(image_id, seed, mode_weights):
         if sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)):
             off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
             sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
-            _shade(canvas, V.geom(sh), r.uniform(0.7, 0.85), W, H)
+            k_sh = r.uniform(0.7, 0.85)
+            if v3:
+                if p3.random() < 0.65:                       # cast outside the building only
+                    sh = affinity.translate(foot, *off).difference(foot)
+                _shade_soft(canvas, V.geom(sh), k_sh, W, H, max(1, int(p3.uniform(0.15, 0.4) * S)))
+            else:
+                _shade(canvas, V.geom(sh), k_sh, W, H)
         wg = V.geom(lay["walls"])
         if wall_look == "grey":
             _mfill(canvas, wg, (r.randint(80, 150),) * 3, W, H)
@@ -2283,7 +2352,7 @@ def compose_floor(image_id, seed, mode_weights):
             clip = rm["inner"].buffer(0.05)
             if stair_u is not None:
                 clip = clip.difference(stair_u.buffer(0.3))
-            pieces = _room_furniture(rm["name"], x0, y0, x1, y1, p3)
+            pieces = _room_furniture(rm["name"], x0, y0, x1, y1, p3, clip)
             if sheet == "ceiling":          # the floor plan ghosted under the RCP (HF14 12)
                 _draw_furniture(canvas, V, [q for q in pieces if q[1] != "rug"],
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
