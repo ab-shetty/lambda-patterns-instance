@@ -6,6 +6,9 @@ references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
 ## Current state (2026-10-01)
+- **Default changed 2026-10-01: `generate_synthetic_fc.py --cedar-shingle 0.5`.** Half of shingle
+  styles are drawn as cedar shingles (vertical joints dominant, like HF14 25/27) instead of
+  brick-like courses. Pools generated before this commit reproduce only with `--cedar-shingle 0`.
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).
