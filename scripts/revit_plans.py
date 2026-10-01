@@ -1686,6 +1686,48 @@ def _footprint_notch(foot, pr):
     return best.buffer(-0.15, join_style=2) if pr.random() < 0.5 else best
 
 
+def _per_face(band, foot):
+    """Split a band outside `foot` into one piece per footprint edge, mitred along the corner
+    bisectors; yields (piece, edge angle in degrees)."""
+    coords = list(foot.exterior.coords)[:-1]
+    n = len(coords)
+    out_n = []
+    for k in range(n):
+        (ax, ay), (bx, by) = coords[k], coords[(k + 1) % n]
+        L = math.hypot(bx - ax, by - ay) or 1.0
+        nx, ny = (by - ay) / L, -(bx - ax) / L
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        if foot.contains(Point(mx + 0.05 * nx, my + 0.05 * ny)):
+            nx, ny = -nx, -ny
+        out_n.append((nx, ny))
+    R = 6.0
+    done = None
+    for k in range(n):
+        a, b = coords[k], coords[(k + 1) % n]
+        n0, n1, n2 = out_n[k - 1], out_n[k], out_n[(k + 1) % n]
+
+        def miter(p, q):
+            mx, my = p[0] + q[0], p[1] + q[1]
+            d = 1.0 + p[0] * q[0] + p[1] * q[1]
+            return (mx / d, my / d) if d > 0.2 else (q[0], q[1])
+        ma, mb = miter(n0, n1), miter(n1, n2)
+        quad = Polygon([a, b, (b[0] + R * mb[0], b[1] + R * mb[1]), (a[0] + R * ma[0], a[1] + R * ma[1])]).buffer(0)
+        piece = band.intersection(quad)
+        if done is not None:
+            piece = piece.difference(done)
+        if piece.is_empty or piece.area < 0.5:
+            continue
+        done = piece if done is None else unary_union([done, piece])
+        ang = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180
+        for q in G.polys_of(piece):
+            yield q, ang
+    rest = band.difference(done) if done is not None else band
+    for q in G.polys_of(rest):
+        if q.area > 0.5:
+            bx = q.bounds
+            yield q, 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90
+
+
 def _soffit_band(foot, pr):
     """The eave overhang drawn on a ceiling plan: a strip 1-2.5 ft outside the walls, the
     whole ring or the stretches along some sides (an L on HF14 12)."""
@@ -2154,11 +2196,18 @@ def compose_floor(image_id, seed, mode_weights):
         if v3 and hard_polys and hs.kind == "hatch" and abs(hs.params.get("sp", 0) - sp) < 0.15:
             sp = hs.params["sp"] + p3.choice([-1, 1]) * p3.uniform(0.15, 0.3)    # soffit boards != deck boards
             sp = max(0.2, sp)
+        perp = p3.random() < 0.4               # v3: boards across the band rather than along it
         for q in G.polys_of(soffit):
             bx = q.bounds
             st = G.Style("hatch", (255, 255, 255), sline, lw_pat,
                          {"sp": sp, "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90}, fam_seed + 31, "soffit")
-            _fill(canvas, V.geom(q), st, S, W, H)
+            if v3:      # one board direction per face of the house, mitred at the corners
+                for piece, ang in _per_face(q, foot):
+                    a2 = (ang + 90) % 180 if perp else ang
+                    _fill(canvas, V.geom(piece), G.Style("hatch", (255, 255, 255), sline, lw_pat, {"sp": sp, "angle": a2},
+                                                         fam_seed + 31, "soffit"), S, W, H)
+            else:
+                _fill(canvas, V.geom(q), st, S, W, H)
             G.cv_outline(canvas, V.geom(q), ink, lw_thin)
             if v3 and p3.random() < 0.6:                  # fascia / trim line along the edge
                 G.cv_outline(canvas, V.geom(q.buffer(-p3.uniform(0.25, 0.5), join_style=2)), sline, lw_thin * 0.8)
