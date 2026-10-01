@@ -1653,6 +1653,19 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
     elif k == "concrete":
         G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
         G._stipple(layer, x0, y0, S, m["density"] * 0.15, c, m["seed"] + 1, r_px=2)
+        if m.get("tri"):                    # AR-CONC aggregate: small open triangles, cell-seeded
+            cell = 2.0 * S
+            hh, ww = layer.shape[:2]
+            for cy in range(math.floor(y0 / cell), math.ceil((y0 + hh) / cell) + 1):
+                for cx in range(math.floor(x0 / cell), math.ceil((x0 + ww) / cell) + 1):
+                    rr = random.Random(m["seed"] * 7919 + cx * 104729 + cy * 1299709)
+                    for _ in range(rr.randint(0, 3)):
+                        px, py = cx * cell + rr.random() * cell - x0, cy * cell + rr.random() * cell - y0
+                        sz = rr.uniform(0.12, 0.3) * S
+                        a0 = rr.uniform(0, 2 * math.pi)
+                        pts = np.array([[px + sz * math.cos(a0 + k2 * 2.094), py + sz * math.sin(a0 + k2 * 2.094)]
+                                        for k2 in range(3)], np.int32)
+                        cv2.polylines(layer, [pts], True, G.bgr(c), max(1, int(lw * 0.8)), cv2.LINE_AA)
     elif k == "dots":
         _dotgrid(layer, x0, y0, S, m["sp"], max(1.2, 0.07 * S), c, m["fill"], lw, m.get("jit", 0.0), m["seed"])
     elif k == "basket":
@@ -2157,6 +2170,8 @@ def compose_floor(image_id, seed, mode_weights):
                 m["sp"] *= p3.uniform(0.45, 0.65)
             elif m["kind"] == "dots" and p3.random() < 0.7:
                 m["jit"] = p3.uniform(0.12, 0.35)
+            elif m["kind"] == "concrete":
+                m["tri"] = p3.random() < 0.7
             m["line"] = G.mix(m["line"], m["base"], k_l)
 
     # ---- layout
@@ -2281,7 +2296,12 @@ def compose_floor(image_id, seed, mode_weights):
             side = p3.random() < 0.5
             fin_rooms = [rm for rm in rooms if (rm["cell"].centroid.y >= cut) == side and rm["zone"] != "garage"]
             if fin_rooms and len(fin_rooms) < len(rooms):
-                crawl = crawl.difference(unary_union([rm["cell"] for rm in fin_rooms]).buffer(lay["t_int"]))
+                crawl = foot.buffer(-lay["t_ext"], join_style=2)          # fill runs to the wall centre lines
+                if slab_rooms:
+                    crawl = crawl.difference(unary_union([rm["cell"] for rm in rooms if rm["zone"] == "garage"])
+                                             .buffer(lay["t_int"] / 2, join_style=2))
+                crawl = crawl.difference(unary_union([rm["cell"] for rm in fin_rooms]).buffer(lay["t_int"] / 2,
+                                                                                              join_style=2))
                 crawl = unary_union([q for q in G.polys_of(crawl) if q.area > 40])
             else:
                 fin_rooms = []
@@ -2301,7 +2321,7 @@ def compose_floor(image_id, seed, mode_weights):
                 sx_row = spx * p3.uniform(0.85, 1.2)
                 xx = px0 + p3.uniform(0.4, 1.0) * sx_row
                 while xx < px1 - 1:
-                    fr = foot_r * p3.choice([1.0, 1.0, 1.0, 1.35])          # bigger footings under point loads
+                    fr = foot_r
                     q = Point(xx, yy).buffer(fr, 20) if round_p else box(xx - fr, yy - fr, xx + fr, yy + fr)
                     if crawl.buffer(-0.3).contains(q):
                         piers.append(q)
@@ -2321,6 +2341,8 @@ def compose_floor(image_id, seed, mode_weights):
             cm = floor_material(ck, r, fam_seed + 21, colour, r.choice([0, 90]))
             if v3 and ck == "dots" and p3.random() < 0.7:
                 cm["jit"] = p3.uniform(0.12, 0.35)
+            if v3 and ck == "concrete":
+                cm["tri"] = p3.random() < 0.7
             if v3:
                 cm["line"] = G.mix(cm["line"], cm["base"], p3.uniform(0.25, 0.6))
             draw_floor(canvas, V.geom(crawl), cm, S, W, H, lw_pat)
@@ -2335,6 +2357,8 @@ def compose_floor(image_id, seed, mode_weights):
             if ck != "blank":
                 _separate(sm["kind"], sm, sm["base"], [(cm["kind"], cm, cm["base"])])
             reg = unary_union(slab_rooms)
+            if v3 and sm["kind"] == "concrete":
+                sm["tri"] = p3.random() < 0.7
             draw_floor(canvas, V.geom(reg), sm, S, W, H, lw_pat)
             if v3:
                 G.cv_outline(canvas, V.geom(reg), ink, lw_thin)                # slab edge
@@ -2382,6 +2406,10 @@ def compose_floor(image_id, seed, mode_weights):
         if v3 and fin_rooms:            # the finished rooms' walls and doors, as on a floor plan
             fz = unary_union([rm["cell"] for rm in fin_rooms]).buffer(0.3, join_style=2)
             fw = unary_union([q for q in G.polys_of(lay["walls"].intersection(fz)) if q.area > 6 * lay["t_int"] ** 2 + 2])
+            for d in lay["doors"]:      # doors of the finished rooms
+                dc = Point(d[1], d[2]) if d[0] == "v" else Point(d[2], d[1])
+                if fz.contains(dc):
+                    _draw_door(canvas, V, d, lay["t_ext"], lay["t_int"], ink, lw_thin, S, p3)
             fw_look = p3.random() < 0.5
             _mfill(canvas, V.geom(fw), (p3.randint(0, 120),) * 3 if fw_look else (255, 255, 255), W, H)
             G.cv_outline(canvas, V.geom(fw), ink, lw_thin if fw_look else lw_heavy * 0.8)
