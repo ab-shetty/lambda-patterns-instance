@@ -1636,6 +1636,8 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
     layer = np.empty((y1 - y0, x1 - x0, 3), np.uint8)
     layer[:] = G.bgr(m["base"])
     k, c = m["kind"], m["line"]
+    lx0, ly0 = x0, y0
+    x0, y0 = x0 + m.get("ox", 0.0), y0 + m.get("oy", 0.0)     # v3: pattern origin per room
     if k in ("plank_lines", "joists", "hatch45"):
         G._dlines(layer, x0, y0, S, m["sp"], m["ang"], c, lw)
     elif k == "plank":
@@ -1659,6 +1661,7 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
         G._ashlar(layer, x0, y0, S, m["unit"], c, lw, m["seed"])
     elif k in TILES:
         hatch_layer(layer, x0, y0, S, k, m["sp"], c, m.get("ang", 0) if k in ("t_hbone", "t_earth", "t_woodgrain") else 0)
+    x0, y0 = lx0, ly0
     mask = G.poly_mask(affinity.translate(poly_px, -x0, -y0), x1 - x0, y1 - y0)
     G.blend_mask(canvas[y0:y1, x0:x1], layer, mask)
 
@@ -1954,8 +1957,11 @@ def _dining(cx, cy, pr):
     if pr.random() < 0.3:
         out.append((_ell(cx, cy, 2.2, 2.2), "item"))
         for a in range(0, 360, 60):
-            out.append((box(cx + 3.0 * math.cos(math.radians(a)) - 0.75, cy + 3.0 * math.sin(math.radians(a)) - 0.75,
-                            cx + 3.0 * math.cos(math.radians(a)) + 0.75, cy + 3.0 * math.sin(math.radians(a)) + 0.75), "item"))
+            ux, uy = math.cos(math.radians(a)), math.sin(math.radians(a))
+            ch = box(-0.75, -0.75, 0.75, 0.75).buffer(-0.15).buffer(0.15, 6)
+            bk = box(0.5, -0.75, 0.75, 0.75)                                         # back, away from the table
+            for g_, k_ in ((ch, "item"), (bk, "line")):
+                out.append((affinity.translate(affinity.rotate(g_, a, origin=(0, 0)), cx + 3.0 * ux, cy + 3.0 * uy), k_))
         return out
     tw, th = pr.choice([(6.0, 3.3), (7.5, 3.5), (5.0, 3.0)])
     out.append((box(cx - tw / 2, cy - th / 2, cx + tw / 2, cy + th / 2), "item"))
@@ -1973,10 +1979,14 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
     """solid: furniture blocks filled white with a soft drop shadow (rendered sheets, HF14 0);
     otherwise outlines only, so the floor pattern shows through."""
     skip = False
+    placed = []
     for q, kind in pieces:
         if kind == "item":              # an item's detail lines follow it: drop them with it
-            skip = clip is not None and not q.within(clip)
-        if skip and kind == "line" or clip is not None and not q.within(clip):
+            skip = clip is not None and not q.within(clip) or \
+                any(q.intersection(o).area > 0.02 * min(q.area, o.area) for o in placed)
+            if not skip:
+                placed.append(q)
+        if skip and kind == "line" or clip is not None and not q.within(clip) or kind == "item" and skip:
             continue
         g = V.geom(q)
         if kind == "rug":           # a rug covers the floor pattern: light fill, border band
@@ -2189,7 +2199,7 @@ def compose_floor(image_id, seed, mode_weights):
                              st.seed, "hardscape")
             _fill(canvas, V.geom(p), st, S, W, H)
             G.cv_outline(canvas, V.geom(p), ink, lw_thin)
-            if v3 and st.kind == "hatch" and p3.random() < 0.7:          # rim / edge board
+            if v3 and st.kind == "hatch" and p3.random() < 0.3:          # rim / edge board
                 G.cv_outline(canvas, V.geom(p.buffer(-0.6, join_style=2)), ink, lw_thin * 0.8)
             labelled.append(("hardscape", V.geom(p)))
         if v3:      # patio furniture on the paving (HF14 0), inside the label as annotators draw it
@@ -2242,7 +2252,12 @@ def compose_floor(image_id, seed, mode_weights):
             reg = unary_union(polys)
             if stair_u is not None:
                 reg = reg.difference(stair_u)
-            draw_floor(canvas, V.geom(reg), m, S, W, H, lw_pat)
+            if v3 and p3.random() < 0.7:                 # each room starts its own tile / plank layout
+                for q in G.polys_of(reg):
+                    mq = dict(m, ox=p3.uniform(0, 3) * S, oy=p3.uniform(0, 3) * S)
+                    draw_floor(canvas, V.geom(q), mq, S, W, H, lw_pat)
+            else:
+                draw_floor(canvas, V.geom(reg), m, S, W, H, lw_pat)
             if sheet == "finish":                        # patterned finish => always labelled
                 labelled.append((f"floor{n}", V.geom(reg)))
         if v3 and p3.random() < 0.7:                     # threshold lines across the openings
@@ -2379,8 +2394,9 @@ def compose_floor(image_id, seed, mode_weights):
         wall_look = r.choices(["grey", "black", "double"], weights=[50, 30, 20])[0]
         if v3 and wall_look == "double" and p3.random() < 0.75:     # cut walls read heavier than everything else
             wall_look = p3.choice(["grey", "black", "hatch"])
-        if sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)) or \
-                (v3 and sheet == "finish" and p3.random() < 0.3):
+        wall_sh = sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)) or \
+            (v3 and sheet == "finish" and p3.random() < 0.3)
+        if wall_sh:
             off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
             sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
             k_sh = r.uniform(0.7, 0.85)
@@ -2393,7 +2409,7 @@ def compose_floor(image_id, seed, mode_weights):
         wg = V.geom(lay["walls"])
         if wall_look == "grey":
             _mfill(canvas, wg, (r.randint(80, 150),) * 3, W, H)
-            G.cv_outline(canvas, wg, ink, lw_thin)
+            G.cv_outline(canvas, wg, ink, lw_thin * p3.uniform(1.3, 2.2) if v3 else lw_thin)
         elif wall_look == "black":
             _mfill(canvas, wg, (r.randint(0, 35),) * 3, W, H)
         elif wall_look == "hatch":                  # v3: diagonal poché hatch, heavy outline
@@ -2436,7 +2452,7 @@ def compose_floor(image_id, seed, mode_weights):
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
             elif p3.random() < 0.9:
                 _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
-                                "shadow" if sheet == "rendered" and p3.random() < 0.75 else True,
+                                "shadow" if wall_sh else True,
                                 W, H, p3, clip=clip)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
