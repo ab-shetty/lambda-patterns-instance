@@ -1848,11 +1848,15 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
             for dx, dy in [(0.7, 0.6), (1.7, 0.6), (0.7, 1.5), (1.7, 1.5)]:
                 E(rx + dx, dy, 0.36, 0.36, "line"); E(rx + dx, dy, 0.2, 0.2, "line")
         R(w - 3.2, 0, w - 0.2, 2.6)                                                      # fridge
+        out.append((LineString([tr(0, 1.15), tr(w, 1.15)]).buffer(0.02), "line"))      # uppers (projected)
         R(w - 3.2, 2.35, w - 0.2, 2.6, "line")                                          # fridge door
         if w > 12 and h > 11:
             ix, iy = w * 0.55, h * 0.6
-            R(ix - 3.5, iy - 1.5, ix + 3.5, iy + 1.5)
-            R(ix - 3.3, iy - 1.3, ix + 3.3, iy + 1.3, "line")
+            iw = pr.uniform(2.8, 4.2)
+            R(ix - iw, iy - 1.5, ix + iw, iy + 1.5)
+            R(ix - iw, iy + 0.4, ix + iw, iy + 0.41, "line")                               # overhang
+            if pr.random() < 0.5:
+                R(ix - 1.0, iy - 1.2, ix + 0.3, iy - 0.2, "line", rad=0.15)                 # prep sink
             for k in range(3):
                 E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.6, 0.6); E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.35, 0.35, "line")
     elif any(k in name for k in ("BATH", "POWDER")) and w > 4.5 and h > 4.5:
@@ -1878,8 +1882,11 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
             R(0.2, h * 0.3 + k * 1.25, 1.4, h * 0.3 + k * 1.25 + 0.01, "line")
     elif "GARAGE" in name and w > 10 and h > 16:
         for k in range(1 if w < 20 else 2):
-            cx = w * (k + 0.5) / (1 if w < 20 else 2)
-            R(cx - 3.0, 1.5, cx + 3.0, 16.0, rad=1.0)
+            cx = w * (k + 0.5) / (1 if w < 20 else 2) + pr.uniform(-0.8, 0.8)
+            if k == 1 and pr.random() < 0.3:
+                continue                                                                    # one bay empty
+            cl, cw = pr.uniform(14.0, 16.5), pr.uniform(2.8, 3.2)
+            R(cx - cw, 1.5, cx + cw, 1.5 + cl, rad=pr.uniform(0.7, 1.2))
             P([(cx - 2.6, 5.0), (cx + 2.6, 5.0), (cx + 2.2, 6.6), (cx - 2.2, 6.6)], "line")
             R(cx - 2.2, 6.6, cx + 2.2, 11.6, "line")
             P([(cx - 2.2, 11.6), (cx + 2.2, 11.6), (cx + 2.5, 12.8), (cx - 2.5, 12.8)], "line")
@@ -2079,12 +2086,12 @@ def compose_floor(image_id, seed, mode_weights):
     if v3:
         # herringbone / basket / wood-grain tiles at material scale (planks ~0.3-0.5 ft, not 2 ft), and
         # floor linework a lighter pen than the walls; one factor for all, so families stay apart
-        k_t, k_l = p3.uniform(0.3, 0.5), p3.uniform(0.15, 0.45)
+        k_t, k_l = p3.uniform(0.3, 0.5), p3.uniform(0.3, 0.65)     # real floors are soft (HF14 0, 7, 12)
         for m in {id(m): m for m in zone_mat.values() if m is not None}.values():
             if m["kind"] in TILES and m["kind"] not in ("t_earth", "t_aggregate"):
                 m["sp"] *= k_t
             elif m["kind"] == "basket":
-                m["sp"] *= 0.7
+                m["sp"] *= p3.uniform(0.45, 0.65)
             elif m["kind"] == "dots" and p3.random() < 0.7:
                 m["jit"] = p3.uniform(0.12, 0.35)
             m["line"] = G.mix(m["line"], m["base"], k_l)
@@ -2173,6 +2180,9 @@ def compose_floor(image_id, seed, mode_weights):
             draw_floor(canvas, V.geom(reg), m, S, W, H, lw_pat)
             if sheet == "finish":                        # patterned finish => always labelled
                 labelled.append((f"floor{n}", V.geom(reg)))
+        if v3 and p3.random() < 0.7:                     # threshold lines across the openings
+            for (i, j, op) in lay["openings"]:
+                G.cv_outline(canvas, V.geom(op), ink, lw_thin * 0.7)
     elif sheet == "underfloor":
         # crawlspace / slab / framing plan (real HF14 7, Gemini under-floor sheets)
         slab_rooms = [rm["inner"] for rm in rooms if rm["zone"] == "garage"]
@@ -2231,6 +2241,8 @@ def compose_floor(image_id, seed, mode_weights):
             cm = floor_material(ck, r, fam_seed + 21, colour, r.choice([0, 90]))
             if v3 and ck == "dots" and p3.random() < 0.7:
                 cm["jit"] = p3.uniform(0.12, 0.35)
+            if v3:
+                cm["line"] = G.mix(cm["line"], cm["base"], p3.uniform(0.25, 0.6))
             draw_floor(canvas, V.geom(crawl), cm, S, W, H, lw_pat)
             lab = crawl.difference(unary_union(piers)) if piers else crawl
             labelled.append(("crawl", V.geom(lab)))
@@ -2358,7 +2370,7 @@ def compose_floor(image_id, seed, mode_weights):
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
             elif p3.random() < 0.9:
                 _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
-                                "shadow" if sheet == "rendered" and p3.random() < 0.75 else p3.random() < 0.8,
+                                "shadow" if sheet == "rendered" and p3.random() < 0.75 else True,
                                 W, H, p3, clip=clip)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
