@@ -2232,7 +2232,9 @@ def compose_floor(image_id, seed, mode_weights):
         if v3 and hard_polys and hs.kind == "hatch" and abs(hs.params.get("sp", 0) - sp) < 0.15:
             sp = hs.params["sp"] + p3.choice([-1, 1]) * p3.uniform(0.15, 0.3)    # soffit boards != deck boards
             sp = max(0.2, sp)
-        perp = p3.random() < 0.4               # v3: boards across the band rather than along it
+        perp = p3.random() < 0.65              # v3: boards across the band rather than along it
+        if v3:
+            sp = p3.uniform(0.15, 0.3)          # T&G boards: dense (HF14 12)
         for q in G.polys_of(soffit):
             bx = q.bounds
             st = G.Style("hatch", (255, 255, 255), sline, lw_pat,
@@ -2454,6 +2456,17 @@ def compose_floor(image_id, seed, mode_weights):
         else:
             _mfill(canvas, wg, (255, 255, 255), W, H)
             G.cv_outline(canvas, wg, ink, lw_heavy * 0.8 if v3 else lw_thin * 1.2)
+        if v3 and len(rooms) >= 3 and p3.random() < 0.4:
+            # existing vs new construction: some rooms' walls in a second rendering (HF14 12 mixes them)
+            sub = p3.sample(rooms, max(1, len(rooms) // p3.randint(2, 4)))
+            alt = lay["walls"].intersection(unary_union([rm["cell"] for rm in sub]).buffer(0.3, join_style=2))
+            ag = V.geom(alt)
+            if wall_look in ("grey", "black", "hatch"):
+                _mfill(canvas, ag, (255, 255, 255), W, H)
+                G.cv_outline(canvas, ag, ink, lw_thin * 1.1)
+            else:
+                _mfill(canvas, ag, (p3.randint(90, 160),) * 3, W, H)
+                G.cv_outline(canvas, ag, ink, lw_thin)
         t = lay["t_ext"]
         win_style = r.choices(["3line", "2line", "sill"], weights=[45, 30, 25])[0]
         for (o, pos, c, w) in lay["windows"]:
