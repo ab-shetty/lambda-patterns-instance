@@ -47,6 +47,10 @@ Rounds 13–18 sit at 88–93% vs sheet 0 and 92–95% vs sheet 12. Most of the 
 
 Best so far: 85% against sheet 0 (rounds 5 and 6, rendered and finish sheets). No judge has called the wrong image yet.
 
+## Calibration: real vs real
+
+The same prompt was run on two pairs of **real** sheets, with the judges still told one was synthetic: sheet 7 vs 0 got 65% and sheet 7 vs 12 got 60%. Both judges called sheet 7 "synthetic" and wrote the same kinds of tells, e.g. "uniform hatch clipped to a polygon" and "flat line-weight hierarchy". So "can't tell" for these judges is about 60–65% confidence, not 50%. The 88–93% plateau is a real gap.
+
 ## What v3 changed (all in `scripts/revit_plans.py`)
 
 - **Framing.** 80% of sheets are cropped to the drawing plus its dimension and grid ring, sometimes cutting through the edges. Real floor plans fill about 75% of the frame; ours filled 47%.

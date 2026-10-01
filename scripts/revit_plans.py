@@ -1892,6 +1892,14 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
             dx = w * 0.18 if cx > w / 2 else w * 0.82
             if 3.5 < dx < w - 3.5:
                 out.extend(_dining(*tr(dx, h * 0.5), pr))
+        if pr.random() < 0.6:
+            R(cx - 2.5, cy - 4.6 - 1.4, cx + 2.5, cy - 4.6 - 0.2) if cy - 6.0 > 0.2 else None    # TV console
+        if pr.random() < 0.6:
+            pc = (pr.choice([1.3, w - 1.3]), pr.choice([1.3, h - 1.3]))
+            E(*pc, 0.9, 0.9)
+            for a in range(0, 360, 45):                                                       # potted plant
+                out.append((LineString([tr(*pc), tr(pc[0] + 0.8 * math.cos(math.radians(a)),
+                                                    pc[1] + 0.8 * math.sin(math.radians(a)))]).buffer(0.01), "line"))
     elif "DINING" in name and w > 8 and h > 8:
         out.extend(_dining(x0 + w / 2, y0 + h / 2, pr))
     elif "KITCHEN" in name and w > 8 and h > 8:
@@ -2002,13 +2010,27 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
         if skip and kind == "line" or clip is not None and not q.within(clip) or kind == "item" and skip:
             continue
         g = V.geom(q)
-        if kind == "rug":           # a rug covers the floor pattern: light fill, border band
+        if kind == "rug":           # a rug covers the floor pattern: light fill, border band, patterned field
             if solid:
                 G.cv_fill(canvas, g, (pr.randint(236, 250),) * 3)
-                G.cv_outline(canvas, V.geom(q.buffer(-0.35, join_style=2)), G.mix(ink, (255, 255, 255), 0.55), lw * 0.6)
+                inner = q.buffer(-0.35, join_style=2)
+                rc = G.mix(ink, (255, 255, 255), 0.6)
+                G.cv_outline(canvas, V.geom(inner), rc, lw * 0.5)
+                fld = pr.random()
+                if fld < 0.5 and not inner.is_empty:
+                    ib = inner.buffer(-0.3, join_style=2)
+                    if not ib.is_empty:
+                        st = G.Style("hatch" if fld < 0.25 else "cross", (255, 255, 255), rc, max(0.6, lw * 0.4),
+                                     {"sp": pr.uniform(0.5, 1.0), "angle": pr.choice([0, 45, 90])}, pr.randrange(1 << 20), "rug")
+                        lay_ = canvas.copy()
+                        G.draw_fill(lay_, V.geom(ib), st, V.S, W, H)
+                        mk = np.zeros((H, W), np.uint8)
+                        for qq in G.polys_of(V.geom(ib)):
+                            mk = np.maximum(mk, G.poly_mask(qq, W, H))
+                        canvas[mk > 0] = np.minimum(canvas[mk > 0], lay_[mk > 0])
             G.cv_outline(canvas, g, G.mix(ink, (255, 255, 255), 0.35), lw * 0.8)
-        elif kind == "line":
-            G.cv_outline(canvas, g, ink, lw * 0.8)
+        elif kind == "line":                # detail in a finer pen than the outline
+            G.cv_outline(canvas, g, ink, lw * 0.55)
         else:
             if solid:
                 if solid == "shadow":
