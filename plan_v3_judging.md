@@ -35,7 +35,15 @@ Script: the scratchpad `turing_round.py` (not kept). A round is about 20 lines: 
 | 12* | rendered | 90% | 92% | one tile grid lined up across rooms; inset deck border too perfect; chair backs missing; inconsistent shadows |
 | 13* | under-floor (partly finished) | 90% | 92% | pier sizes mixed; concrete without aggregate triangles; gaps between the fill and the partitions; partitions with no doors |
 
+| 14* | ceiling | 92% | 92% | soffit drawn as 3–4 sparse lines; every wall uses one rendering |
+| 15* | rendered | **88%** | 92% | square-grid paving; wall style switching part way along a wall (from the random room subset) |
+| 16* | finish | 90% | 93% | floors stop at doorways and leave white gaps; exterior and interior walls look alike; shadows (judge B) |
+| 17* | finish (colour) | **88%** | 93% | windows project past the wall face (the "sill" style); uniform shadows; plank texture |
+| 18* | rendered | 90% | 95% | deck lines uniform with no butt joints; inset rim border; shadows (judge B) |
+
 \* graphics-only prompt.
+
+Rounds 13–18 sit at 88–93% vs sheet 0 and 92–95% vs sheet 12. Most of the sheet-12 judge's verdicts rest on drop shadows, which sheet 0 has and sheet 12 doesn't. Every rendered sample therefore fails against sheet 12 and every unshaded one against sheet 0, so a mixed pool can't satisfy both at once. The remaining recurring tells are drawing-craft items: line-weight hierarchy, the detail of windows and doors, wall joins, and "library-quality" furniture. They matter less for pattern matching than the fills, which are now mostly not the top tell.
 
 Best so far: 85% against sheet 0 (rounds 5 and 6, rendered and finish sheets). No judge has called the wrong image yet.
 
@@ -56,7 +64,8 @@ Best so far: 85% against sheet 0 (rounds 5 and 6, rendered and finish sheets). N
   - A pattern origin per room, with threshold lines across openings.
   - Jittered dot stipple, and AR-CONC triangles in concrete.
 - **Walls.** Thin double walls become heavy outline, poché or diagonal hatch. Grey walls get a heavier outline. Shadows are soft and cast mostly outside the building, and also appear on 30% of finish sheets.
-- **Hardscape.** Front walks run on to a notched wall instead of floating. Decks get a rim board (30%).
+- **Hardscape.** Front walks run on to a notched wall instead of floating. Deck boards get staggered butt joints (the rim board was tried and dropped). Square-grid paving becomes irregular stone 65% of the time.
+- **Walls and openings, rounds 14–17.** 40% of sheets draw a second wall rendering for a whole wall class (the partitions or the shell); 60% of sheets thicken the exterior shell. Floor finishes run on through doorways. Windows always sit inside the wall thickness (the projecting-sill style is dropped).
 - **Ceiling sheets.** Soffit boards change direction per face, mitred at the corners, along or across the band. They get a trim line and are spaced differently from the deck boards.
 - **Under-floor sheets.**
   - Pier spans and spacing are uneven; each pier is a footing with a post, round or square, one size per sheet.
