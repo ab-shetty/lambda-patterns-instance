@@ -508,6 +508,9 @@ def main():
     ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
                     help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
                          "family (default); 0 = pre-2026-09-29 pools")
+    ap.add_argument("--masonry-base", type=float, default=0.35,
+                    help="Revit elevations: probability the base band is a brick / stone / block wainscot "
+                         "instead of concrete or flat. Default 0.35 since 2026-10-01; 0 reproduces earlier pools")
     ap.add_argument("--cedar-shingle", type=float, default=0.5,
                     help="probability a shingle style is drawn as cedar shingles (narrow, vertical joints "
                          "dominant, broken butt lines, keyway tabs) instead of coursed units; real elevations "
@@ -542,6 +545,7 @@ def main():
     if args.markup > 0:
         flags["markup"] = args.markup
     flags["cedar_shingle"] = args.cedar_shingle
+    flags["masonry_base"] = args.masonry_base
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

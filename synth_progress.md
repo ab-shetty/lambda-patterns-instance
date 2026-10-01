@@ -9,6 +9,12 @@ below "Log".
 - **Default changed 2026-10-01: `generate_synthetic_fc.py --cedar-shingle 0.5`.** Half of shingle
   styles are drawn as cedar shingles (vertical joints dominant, like HF14 25/27) instead of
   brick-like courses. Pools generated before this commit reproduce only with `--cedar-shingle 0`.
+- **Default changed 2026-10-01: `--masonry-base 0.35`.** The Revit base band (0.6-2.6 ft, on 65%
+  of houses) is a brick / stone / block wainscot 35% of the time instead of concrete or flat,
+  in a muted masonry palette, labelled ~80% (HF14 18 / val 17: grey running-bond roof vs a teal
+  running-bond brick band, dE 16). In a 120-sheet sample: 18 of 75 elevations get a masonry base,
+  2 colour sheets pair a labelled one with a labelled roof (dE 19, 30). `--masonry-base 0`
+  reproduces earlier pools.
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).

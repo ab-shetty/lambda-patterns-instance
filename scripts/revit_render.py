@@ -39,6 +39,10 @@ SPACING = {"lap": "sp", "bb": "sp", "seam": "sp", "vertical": "sp", "asphalt": "
            "shingle": "row", "tile_roof": "row", "stipple": "density", "concrete": "density"}
 KIND_POOL = {"roof": "ROOF_KINDS", "chimney": ["brick", "stone", "stucco"], "foundation": ["concrete", "flat"]}
 PRIORITY = ["main", "roof", "accent", "accent2", "chimney", "foundation"]
+MASONRY_PALETTE = [(142, 104, 94), (122, 92, 84), (158, 124, 112), (112, 86, 80),        # brick reds
+                   (120, 128, 124), (98, 104, 108), (140, 140, 136), (160, 158, 150),    # greys
+                   (110, 124, 126), (96, 120, 122), (126, 140, 138),                      # teal-greys
+                   (150, 142, 130), (132, 126, 118), (176, 164, 146)]                      # tans / buff
 
 
 def _lab(c):
@@ -348,6 +352,19 @@ def compose_revit(image_id, seed, mode_weights):
         styles["roof"].kind, styles["roof"].params = "asphalt", {"row": 0.5, "unit": 1.0}
     styles["chimney"] = G.make_style(r, r.choice(["brick", "stone", "stucco"]), app, fam_seed + 4, S_guess, "chimney")
     styles["foundation"] = G.make_style(r, r.choice(["concrete", "flat"]), app, fam_seed + 5, S_guess, "foundation")
+    # --masonry-base P (2026-10-01): real houses often carry a brick / stone / block wainscot
+    # at the base of the wall (HF14 18, val 17: a teal running-bond band under grey running-
+    # bond roof shingles). The Revit base band was only ever concrete or flat, so that pair --
+    # two coursed textures a tint apart -- never occurred. Own RNG: P = 0 is byte-identical.
+    masonry_base = None
+    if getattr(G, "MASONRY_BASE", 0) > 0:
+        mr = random.Random(fam_seed * 97 + 13)
+        if mr.random() < G.MASONRY_BASE:
+            masonry_base = mr
+            # real masonry is muted: brick reds, greys, teal-greys, tans (RGB)
+            styles["foundation"] = G.make_style(mr, mr.choice(["brick", "brick", "stone", "block"]), app,
+                                                fam_seed + 5, S_guess, "foundation",
+                                                base_override=mr.choice(MASONRY_PALETTE))
     for st in styles.values():
         if not shaded:
             st.base = (255, 255, 255)
@@ -374,6 +391,10 @@ def compose_revit(image_id, seed, mode_weights):
     if r.random() < 0.7:
         label_fams.add("chimney")
     if r.random() < 0.4 and styles["foundation"].kind != "flat":
+        label_fams.add("foundation")
+    # a masonry wainscot is a prominent material real annotators label (HF14 18, val 17):
+    # labelled ~80% overall (0.4 above, plus 2/3 of the rest from its own stream)
+    if masonry_base is not None and masonry_base.random() < 0.67:
         label_fams.add("foundation")
     if G.DISTINCT_LOOKS:        # plain colour, no pattern: drawn, never a pattern question
         label_fams = {f for f in label_fams if styles.get(f) is None or styles[f].kind != "flat"}
