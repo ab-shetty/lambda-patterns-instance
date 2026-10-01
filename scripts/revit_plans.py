@@ -2018,6 +2018,31 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
             G.cv_outline(canvas, g, ink, lw)
 
 
+def _butt_joints(canvas, poly_px, sp_ft, angle, S, colour, lw, rng):
+    """Staggered board-end joints between the parallel lines of a deck hatch (same phase as G._dlines)."""
+    H, W = canvas.shape[:2]
+    bx0, by0, bx1, by1 = poly_px.bounds
+    x0, y0, x1, y1 = max(0, int(bx0) - 2), max(0, int(by0) - 2), min(W, int(bx1) + 2), min(H, int(by1) + 2)
+    if x1 <= x0 or y1 <= y0:
+        return
+    sub = canvas[y0:y1, x0:x1]
+    layer = sub.copy()
+    th = math.radians(angle)
+    nx, ny, dx, dy = -math.sin(th), math.cos(th), math.cos(th), math.sin(th)
+    sp = sp_ft * S
+    ds = [cx * nx + cy * ny for cx, cy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+    ts = [cx * dx + cy * dy for cx, cy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+    for k in range(math.floor(min(ds) / sp) - 1, math.ceil(max(ds) / sp) + 1):
+        t = min(ts) - rng.uniform(0, 8) * S
+        while t < max(ts):
+            t += rng.uniform(4, 12) * S
+            a = (t * dx + k * sp * nx - x0, t * dy + k * sp * ny - y0)
+            b = (a[0] + sp * nx, a[1] + sp * ny)
+            cv2.line(layer, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), G.bgr(colour), max(1, int(lw)), cv2.LINE_AA)
+    m = G.poly_mask(affinity.translate(poly_px, -x0, -y0), x1 - x0, y1 - y0)
+    G.blend_mask(sub, layer, m)
+
+
 def _frame_crop(canvas, labelled, focus_px, pr):
     """Crop to the drawing as the real sheets do (they fill ~75% of the image, our full sheets
     ~47%), sometimes cutting through its edges (HF14 11, 12). Returns canvas, labelled or None."""
@@ -2215,9 +2240,9 @@ def compose_floor(image_id, seed, mode_weights):
                              {"sp": st.params["sp"], "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90},
                              st.seed, "hardscape")
             _fill(canvas, V.geom(p), st, S, W, H)
+            if v3 and st.kind == "hatch":                                # board ends, staggered
+                _butt_joints(canvas, V.geom(p), st.params["sp"], st.params.get("angle", 0), S, st.line, st.lw, p3)
             G.cv_outline(canvas, V.geom(p), ink, lw_thin)
-            if v3 and st.kind == "hatch" and p3.random() < 0.3:          # rim / edge board
-                G.cv_outline(canvas, V.geom(p.buffer(-0.6, join_style=2)), ink, lw_thin * 0.8)
             labelled.append(("hardscape", V.geom(p)))
         if v3:      # patio furniture on the paving (HF14 0), inside the label as annotators draw it
             for p in hard_polys:
