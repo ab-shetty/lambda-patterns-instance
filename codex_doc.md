@@ -13,8 +13,9 @@ Detail: `synth_progress.md` Log 2026-10-01. Goal still 0.90 on HF14, synthetic-o
 
 - **Training longer is a real lever.** 500 Revit sheets (>= 3 families) trained ~11k steps
   (1+60 epochs + a 30-epoch restart, swin_t, ROI add) reach HF14 0.822-0.830 @4096, above
-  `revit10k-roi-e5` (0.8126), though val is lower (0.81-0.83 vs 0.886). Checkpoints are
-  local only: `data/runs/ck_fit_conv_swin_t_*_r61_s7/epoch_90.pth`.
+  `revit10k-roi-e5` (0.8126), though val is lower (0.81-0.83 vs 0.886). On the Hub (private,
+  round-trip verified): `abshetty/floz-refunet-swint-fit500-nodr-e60` (the restarts' start,
+  HF14 0.7548 @2048) and `...-fit500-dr07-e90` (gentle-DR arm, HF14 0.8258 @4096).
 - **Next:** that schedule with `--domain-random --dr-scale-min 0.7` (best val of the three
   arms) on more sheets: 2k from scratch (~4.3 h) or continue e90 on 2k (~1.5 h).
 - `--ref-sample instance` (off by default) trains on the evaluator's per-instance question
