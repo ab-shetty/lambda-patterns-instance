@@ -2267,6 +2267,9 @@ def compose_floor(image_id, seed, mode_weights):
             mi, mj = zone_mat.get(rooms[i]["zone"]), zone_mat.get(rooms[j]["zone"])
             if mi is not None and mj is not None and _mkey(mi) == _mkey(mj):
                 fams[_mkey(mi)][1].append(op)
+            elif v3 and (mi is not None or mj is not None):    # the finish runs on through the doorway
+                m_ = mi if mi is not None else mj
+                fams[_mkey(m_)][1].append(op)
         for n, (key, (m, polys)) in enumerate(sorted(fams.items(), key=lambda kv: str(kv[0]))):
             reg = unary_union(polys)
             if stair_u is not None:
@@ -2439,6 +2442,9 @@ def compose_floor(image_id, seed, mode_weights):
             else:
                 _shade(canvas, V.geom(sh), k_sh, W, H)
         wg = V.geom(lay["walls"])
+        if v3 and p3.random() < 0.6:        # exterior walls read heavier than partitions
+            wg = V.geom(unary_union([lay["walls"], foot.buffer(p3.uniform(0.15, 0.35), join_style=2).difference(foot)
+                                     .difference(unary_union(hard_polys) if hard_polys else Point(0, 0).buffer(0))]))
         if wall_look == "grey":
             _mfill(canvas, wg, (r.randint(80, 150),) * 3, W, H)
             G.cv_outline(canvas, wg, ink, lw_thin * p3.uniform(1.3, 2.2) if v3 else lw_thin)
