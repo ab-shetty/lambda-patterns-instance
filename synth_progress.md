@@ -5,13 +5,20 @@ in `synth_progress_archive.md`, Part 1, under its original heading; other docs'
 references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
-## Current state (2026-09-30)
+## Current state (2026-10-01)
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).
 - **Best synthetic-only: 10k Revit + ROI** (`abshetty/floz-refunet-swint-revit10k-roi-e5`,
   private): val 0.8150 / **0.8861**, HF14 0.7868 / 0.8126 @2048 / 4096 -- the best
   validation of any model, real-trained included. Fresh unseen Revit plans 0.872.
+- **Steps per sheet matter as much as sheet count** (2026-10-01): 500 Revit sheets (>= 3
+  families) trained 1+60 epochs then a 30-epoch restart (~11k steps, swin_t, ROI add) reach
+  **HF14 0.822-0.830 @4096** in all three arms (no DR / `--ref-sample instance` /
+  `--dr-scale-min 0.7`), above `revit10k-roi-e5`'s 0.8126 -- but val 0.809-0.834 against its
+  0.886. Not a clear win; untried: the long schedule on more sheets.
+- **Hand-placed reference boxes** (`--boxes eval_boxes/hand_v1.json`) change no model by more
+  than +-0.016 paired on HF14 (none significant); the shipped model reads 0.8461 (51 q).
 - **Reference jitter fix is the default since 728def3** (reference gets the sheet's
   `--domain-random` brightness/contrast); `--legacy-ref-jitter` = every earlier run.
 - **Screens now use ROI** (`EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 <arm>`);
@@ -553,3 +560,52 @@ vs 18% in training; under 12 px 0.56), and native-res scoring caps at 0.950. One
 per family gives 0.886. HF14 is not like that: median 1 piece per family, 7% of families
 >= 5 pieces, no box under 12 px, 77% of boxes >= 64 px at 2048. So the synthetic per-
 instance score is not a proxy for HF14, and the fit sweep's premise is gone.
+
+
+### 2026-10-01 -- fit sweep Stage A, training to convergence, hand-placed boxes
+
+One seed (7), swin_t unless noted, 2048, ROI add, batch 4. Pool: `generate_synthetic_fc.py
+--revit --revit-plans --shaped --mode-weights 66,16,18 --seed 6`, ids 700000+ (3,000 drawn,
+2,985 ok), the 500 sheets with >= 3 labelled families (`fitA_train`); fresh = 40 such sheets
+from ids 800000+. Seen / fresh are per-instance questions at 2048 (`--local-pool`), so they
+carry the sliver artifact above; read them as relative, not as HF14 proxies.
+
+**Stage A (`run_fit_sweep.sh A`, 1+15 epochs, DR on).** Batch 8 OOMs swin_s at 2048, so
+all three ran at batch 4 (`BS=4`). Seen / fresh: swin_t 0.739 / 0.786, swin_s 0.742 /
+0.803, swin_b 0.754 / 0.799; per-epoch HF14 @2048 0.730 / 0.744 / 0.725. Train and val loss
+were still falling at the last epoch (~2k steps): undertrained, so the backbone comparison
+says nothing about capacity. swin_t at batch 8 (half the steps): 0.718 / 0.736.
+
+**Training to convergence (`run_fit_converge.sh`, swin_t, DR off).** 1+60 epochs: seen 0.764
+/ 0.820 / 0.853 / 0.862 at e15 / 30 / 45 / 60, fresh 0.797 / 0.847 / 0.864 / 0.878 -- fresh
+climbs with seen, so this is learning, not memorising. Fresh-cosine restart from e60 for 30
+epochs (`INIT=...`): **seen 0.880, fresh 0.890** at e90; over-selection ~20% -> ~4%. Ceilings
+(`label_ceiling.py`, opt stride 4 @2048): seen 0.950, fresh 0.954. On 4+ family seen sheets
+(0.873) half the remaining gap is that ceiling and most of the rest is boxes under 12 px at
+input (0.55); boxes >= 32 px score 0.929.
+
+**Restart arms from e60, 30 epochs each, paired:**
+
+| arm | seen | fresh | val @4096 | HF14 @4096 (val-chosen size) |
+|---|---:|---:|---:|---:|
+| no DR (control) | 0.880 | 0.890 | 0.809 | 0.8220 |
+| `--ref-sample instance` | 0.889 | 0.891 | 0.823 | 0.8302 (+0.008, 12/9, p=0.62) |
+| `--domain-random --dr-scale-min 0.7` | 0.854 | 0.881 | **0.834** | 0.8258 (+0.004, 10/17, p=0.87) |
+
+`--ref-sample instance` (new, default `family` byte-identical, checked on 30 hashed samples):
+draws any labelled instance uniformly and asks for its family, with sheets weighted by
+instance count -- the evaluator's question mix (boxes < 12 px 12% vs evaluator 10%; targets
+in >= 5-piece families 66% vs 64%). It closes the seen/fresh gap but not HF14's, which has
+~1 piece per family. All three arms beat `revit10k-roi-e5` on HF14 (0.8126) and lose to it
+on val (0.886): 500 sheets at ~11k steps roughly match 10k sheets at ~7.5k. Real-sheet
+loss of the no-DR model is on normal boxes (>= 64 px: 65%), 40% under-selection.
+
+**Hand-placed boxes (`run_hand_box_evals.sh`, `eval_boxes/hand_v1.json`, @4096).**
+Automatic boxes reproduce every published number exactly. Paired hand - auto on HF14 (51
+shared questions): shipped +0.003 (0.8461), restart-e13 +0.016 (p=0.11), revitmix -0.007,
+revit10k -0.005, revit2k +0.013, mixr4-e8 -0.003, the three fit arms -0.003 to +0.002. On
+val (72 shared of 77): only revit2k moves (+0.009, p=0.033); the dropped questions alone move
+some means (revit10k 0.886 -> 0.898 with paired +0.0003). Compare paired, not means.
+
+Next: the long schedule with `--dr-scale-min 0.7` on more sheets (2k from scratch ~4.3 h,
+or continue the 500-sheet e90 on 2k for ~30 epochs, ~1.5 h).

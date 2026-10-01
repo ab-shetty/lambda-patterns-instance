@@ -1,11 +1,30 @@
 # Handoff
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-10-01, GH200 -- read this first)
+
+Detail: `synth_progress.md` Log 2026-10-01. Goal still 0.90 on HF14, synthetic-only.
+
+- **Training longer is a real lever.** 500 Revit sheets (>= 3 families) trained ~11k steps
+  (1+60 epochs + a 30-epoch restart, swin_t, ROI add) reach HF14 0.822-0.830 @4096, above
+  `revit10k-roi-e5` (0.8126), though val is lower (0.81-0.83 vs 0.886). Checkpoints are
+  local only: `data/runs/ck_fit_conv_swin_t_*_r61_s7/epoch_90.pth`.
+- **Next:** that schedule with `--domain-random --dr-scale-min 0.7` (best val of the three
+  arms) on more sheets: 2k from scratch (~4.3 h) or continue e90 on 2k (~1.5 h).
+- `--ref-sample instance` (off by default) trains on the evaluator's per-instance question
+  mix; it closes the synthetic seen/fresh gap but does nothing on HF14 (~1 piece per family).
+- Hand-placed boxes (`--boxes eval_boxes/hand_v1.json`) move no model significantly on HF14.
+- Box setup: `pip install --user -r requirements.txt`, FreeCAD via
+  `/opt/miniconda/bin/conda create -p /opt/fc -c conda-forge --override-channels freecad`
+  (aarch64 works), and `set -a; . ~/.env; set +a` before training (the per-epoch HF14
+  diagnostic needs `HF_TOKEN`). Never `pgrep -f` / `pkill -f` a pattern that appears in the
+  calling command; it matches the calling shell. Wait on PIDs.
 
 ## Pick up here (2026-09-30, CPU session -- read this first)
 
