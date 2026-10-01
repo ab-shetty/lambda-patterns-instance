@@ -112,6 +112,14 @@ COLOUR_PAIRS = 0.0
 # markup sheets (18-27) are coloured. Labels are unchanged: the family is the texture, the
 # markup colour is an overlay. 0 = off, byte-identical pools.
 MARKUP = 0.0
+# Probability a shingle style (roof or wall) is drawn as CEDAR shingles (2026-10-01): narrow,
+# irregular shingles whose vertical joints dominate, light broken course lines, and small tabs
+# hanging under some joints -- the way real elevations draw cedar/shake (HF14 25, 27). v6's
+# shingles are wide units in short courses that read as small brick (57-61% of their edge
+# energy is horizontal vs 29-37% on the real ones), so "vertical siding vs shingle roof" never
+# looked confusable in training (descriptor similarity 0.81-0.86 synth vs 0.97 real). Own RNG
+# per style; 0 = off, byte-identical pools.
+CEDAR_SHINGLE = 0.0
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -528,6 +536,34 @@ def _courses(layer, ox, oy, S, row_ft, unit_ft, colour, lw, seed,
                     cv_line(layer, (x, y_top), (x, y_bot), colour, jl)
 
 
+def _cedar_shingles(layer, ox, oy, S, row_ft, colour, base, lw, seed):
+    """Cedar / shake shingles as elevations draw them: narrow irregular shingles (0.2-0.5 ft)
+    so the vertical joints dominate, each course's butt line lighter and broken, and a short
+    tab (keyway shadow) hanging under about a third of the joints."""
+    h, w = layer.shape[:2]
+    rp = row_ft * S
+    light = mix(colour, base, 0.3)
+    r0, r1 = math.floor(oy / rp) - 1, math.ceil((oy + h) / rp) + 1
+    for r in range(r0, r1 + 1):
+        rr = random.Random(seed * 7919 + r * 31 + 5)
+        y_top = r * rp - oy
+        y_bot = y_top + rp
+        x_ft = -400.0 + rr.uniform(0, 0.5)
+        while x_ft * S < ox + w + 5:
+            nxt = x_ft + rr.uniform(0.25, 0.6)
+            xa, xb = x_ft * S - ox, nxt * S - ox
+            if xb >= -2 and xa <= w + 2:
+                if rr.random() < 0.9:                      # butt line, lighter and broken
+                    cv_line(layer, (xa, y_bot), (xb, y_bot), light, lw)
+                cv_line(layer, (xa, y_top + rp * rr.uniform(0.0, 0.15)), (xa, y_bot), colour, lw)
+                if rr.random() < 0.3:                      # keyway: a small closed slot under the joint
+                    tw, th = max(3.0, 0.09 * S), rp * rr.uniform(0.25, 0.45)
+                    cv_line(layer, (xa - tw / 2, y_bot), (xa - tw / 2, y_bot + th), colour, lw)
+                    cv_line(layer, (xa + tw / 2, y_bot), (xa + tw / 2, y_bot + th), colour, lw)
+                    cv_line(layer, (xa - tw / 2, y_bot + th), (xa + tw / 2, y_bot + th), colour, lw)
+            x_ft = nxt
+
+
 def _stones(layer, ox, oy, S, colour, lw, seed, coursed=True, shade=None):
     h, w = layer.shape[:2]
     rr = random.Random(seed * 104729)
@@ -749,6 +785,8 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     elif k == "bb":
         _vlines(layer, x0, y0, S, p["sp"], c, lw)
         _vlines(layer, x0, y0, S, p["sp"], c, lw, phase_ft=p["batten"])
+    elif k == "shingle" and p.get("cedar"):
+        _cedar_shingles(layer, x0, y0, S, p["row"], c, style.base, lw, sd)
     elif k == "shingle":
         _courses(layer, x0, y0, S, p["row"], 0, c, lw, sd, random_width=(0.35, 0.95))
     elif k == "brick":
@@ -888,6 +926,11 @@ def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_over
         params = {"sp": rng.choice([1.0, 1.33, 1.5, 2.0]), "batten": rng.uniform(0.15, 0.25)}
     elif kind == "shingle":
         params = {"row": rng.choice([0.42, 0.5, 0.58]) if not roof else rng.choice([0.4, 0.5])}
+        if CEDAR_SHINGLE > 0:
+            cr = random.Random(seed * 131 + 17)          # own stream: the style RNG is untouched
+            if cr.random() < CEDAR_SHINGLE:
+                params["cedar"] = True
+                params["row"] = cr.choice([0.45, 0.55, 0.65])
     elif kind == "brick":
         params = {"row": 0.222 if S >= 45 else 0.333, "unit": 0.667,
                   "shade": mix(base, line, 0.35) if rng.random() < 0.3 else None}
@@ -2788,13 +2831,14 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
     global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
-    global TRIM_LABEL_PROB, MARKUP
+    global TRIM_LABEL_PROB, MARKUP, CEDAR_SHINGLE
     TRIM_LABEL_PROB = trim_label_prob
     MARKUP = markup
+    CEDAR_SHINGLE = cedar_shingle
     COLOUR_PAIRS = colour_pairs
     TRIM_CUT = trim_cut
     DISTINCT_LOOKS = distinct_looks
