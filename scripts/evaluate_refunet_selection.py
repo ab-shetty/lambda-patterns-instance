@@ -90,7 +90,7 @@ def load_refunet(checkpoint_path, device):
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                    mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1,
-                   save_probs=None):
+                   save_probs=None, box_overrides=None):
     """`tta` averages sigmoid maps over dihedral views of image AND reference
     (the reference crop is a piece of the same image, so it turns with it)."""
     device = device or next(model.parameters()).device
@@ -114,6 +114,16 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
                 rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
                 x, y, w, h = sample_reference_box(ref_mask, 128, 512, rng=rng)
+                # --boxes: a hand-placed box (native pixels) replaces the automatic one;
+                # null drops the question. The rng draw above still happens, so every
+                # other question keeps its automatic box exactly.
+                ov = (box_overrides or {}).get(str(image_idx), {})
+                if str(ref_idx) in ov:
+                    if ov[str(ref_idx)] is None:
+                        continue
+                    x, y, w, h = (int(round(v)) for v in ov[str(ref_idx)])
+                    x, y = max(0, min(x, w0 - 1)), max(0, min(y, h0 - 1))
+                    w, h = max(1, min(w, w0 - x)), max(1, min(h, h0 - y))
                 crop = image0[y:y + h, x:x + w]
                 if not crop.size:
                     continue
@@ -179,6 +189,10 @@ def main():
     parser.add_argument("--metrics-out", required=True)
     parser.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8),
                         help="dihedral test-time augmentation views to average")
+    parser.add_argument("--boxes", default="",
+                        help="JSON {image_index: {question_index: [x, y, w, h] | null}} in native "
+                             "pixels: replace the automatic reference box of those questions, or "
+                             "drop them (null). Other questions are unchanged.")
     parser.add_argument("--local-pool", default="",
                         help="score a local synthetic pool (images/ + annotations/) instead of the "
                              "real-world test set; --indices then indexes its sorted sheets "
@@ -207,7 +221,8 @@ def main():
     rows = evaluate_model(model, records, indices, args.image_max_size,
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
-                          tta=args.tta, save_probs=args.save_probs or None)
+                          tta=args.tta, save_probs=args.save_probs or None,
+                          box_overrides=json.loads(Path(args.boxes).read_text()) if args.boxes else None)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
@@ -215,6 +230,7 @@ def main():
                                                     checkpoint.get("epoch")),
                "image_max_size": args.image_max_size,
                "mask_thresh": args.mask_thresh, "tta": args.tta,
+               "boxes": args.boxes or "automatic",
                "n_images": len(indices), "n_reference_selections": len(rows),
                "mean_iou": mean_iou, "selections": rows}
     path = Path(args.metrics_out)
