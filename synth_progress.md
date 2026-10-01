@@ -22,6 +22,19 @@ below "Log".
   walled on two sides and butting the interior floors; half pave in the interior floors' grey;
   interior plank / tile lines stronger. In 40 floor plans: 8 ceiling sheets, 9 rendered.
   `--plan-v2 0` reproduces earlier pools (40 sheets checked).
+- **New, opt-in 2026-10-01: `--plan-source data/reference/swiss_dwellings/layouts.pkl.gz`
+  (`--plan-source-p P`, default 1).** Floor plans use real apartment layouts from Swiss Dwellings
+  v3 (Archilyse AG, Zenodo 7788422, **CC BY 4.0: commercial use OK, credit required** in any
+  released data or model card) instead of `plan_layout`. Each apartment comes with real walls and
+  thicknesses, doors, windows, balconies and railings, and fitted kitchens, sinks, toilets, tubs,
+  showers and stairs. Build the file with `python3 scripts/swiss_plans.py` from the zip
+  (`curl -L -o data/reference/swiss_dwellings/sd.zip
+  https://zenodo.org/api/records/7788422/files/swiss-dwellings-v3.0.0.zip/content`, 932 MB;
+  about 20 min on CPU). Of 45,176 apartments, 19,046 are kept (75 MB): residential, 4+ rooms,
+  45-260 m2, walls within 2 degrees of square, one footprint, exact repeats dropped. The judges'
+  last tells were layout (wall stubs, door collisions, odd rooms); real layouts remove those.
+  Nothing trained on it yet. Off = byte-identical (checked at plan-v2 1 and 2).
+  Ruled out on licence (non-commercial): CubiCasa5K and FloorPlanCAD.
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).

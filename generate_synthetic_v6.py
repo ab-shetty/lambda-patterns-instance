@@ -127,6 +127,7 @@ MASONRY_BASE = 0.0
 # paving beside grey interiors, stronger interior texture, and a ceiling / electrical sheet
 # type with a labelled soffit band (HF14 0, 12). 0 = off, byte-identical pools.
 PLAN_V2 = 0
+PLAN_SOURCE, PLAN_SOURCE_P = None, 1.0      # --plan-source: Swiss Dwellings layouts (scripts/swiss_plans.py)
 EXCERPT_CROP_PROB = 0.30
 GRAPH_PAPER_PROB = 0.12
 TOWNHOUSE_PROB = 0.18                  # eval 17-19: rows of identical units
@@ -2838,12 +2839,13 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, plan_v2=0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, plan_v2=0, plan_source=None, plan_source_p=1.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
     global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
-    global TRIM_LABEL_PROB, MARKUP, CEDAR_SHINGLE, MASONRY_BASE, PLAN_V2
+    global TRIM_LABEL_PROB, MARKUP, CEDAR_SHINGLE, MASONRY_BASE, PLAN_V2, PLAN_SOURCE, PLAN_SOURCE_P
     PLAN_V2 = plan_v2
+    PLAN_SOURCE, PLAN_SOURCE_P = plan_source, plan_source_p
     MASONRY_BASE = masonry_base
     TRIM_LABEL_PROB = trim_label_prob
     MARKUP = markup

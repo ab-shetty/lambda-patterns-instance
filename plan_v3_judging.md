@@ -86,6 +86,10 @@ The same prompt was run on two pairs of **real** sheets, with the judges still t
 
 Text, leaders, dimensions, grids, electrical logic, door placement and room layout logic. Layout tells came up often: wall stubs, door swings that collide and odd room shapes. They come from `plan_layout`, which v3 does not touch.
 
+## Real layouts (added after the rounds)
+
+The procedural layout was the one part v3 never touched. `--plan-source` now draws real Swiss Dwellings apartments (CC BY 4.0) through the same v3 renderer; see `scripts/swiss_plans.py` and `synth_progress.md`.
+
 ## Next
 
 Nothing has been trained on v3 yet. On the next GPU session, generate a pool with `--plan-v2 2` under a new name and check HF14 0 and 12 against the plan-v2 and earlier pools.

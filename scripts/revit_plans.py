@@ -2086,12 +2086,33 @@ def _frame_crop(canvas, labelled, focus_px, pr):
     return np.ascontiguousarray(canvas[y0:y1, x0:x1]), lab
 
 
+class _SwBlock:
+    """Stand-in for make_house's Block when the layout is a Swiss Dwellings apartment."""
+    kind = "main"
+
+    def __init__(self, x0, y0, x1, y1):
+        self.x0, self.y0, self.x1, self.y1 = x0, y0, x1, y1
+        self.w, self.d = x1 - x0, y1 - y0
+
+
 def compose_floor(image_id, seed, mode_weights):
     house = _house(image_id, seed, mode_weights)
     r = random.Random(seed * 1_000_003 + image_id * 191 + 61)
     lay = plan_layout(house, random.Random(seed * 1_000_003 + image_id * 193 + 67))
-    rooms, foot = lay["rooms"], lay["foot"]
     blocks = house["blocks"]
+    # --plan-source (G.PLAN_SOURCE, 2026-10-01): a real Swiss Dwellings apartment (CC BY 4.0) instead of
+    # the procedural layout, with probability G.PLAN_SOURCE_P; own stream, so off leaves pools unchanged
+    swiss = None
+    if getattr(G, "PLAN_SOURCE", None):
+        ps = random.Random(seed * 1_000_003 + image_id * 223 + 97)
+        if ps.random() < getattr(G, "PLAN_SOURCE_P", 1.0):
+            import swiss_plans
+            recs = swiss_plans.load(G.PLAN_SOURCE)
+            lay = swiss = swiss_plans.layout(recs[ps.randrange(len(recs))], ps, _zone)
+            fx0, fy0, fx1, fy1 = lay["foot"].bounds
+            blocks = [_SwBlock(fx0, fy0, fx1, fy1)]
+            house = dict(house, front_door_u=(lay["front_x"] - fx0) / max(fx1 - fx0, 1e-6))
+    rooms, foot = lay["rooms"], lay["foot"]
     mb = blocks[0]
     ink = (r.randint(0, 30),) * 3
     colour = r.random() < 0.3
@@ -2148,6 +2169,8 @@ def compose_floor(image_id, seed, mode_weights):
             pieces.append(box(x1f, yy, x1f + dd, yy + dl) if r.random() < 0.5 else box(x0f - dd, yy, x0f, yy + dl))
         if not pieces:
             pieces.append(box(x0f + 2, y1f, min(x1f, x0f + 22), y1f + r.uniform(8, 14)))
+        if swiss is not None and swiss["balconies"]:        # the apartment's own balconies / loggias
+            pieces = swiss["balconies"]
         hard = unary_union(pieces).difference(foot.buffer(0.3, join_style=2))
         hard_polys = [q for q in G.polys_of(hard) if q.area > 12]
         if not hard_polys and sheet == "rendered":              # the rendered sheet's question is the hardscape
@@ -2155,7 +2178,7 @@ def compose_floor(image_id, seed, mode_weights):
             hard_polys = [box(x0f, y1f + 0.5, x0f + pw, y1f + r.uniform(8, 14))]
         # plan v2: a covered patio in a notch of the footprint, walled on two sides and
         # butting the interior floors (HF14 0), half the time
-        if v2 and pr.random() < 0.5:
+        if v2 and pr.random() < 0.5 and swiss is None:
             notch = _footprint_notch(foot, pr)
             if notch is not None:
                 hard_polys = [q for q in G.polys_of(unary_union(hard_polys + [notch])) if q.area > 12]
@@ -2301,6 +2324,8 @@ def compose_floor(image_id, seed, mode_weights):
             labelled.append(("soffit", V.geom(q)))
 
     stairs = plan_stairs(rooms, r) if sheet in ("finish", "rendered") and r.random() < 0.45 else []
+    if swiss is not None:           # real stairs come with the fitted pieces
+        stairs = []
     stair_u = unary_union([st["poly"] for st in stairs]) if stairs else None
     # ---- floors: regions = rooms of a material + the openings between two such rooms
     if sheet in ("finish", "rendered"):
@@ -2556,6 +2581,9 @@ def compose_floor(image_id, seed, mode_weights):
             win_style = p3.choice(["3line", "2line"])
         for (o, pos, c, w) in lay["windows"]:
             _draw_window(canvas, V, o, pos, c, w, t, win_style, ink, lw_thin)
+        if swiss is not None:           # balcony railings
+            for q in swiss["railings"]:
+                G.cv_outline(canvas, V.geom(q), ink, lw_thin)
         for d in lay["doors"]:
             _draw_door(canvas, V, d, t, lay["t_int"], ink, lw_thin, S, r)
     if grid_on:
@@ -2572,7 +2600,13 @@ def compose_floor(image_id, seed, mode_weights):
             clip = rm["inner"].buffer(0.05)
             if stair_u is not None:
                 clip = clip.difference(stair_u.buffer(0.3))
-            pieces = _room_furniture(rm["name"], x0, y0, x1, y1, p3, clip)
+            fname = rm["name"]
+            if swiss is not None:       # rooms with real fittings: furniture around them, never a second kitchen / bath
+                fit = [q for q, k in swiss["fixtures"] if k == "item" and q.intersects(rm["inner"])]
+                if fit:
+                    clip = clip.difference(unary_union(fit).buffer(0.4))
+                    fname = "DINING" if "DINING" in fname else ("LIVING" if "LIVING" in fname else "")
+            pieces = _room_furniture(fname, x0, y0, x1, y1, p3, clip) if fname else []
             if sheet == "ceiling":          # the floor plan ghosted under the RCP (HF14 12)
                 _draw_furniture(canvas, V, [q for q in pieces if q[1] != "rug"],
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
@@ -2580,6 +2614,13 @@ def compose_floor(image_id, seed, mode_weights):
                 _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
                                 "shadow" if wall_sh else True,
                                 W, H, p3, clip=clip)
+        if sheet != "underfloor" and swiss is not None and rm is rooms[-1]:      # the real fitted pieces
+            fx = swiss["fixtures"]
+            if sheet == "ceiling":
+                _draw_furniture(canvas, V, fx, G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False,
+                                W, H, p3)
+            else:
+                _draw_furniture(canvas, V, fx, ink, lw_thin * p3.uniform(0.7, 0.95), "shadow" if wall_sh else True, W, H, p3)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
                     not (stair_u is not None and rm["inner"].intersects(stair_u)):   # rectangles, no stair

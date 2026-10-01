@@ -514,6 +514,12 @@ def main():
                          "with a labelled soffit band. Default 1 since 2026-10-01; 0 reproduces earlier pools. "
                          "2 = v3 on top: furniture in every room (solid with shadows on rendered sheets, ghosted "
                          "under ceiling plans), patio furniture, and framing cropped to the drawing")
+    ap.add_argument("--plan-source", default=None,
+                    help="--revit-plans floor plans: a layouts file from scripts/swiss_plans.py (real Swiss Dwellings "
+                         "apartments, CC BY 4.0 -- credit Archilyse AG) used instead of the procedural layout; "
+                         "off = byte-identical")
+    ap.add_argument("--plan-source-p", type=float, default=1.0,
+                    help="with --plan-source: probability a floor plan uses a real layout (rest procedural)")
     ap.add_argument("--masonry-base", type=float, default=0.35,
                     help="Revit elevations: probability the base band is a brick / stone / block wainscot "
                          "instead of concrete or flat. Default 0.35 since 2026-10-01; 0 reproduces earlier pools")
@@ -553,6 +559,9 @@ def main():
     flags["cedar_shingle"] = args.cedar_shingle
     flags["masonry_base"] = args.masonry_base
     flags["plan_v2"] = args.plan_v2
+    if args.plan_source:
+        flags["plan_source"] = os.path.abspath(args.plan_source)
+        flags["plan_source_p"] = args.plan_source_p
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))
