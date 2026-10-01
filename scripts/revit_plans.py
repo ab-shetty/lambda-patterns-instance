@@ -2467,11 +2467,36 @@ def compose_floor(image_id, seed, mode_weights):
             fw_look = p3.random() < 0.5
             _mfill(canvas, V.geom(fw), (p3.randint(0, 120),) * 3 if fw_look else (255, 255, 255), W, H)
             G.cv_outline(canvas, V.geom(fw), ink, lw_thin if fw_look else lw_heavy * 0.8)
-        poche = v3 and p3.random() < 0.6
+        poche = v3 and p3.random() < 0.85
         _mfill(canvas, V.geom(ring), (255, 255, 255) if not poche else (p3.randint(150, 215),) * 3, W, H)
         G.cv_outline(canvas, V.geom(ring), ink, lw_heavy)
-        _dash_poly(canvas, V.geom(foot.buffer(0.9, join_style=2)), G.mix(ink, (255, 255, 255), 0.4), lw_thin,
-                   [(0.6 * S, 0.3 * S)])                          # footing below
+        if not v3 or p3.random() < 0.5:
+            _dash_poly(canvas, V.geom(foot.buffer(p3.uniform(0.5, 1.2) if v3 else 0.9, join_style=2)),
+                       G.mix(ink, (255, 255, 255), 0.4), lw_thin, [(0.6 * S, 0.3 * S)])   # footing below
+        if v3:          # crawl vents in the stem wall, and an access hatch
+            coords = list(foot.exterior.coords)
+            for a_, b_ in zip(coords, coords[1:]):
+                L = math.dist(a_, b_)
+                if L < 8:
+                    continue
+                for k in range(int(L // p3.uniform(8, 14))):
+                    f = (k + 0.5) / max(1, int(L // 10)) if L > 10 else 0.5
+                    f = min(0.9, max(0.1, f + p3.uniform(-0.05, 0.05)))
+                    c = (a_[0] + f * (b_[0] - a_[0]), a_[1] + f * (b_[1] - a_[1]))
+                    ux, uy = (b_[0] - a_[0]) / L, (b_[1] - a_[1]) / L
+                    vent = Polygon([(c[0] - 0.7 * ux - 0.3 * uy, c[1] - 0.7 * uy + 0.3 * ux),
+                                    (c[0] + 0.7 * ux - 0.3 * uy, c[1] + 0.7 * uy + 0.3 * ux),
+                                    (c[0] + 0.7 * ux + 0.3 * uy, c[1] + 0.7 * uy - 0.3 * ux),
+                                    (c[0] - 0.7 * ux + 0.3 * uy, c[1] - 0.7 * uy - 0.3 * ux)])
+                    G.cv_fill(canvas, V.geom(vent), (255, 255, 255))
+                    G.cv_outline(canvas, V.geom(vent), ink, lw_thin)
+            ac = foot.buffer(-3).representative_point() if not foot.buffer(-3).is_empty else None
+            if ac is not None and p3.random() < 0.7:
+                hb = box(ac.x - 1.2, ac.y - 1.0, ac.x + 1.2, ac.y + 1.0)
+                G.cv_fill(canvas, V.geom(hb), (255, 255, 255))
+                G.cv_outline(canvas, V.geom(hb), ink, lw_thin)
+                G.cv_line(canvas, V.px(ac.x - 1.2, ac.y - 1.0), V.px(ac.x + 1.2, ac.y + 1.0), ink, lw_thin * 0.7)
+                G.cv_line(canvas, V.px(ac.x - 1.2, ac.y + 1.0), V.px(ac.x + 1.2, ac.y - 1.0), ink, lw_thin * 0.7)
     else:
         wall_look = r.choices(["grey", "black", "double"], weights=[50, 30, 20])[0]
         if v3 and wall_look == "double" and p3.random() < 0.75:     # cut walls read heavier than everything else
