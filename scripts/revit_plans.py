@@ -2129,7 +2129,18 @@ def compose_floor(image_id, seed, mode_weights):
         # herringbone / basket / wood-grain tiles at material scale (planks ~0.3-0.5 ft, not 2 ft), and
         # floor linework a lighter pen than the walls; one factor for all, so families stay apart
         k_t, k_l = p3.uniform(0.3, 0.5), p3.uniform(0.3, 0.65)     # real floors are soft (HF14 0, 7, 12)
-        for m in {id(m): m for m in zone_mat.values() if m is not None}.values():
+        mats = list({id(m): m for m in zone_mat.values() if m is not None}.values())
+        if not any(m["kind"] == "plank" for m in mats):          # staggered planks, not bare parallel lines
+            for m in mats:
+                if m["kind"] == "plank_lines" and p3.random() < 0.65:
+                    m["kind"], m["w"] = "plank", max(0.35, m["sp"])
+                    break
+        if p3.random() < 0.4:                                   # a light tone under every floor on the sheet
+            tone = p3.randint(226, 244)
+            for m in mats:
+                if m["base"] == (255, 255, 255):
+                    m["base"] = (tone,) * 3
+        for m in mats:
             if m["kind"] in TILES and m["kind"] not in ("t_earth", "t_aggregate"):
                 m["sp"] *= k_t
             elif m["kind"] == "basket":
@@ -2368,7 +2379,8 @@ def compose_floor(image_id, seed, mode_weights):
         wall_look = r.choices(["grey", "black", "double"], weights=[50, 30, 20])[0]
         if v3 and wall_look == "double" and p3.random() < 0.75:     # cut walls read heavier than everything else
             wall_look = p3.choice(["grey", "black", "hatch"])
-        if sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)):
+        if sheet == "rendered" and (r.random() < 0.45 or (v3 and p3.random() < 0.65)) or \
+                (v3 and sheet == "finish" and p3.random() < 0.3):
             off = (r.uniform(0.35, 0.8), r.uniform(0.35, 0.8))
             sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
             k_sh = r.uniform(0.7, 0.85)
