@@ -2508,9 +2508,11 @@ def compose_floor(image_id, seed, mode_weights):
             sh = affinity.translate(lay["walls_full"], *off).difference(lay["walls_full"])
             k_sh = r.uniform(0.7, 0.85)
             if v3:
-                if p3.random() < 0.65:                       # cast outside the building only
+                if p3.random() < 0.65:                       # cast outside the building only: soft
                     sh = affinity.translate(foot, *off).difference(foot)
-                _shade_soft(canvas, V.geom(sh), k_sh, W, H, max(1, int(p3.uniform(0.15, 0.4) * S)))
+                    _shade_soft(canvas, V.geom(sh), k_sh, W, H, max(1, int(p3.uniform(0.15, 0.4) * S)))
+                else:                                        # cast by every wall onto the floors: crisp
+                    _shade_soft(canvas, V.geom(sh), k_sh, W, H, max(1, int(p3.uniform(0.02, 0.08) * S)))
             else:
                 _shade(canvas, V.geom(sh), k_sh, W, H)
         wg = V.geom(lay["walls"])
