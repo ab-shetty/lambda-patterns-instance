@@ -15,6 +15,13 @@ below "Log".
   running-bond brick band, dE 16). In a 120-sheet sample: 18 of 75 elevations get a masonry base,
   2 colour sheets pair a labelled one with a labelled roof (dE 19, 30). `--masonry-base 0`
   reproduces earlier pools.
+- **Default changed 2026-10-01: `--plan-v2 1` (floor plans, `--revit-plans`).** (a) A ceiling /
+  electrical sheet type (15% of floor plans; HF14 12): line-only, dense MEP clutter, the eave
+  soffit band (1-2.5 ft outside the walls, whole ring or some sides) plus porch ceilings
+  labelled `soffit`. (b) Rendered sheets (HF14 0): half get a covered patio in a footprint notch
+  walled on two sides and butting the interior floors; half pave in the interior floors' grey;
+  interior plank / tile lines stronger. In 40 floor plans: 8 ceiling sheets, 9 rendered.
+  `--plan-v2 0` reproduces earlier pools (40 sheets checked).
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).

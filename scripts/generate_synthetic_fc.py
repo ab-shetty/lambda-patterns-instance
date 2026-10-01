@@ -508,6 +508,10 @@ def main():
     ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
                     help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
                          "family (default); 0 = pre-2026-09-29 pools")
+    ap.add_argument("--plan-v2", type=int, default=1, choices=[0, 1],
+                    help="--revit-plans floor plans v2: covered patios in footprint notches, grey paving beside "
+                         "grey interiors, stronger interior texture, and a ceiling / electrical sheet type (15%%) "
+                         "with a labelled soffit band. Default 1 since 2026-10-01; 0 reproduces earlier pools")
     ap.add_argument("--masonry-base", type=float, default=0.35,
                     help="Revit elevations: probability the base band is a brick / stone / block wainscot "
                          "instead of concrete or flat. Default 0.35 since 2026-10-01; 0 reproduces earlier pools")
@@ -546,6 +550,7 @@ def main():
         flags["markup"] = args.markup
     flags["cedar_shingle"] = args.cedar_shingle
     flags["masonry_base"] = args.masonry_base
+    flags["plan_v2"] = args.plan_v2
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))

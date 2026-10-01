@@ -1645,6 +1645,39 @@ BED_FIN = (["carpet", "plank_lines", "plank", "dots", "t_hbone", "t_woodgrain"],
 GARAGE_FIN = (["concrete", "dots", "carpet", "t_aggregate"], [42, 18, 10, 30])
 
 
+def _footprint_notch(foot, pr):
+    """A notch of the footprint's bounding box that the walls enclose on two or more sides
+    (the covered patio between wings on HF14 0, the porch on 12), or None."""
+    x0, y0, x1, y1 = foot.bounds
+    best = None
+    for q in G.polys_of(box(x0, y0, x1, y1).difference(foot.buffer(0.05, join_style=2))):
+        if not 60 <= q.area <= 900:
+            continue
+        shared = q.exterior.intersection(foot.buffer(0.2, join_style=2)).length
+        if shared >= 0.4 * q.exterior.length and (best is None or q.area > best.area):
+            best = q
+    if best is None:
+        return None
+    return best.buffer(-0.15, join_style=2) if pr.random() < 0.5 else best
+
+
+def _soffit_band(foot, pr):
+    """The eave overhang drawn on a ceiling plan: a strip 1-2.5 ft outside the walls, the
+    whole ring or the stretches along some sides (an L on HF14 12)."""
+    ov = pr.uniform(1.0, 2.5)
+    ring = foot.buffer(ov, join_style=2).difference(foot)
+    if pr.random() < 0.35:
+        return ring
+    coords = list(foot.exterior.coords)
+    keep = []
+    for a, b in zip(coords, coords[1:]):
+        if math.dist(a, b) >= 6 and pr.random() < 0.55:
+            keep.append(LineString([a, b]).buffer(ov + 0.3, cap_style=2))
+    if not keep:
+        return ring
+    return ring.intersection(unary_union(keep))
+
+
 def compose_floor(image_id, seed, mode_weights):
     house = _house(image_id, seed, mode_weights)
     r = random.Random(seed * 1_000_003 + image_id * 191 + 61)
@@ -1658,6 +1691,11 @@ def compose_floor(image_id, seed, mode_weights):
     # three sheet types, in the proportions the Gemini + real floor plans show
     sheet = r.choices(["finish", "rendered", "underfloor"], weights=[55, 22, 23])[0]
     x0f, y0f, x1f, y1f = foot.bounds
+    # --plan-v2 (G.PLAN_V2, 2026-10-01): own stream, so 0 leaves every pool byte-identical
+    v2 = bool(getattr(G, "PLAN_V2", 0))
+    pr = random.Random(seed * 1_000_003 + image_id * 199 + 73)
+    if v2 and pr.random() < 0.15:
+        sheet = "ceiling"                       # reflected ceiling / electrical plan (HF14 12)
 
     # ---- exterior hardscape (rendered sheets always, finish sheets sometimes)
     hard_polys = []
@@ -1682,6 +1720,18 @@ def compose_floor(image_id, seed, mode_weights):
         if not hard_polys and sheet == "rendered":              # the rendered sheet's question is the hardscape
             pw = min(22.0, x1f - x0f)
             hard_polys = [box(x0f, y1f + 0.5, x0f + pw, y1f + r.uniform(8, 14))]
+        # plan v2: a covered patio in a notch of the footprint, walled on two sides and
+        # butting the interior floors (HF14 0), half the time
+        if v2 and pr.random() < 0.5:
+            notch = _footprint_notch(foot, pr)
+            if notch is not None:
+                hard_polys = [q for q in G.polys_of(unary_union(hard_polys + [notch])) if q.area > 12]
+    soffit = None
+    if sheet == "ceiling":
+        soffit = _soffit_band(foot, pr)
+        notch = _footprint_notch(foot, pr)
+        if notch is not None and pr.random() < 0.7:          # porch ceiling: the same soffit boards
+            soffit = unary_union([soffit, notch])
 
     # ---- finishes: one material per zone; identical materials are ONE family
     zone_mat = {}
@@ -1704,6 +1754,8 @@ def compose_floor(image_id, seed, mode_weights):
         fl = floor_material(r.choice(["plank", "plank_lines", "tile"]), r, fam_seed + 1, False, r.choice([0, 90]))
         fl["base"] = (r.randint(222, 242),) * 3
         fl["line"] = G.mix(fl["base"], (0, 0, 0), r.uniform(0.12, 0.25))
+        if v2:      # real rendered interiors show their planks / tile clearly (HF14 0)
+            fl["line"] = G.mix(fl["base"], (0, 0, 0), pr.uniform(0.18, 0.4))
         for z in ("living", "bed"):
             zone_mat[z] = fl
         zone_mat["wet"] = floor_material("tile", r, fam_seed + 2, False)
@@ -1712,7 +1764,7 @@ def compose_floor(image_id, seed, mode_weights):
     floor_fams = _separate_all([zone_mat.get(z) for z in ("living", "bed", "wet", "garage")])
 
     # ---- layout
-    allg = unary_union([foot] + hard_polys)
+    allg = unary_union([foot] + hard_polys + ([soffit] if soffit is not None else []))
     ex0, ey0, ex1, ey1 = allg.bounds
     grid_on = r.random() < (0.55 if sheet != "finish" else 0.35)
     dims_on = r.random() < 0.75
@@ -1737,6 +1789,11 @@ def compose_floor(image_id, seed, mode_weights):
                        weights=[22, 12, 13, 22, 5, 7, 8, 6, 5])[0]
         hs = _hard_style(hk, r, lw_pat, fam_seed + 11, colour)
         _separate(hs.kind, hs.params, hs.base, floor_fams)
+        if v2 and sheet == "rendered" and pr.random() < 0.5:
+            # paving in the interior floors' grey, a little darker (HF14 0: grey pavers
+            # beside grey planks), instead of a tan that sets it apart
+            gv = max(150, zone_mat["living"]["base"][0] - pr.randint(5, 30))
+            hs.base, hs.line = (gv,) * 3, G.mix((gv,) * 3, (0, 0, 0), pr.uniform(0.25, 0.45))
         for p in hard_polys:
             st = hs
             if st.kind == "hatch":                               # deck boards run the long way of each piece
@@ -1747,6 +1804,18 @@ def compose_floor(image_id, seed, mode_weights):
             _fill(canvas, V.geom(p), st, S, W, H)
             G.cv_outline(canvas, V.geom(p), ink, lw_thin)
             labelled.append(("hardscape", V.geom(p)))
+
+    # ---- soffit band (ceiling sheets): soffit boards running along each stretch
+    if soffit is not None:
+        sp = pr.uniform(0.25, 0.45)
+        sline = (pr.randint(90, 160),) * 3
+        for q in G.polys_of(soffit):
+            bx = q.bounds
+            st = G.Style("hatch", (255, 255, 255), sline, lw_pat,
+                         {"sp": sp, "angle": 0 if bx[2] - bx[0] >= bx[3] - bx[1] else 90}, fam_seed + 31, "soffit")
+            _fill(canvas, V.geom(q), st, S, W, H)
+            G.cv_outline(canvas, V.geom(q), ink, lw_thin)
+            labelled.append(("soffit", V.geom(q)))
 
     stairs = plan_stairs(rooms, r) if sheet in ("finish", "rendered") and r.random() < 0.45 else []
     stair_u = unary_union([st["poly"] for st in stairs]) if stairs else None
@@ -1894,7 +1963,40 @@ def compose_floor(image_id, seed, mode_weights):
             c = p.representative_point()
             tq.add(V.px(c.x, c.y), r.choice(["COVERED PATIO", "PATIO", "DECK", "TERRACE", "(N) DECK"]), size, ink,
                    anchor="mm")
-    if sheet != "underfloor" and r.random() < 0.15:           # MEP overlay (HF14 12)
+    if sheet == "ceiling":
+        # dense MEP clutter, as on HF14 12: switch legs (dashed arcs), fixtures, duct runs, notes
+        mcol = (pr.randint(20, 90),) * 3
+        for _ in range(pr.randint(14, 32)):
+            rm = pr.choice(rooms)
+            x0, y0, x1, y1 = rm["inner"].bounds
+            cx, cy = pr.uniform(x0, x1), pr.uniform(y0, y1)
+            kind = pr.random()
+            if kind < 0.45:
+                rad = pr.uniform(1.5, 5.0) * S
+                for a in range(0, 360, 20):
+                    cv2.ellipse(canvas, G._pt(V.px(cx, cy)), (int(rad * G.SCALE), int(rad * pr.uniform(0.5, 0.9) * G.SCALE)),
+                                0, a, a + 11, G.bgr(mcol), max(1, int(lw_thin)), cv2.LINE_AA, G.SHIFT)
+            elif kind < 0.8:
+                rr_ = 0.45 * S
+                cv2.circle(canvas, G._pt(V.px(cx, cy)), int(rr_ * G.SCALE), G.bgr(mcol), max(1, int(lw_thin)),
+                           cv2.LINE_AA, G.SHIFT)
+                for dx, dy in ((1, 1), (1, -1)):
+                    a, b = V.px(cx - 0.32 * dx, cy - 0.32 * dy), V.px(cx + 0.32 * dx, cy + 0.32 * dy)
+                    G.cv_line(canvas, a, b, mcol, lw_thin)
+            else:
+                ex, ey = pr.uniform(x0, x1), pr.uniform(y0, y1)
+                _dash_line(canvas, V.px(cx, cy), V.px(ex, ey), mcol, lw_thin, [(0.7 * S, 0.35 * S)])
+            tq.add(V.px(cx + 0.7, cy), pr.choice(["$", "B1", "A1", "SD", "F", "$D", "EF", "GFI"]), size * 0.75, mcol,
+                   anchor="lm")
+        for _ in range(pr.randint(3, 7)):
+            rm = pr.choice(rooms)
+            q = rm["inner"].representative_point()
+            G.draw_leader(canvas, tq, V, (q.x, q.y), pr.choice(MEP_NOTES), app, S, pr.choice([1, -1]))
+        if soffit is not None and pr.random() < 0.8:
+            q = G.polys_of(soffit)[0].representative_point()
+            G.draw_leader(canvas, tq, V, (q.x, q.y), pr.choice(["wood soffit, typ.", "WOOD SOFFIT", "(N) T&G SOFFIT"]),
+                          app, S, pr.choice([1, -1]))
+    if sheet not in ("underfloor", "ceiling") and r.random() < 0.15:           # MEP overlay (HF14 12)
         mcol = (r.randint(20, 90),) * 3
         for _ in range(r.randint(4, 10)):
             rm = r.choice(rooms)
@@ -1927,7 +2029,8 @@ def compose_floor(image_id, seed, mode_weights):
         _north(canvas, tq, V.px(ex0 - pad * 0.3, ey0 - pad * 0.3), size * 1.3, ink, lw_thin, size)
     title = {"finish": ["FLOOR PLAN", "FIRST FLOOR PLAN", "PROPOSED FLOOR PLAN", "FLOOR FINISH PLAN", "MAIN LEVEL PLAN"],
              "rendered": ["FLOOR PLAN", "SITE / FLOOR PLAN", "PROPOSED FLOOR PLAN"],
-             "underfloor": ["UNDER-FLOOR FRAMING PLAN", "FOUNDATION PLAN", "GARAGE UNDER-FLOOR PLAN", "CRAWLSPACE PLAN"]}[sheet]
+             "underfloor": ["UNDER-FLOOR FRAMING PLAN", "FOUNDATION PLAN", "GARAGE UNDER-FLOOR PLAN", "CRAWLSPACE PLAN"],
+             "ceiling": ["REFLECTED CEILING PLAN", "ELECTRICAL PLAN", "LIGHTING / RCP PLAN", "MECHANICAL PLAN"]}[sheet]
     _title(canvas, tq, V, ex0, ey1 + bot * 0.55, ex0 + (ex1 - ex0) * r.uniform(0.3, 0.6), r.choice(title), r, ink,
            lw_thin, size)
     if not labelled:
