@@ -24,7 +24,8 @@ import time
 from multiprocessing import Pool
 
 import numpy as np
-from shapely.geometry import LineString, Polygon, box
+from shapely import affinity
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,6 +52,7 @@ def house_for(image_id, seed, mw):
     return G.make_house(rng)
 
 
+OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -480,8 +482,38 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
     front_main = view == "front" and B.kind == "main"
     garage_face = view == "front" and B.kind == "garage"
 
+    # --openings-per-face (2026-10-02, default on): an opening sits on ONE planar face, never
+    # across the edge where a bay / wing steps forward (windows and doors drawn straight through
+    # a projecting bay's corners). 0 reproduces earlier pools.
+    per_face = OPENINGS_PER_FACE[0]
+    fvis = [F["vis"] for F in faces]
+
+    def one_face(p, m):
+        return any(p.within(v.buffer(m)) for v in fvis)
+
     def ok(p, margin=0.0):
-        return p.within(inner) and not any(p.buffer(0.8).intersects(o["poly"]) for o in out)
+        return p.within(inner) and not any(p.buffer(0.8).intersects(o["poly"]) for o in out) and \
+            (not per_face or one_face(p, -0.3))
+
+    def fit(p):
+        """Grade-level door: as is, slid into the face under its centre, or None."""
+        if not per_face or one_face(p, 0.01):
+            return p
+        x0, y0, x1, y1 = p.bounds
+        c = Point((x0 + x1) / 2, (y0 + y1) / 2)
+        for v in sorted(fvis, key=lambda v: v.distance(c)):     # the face under it, else the nearest that fits
+            a, _, b, _ = v.bounds
+            if b - a < (x1 - x0) + 1.0:
+                continue
+            vb = v.buffer(0.01)
+            room = v.buffer(-0.5).union(vb.intersection(G.rect(a - 1, -0.6, b + 1, 0.5))).buffer(0.01)   # 0.5 ft clear, sill at grade
+            for k in range(int((b - a) / 0.5) + 2):          # nearest free spot on this face, either way
+                for dx in ((k * 0.5, -k * 0.5) if k else (0.0,)):
+                    q = affinity.translate(p, dx, 0)
+                    if q.within(room) and \
+                            not any(q.buffer(0.8).intersects(o["poly"]) for o in out):
+                        return q
+        return None
 
     if house.get("units") and B.kind == "main" and view in ("front", "rear"):
         n = house["units"]
@@ -498,7 +530,7 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
                 else:
                     ww = sw if kind == "win" else 3.0
                     p, t = G.rect(base + off, head0, base + off + ww, head0 + 4.0), "window"
-                if p.within(wall.buffer(0.01)):
+                if p.within(wall.buffer(0.01)) and (not per_face or one_face(p, 0.01)):
                     out.append({"poly": p, "type": t, "block": bi})
             for st in range(1, B.stories):
                 for kind, off, sw in tmpl["upper"]:
@@ -511,13 +543,13 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
         dw = 3.0 if rng.random() < 0.7 else 6.0
         du = min(max(fu0 + house["front_door_u"] * width, fu0 + 2.5), fu1 - 2.5 - dw)
         p = G.rect(du, 0, du + dw, -6.8)
-        if p.within(wall.buffer(0.01)):
+        if p.within(wall.buffer(0.01)) and (p := fit(p)) is not None:
             out.append({"poly": p, "type": "door", "block": bi})
     if garage_face and width > 11:
         gdw = min(8.0 if width < 20 or rng.random() < 0.4 else 16.0, width - 3)
         gu = fu0 + (width - gdw) / 2 + rng.uniform(-1, 1)
         p = G.rect(gu, 0, gu + gdw, -7.0)
-        if p.within(wall.buffer(0.01)):
+        if p.within(wall.buffer(0.01)) and (p := fit(p)) is not None:
             out.append({"poly": p, "type": "garage", "block": bi})
     for s in range(B.stories):
         if B.kind == "garage" and s == 0 and garage_face:
@@ -537,6 +569,18 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
             p = G.rect(cu - ww / 2, head, cu + ww / 2, head + wh)
             if ok(p):
                 out.append({"poly": p, "type": "window", "block": bi})
+    if per_face and not house.get("units"):      # a bay / narrow wing face left empty: one centred window per storey
+        for v in fvis:
+            a_, _, b_, _ = v.bounds
+            fw = b_ - a_
+            if not 3.8 <= fw <= 12 or any(o["poly"].intersects(v) for o in out):
+                continue
+            cu, ww = (a_ + b_) / 2, min(fw - 1.4, 4.0 if fw < 8 else 5.0)
+            for s_ in range(B.stories):
+                head = -s_ * fh - 7.0
+                p = G.rect(cu - ww / 2, head, cu + ww / 2, head + 4.5)
+                if ok(p):
+                    out.append({"poly": p, "type": "window", "block": bi})
     # gable-end attic window where the facade rises into a gable
     x0, y0, x1, _ = wall.bounds
     H = B.stories * fh + house["plate"]
@@ -553,6 +597,8 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
 # ----------------------------------------------------------------------------
 def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=False):
     SHAPED[0] = shaped
+    flags = dict(flags)
+    OPENINGS_PER_FACE[0] = bool(flags.pop("openings_per_face", 1))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -622,6 +668,9 @@ def main():
     ap.add_argument("--roof-lines", type=float, default=0.0,
                     help="Revit elevations: probability the roof is plain tight horizontal lines, 60%% of them over "
                          "looser vertical boards, as on HF14 25 / 27; 0 (default) = byte-identical")
+    ap.add_argument("--openings-per-face", type=int, choices=[0, 1], default=1,
+                    help="1 (default since 2026-10-02) = every window / door sits on one planar wall face, never "
+                         "across the corner of a projecting bay or wing; 0 reproduces earlier pools")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -669,6 +718,7 @@ def main():
         flags["roof_lines"] = args.roof_lines
     if args.railings > 0:
         flags["railings"] = args.railings
+    flags["openings_per_face"] = args.openings_per_face
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

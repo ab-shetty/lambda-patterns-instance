@@ -173,6 +173,14 @@ below "Log".
 - **Backbone:** swin transfers best and fits worst, stable across LRs;
   material separability of frozen features does not predict transfer.
 
+- **Default changed 2026-10-02: `--openings-per-face 1`** (`generate_synthetic_fc.py`). Windows
+  and doors were placed against the union of a block's wall faces, so on `--shaped` houses they
+  ran straight across the corners of a projecting bay or wing: 34 of 150 Revit elevations (23%)
+  had one, the 10k pool included. Now each opening sits inside one planar face (0.3 ft clear);
+  a front / garage door that would straddle slides to the nearest free spot on a face that fits
+  it; a narrow face (3.8-12 ft) left empty gets one centred window per storey. 46 / 150 sheets
+  change. `--openings-per-face 0` reproduces earlier pools (12 sheets checked).
+
 ## Synthetic-only failures on HF14 (2026-10-02) and the flags aimed at them
 
 From the Model Results artifact (`revit10k-roi-e5` vs shipped, hand boxes, 4096): HF14 0.8118 vs
