@@ -550,6 +550,21 @@ def compose_revit(image_id, seed, mode_weights):
                 p = o["poly"]
                 rs.append(p.difference(affinity.translate(p, sun[0] * recess, sun[1] * recess)))
             parts = ([sh] if sh is not None else []) + rs
+            rail = e.get("railing")
+            if rail is not None:        # railing + deck slab shadow, cast `depth` in front of the wall
+                d = rail["depth"]
+                sil = unary_union(rail["cut"] + rail["rails"] +
+                                  [G.rect(min(p0[0], p1[0]) - 0.03, min(p0[1], p1[1]) - 0.03,
+                                          max(p0[0], p1[0]) + 0.03, max(p0[1], p1[1]) + 0.03)
+                                   if (p0[0] == p1[0] or p0[1] == p1[1]) else
+                                   Polygon([p0, p1, (p1[0], p1[1] + 0.06), (p0[0], p0[1] + 0.06)])
+                                   for p0, p1 in rail["lines"]])
+                da, db, dy = rail["deck"]
+                slab = Polygon([(da, dy), (db, dy), (db + sun[0] * d, dy + sun[1] * d), (da + sun[0] * d, dy + sun[1] * d)])
+                walls_u = unary_union([q for (f, q, bi, k) in e["surfaces"] if k in ("wall", "found")])
+                rsh = unary_union([affinity.translate(sil, sun[0] * d, sun[1] * d), slab]).intersection(walls_u)
+                if not rsh.is_empty:
+                    parts.append(rsh)
             if parts:
                 m = np.zeros((H, W), np.uint8)
                 for q in G.polys_of(unary_union(parts)):
@@ -593,6 +608,15 @@ def compose_revit(image_id, seed, mode_weights):
             for Wf in e["vf"]:
                 if Wf["kind"][0] in ("wall", "chimney"):
                     _outline_geom(canvas, V.geom(Wf["vis"]), ink, lw_thin)
+        rail = e.get("railing")
+        if rail is not None:            # railing in front of the openings and the shadows
+            fillc = (255, 255, 255) if not shaded else (242, 242, 240)
+            for q in rail["cut"] + rail["rails"]:
+                for qq in G.polys_of(q):
+                    G.cv_fill(canvas, V.geom(qq), fillc)
+                    _outline_geom(canvas, V.geom(qq), ink, lw_thin)
+            for p0, p1 in rail["lines"]:
+                G.cv_line(canvas, V.px(*p0), V.px(*p1), ink, max(1.0, lw_thin * 0.7))
         # heavy profile
         sil = unary_union([p for (_, p, _, _) in e["surfaces"]] + list(e["trims"])).buffer(0.02)
         for p in G.polys_of(sil):

@@ -183,10 +183,15 @@ each now with an opt-in flag (own RNG each; all 0 = byte-identical, 12 sheets ch
 | failure (real sheet) | what the generator lacked | flag |
 |---|---|---|
 | tight horizontal roof lines merged with looser vertical siding, both unpainted (25 q01/q02, 27 q02-q04: 0.94-0.99 shipped -> 0.39-0.72) | roofs were rows with joints or standing seam (vertical lines); a plain horizontal-lines roof never met vertical boards (lap + vertical walls do pair: 51 / 300 sheets) | `--roof-lines P` |
-| railing / stair in front of siding (27: deck balusters over lap read as a grid; stair + rail over vertical boards) | Revit elevations have porch posts but no railings or exterior stairs; labels run on behind them | not built yet (FreeCAD `ArchStairs` / `ArchFence` or Part solids) |
+| railing / stair in front of siding (27: deck balusters over lap read as a grid; stair + rail over vertical boards) | Revit elevations have porch posts but no railings or exterior stairs; labels run on behind them | `--railings P`: balcony (2nd floor) or raised deck across part of a wall, pickets or cables, half with a stair to grade; rim / posts / stringer are trims (cut), rails, balusters, treads and handrail are drawn over and the wall label runs on behind; on shaded sheets the deck + railing shadow is cast `depth` ft out by the same sun as `wall_shadows` |
 | faint line-only texture taken for blank paper (14 q06 brick tile 0.987 -> 0.555 picks blank stucco) | line-only pattern lines were 110-175 grey; 14's are ~240 | `--faint-lines P` |
 | siding in porch shade missed (2 q00/q01 0.88 -> 0.73) | shade was one x0.55-0.75 multiply keeping the hue; 02's is x0.81 and neutral grey (246,242,230 -> 199,200,195) with a x0.68 overlap level | `--soft-shadows P` (two suns through `wall_shadows`, the 3D massing's projection) |
 
+Railings are a 2D overlay with a depth, not FreeCAD solids: in the fused massing they would hide
+the wall and cut its label, which 27's labels do not. FreeCAD 2026.09 (`/opt/fc`, BIM) also has
+`ArchStairs` (stairs + railings), `ArchFence`, `ArchCovering` (cladding / tile patterns on faces)
+and `ArchTruss` / `ArchFrame` -- untried; `Shape.makeParallelProjection` would give exact shadows
+of any solid we add.
 12's thin soffit band is the ceiling sheet type added 2026-10-01 (`--plan-v2 1`), after this model.
 Correction to 2026-09-30 below: the 25 / 27 failures were read there as "not paint". The direct
 cause is the horizontal-roof / vertical-siding pair above; paint is still untested at the

@@ -270,6 +270,89 @@ def classify(F, blocks, chim):
 # ----------------------------------------------------------------------------
 # the v6 elevation dict, from visible faces
 # ----------------------------------------------------------------------------
+def _railing(house, view, walls_by_block, fh, rr):
+    """--railings (2026-10-02): a balcony or raised deck with a railing (and half the time an
+    exterior stair) standing in front of a wall, as on HF14 27. Solid boards -- rim joist,
+    posts, stair stringer -- are trims (cut out of the labels, like the porch posts); the
+    rails, balusters / cables, treads and handrail are drawn over the siding and the wall
+    label runs on behind them, as the annotators drew it. `depth` = distance in front of the
+    wall, so revit_render casts the shadow by the same sun vector as wall_shadows."""
+    walls = {bi: unary_union([F["vis"] for F in Fs]) for bi, Fs in walls_by_block.items()}
+    walls = {bi: w for bi, w in walls.items() if not w.is_empty and w.bounds[2] - w.bounds[0] > 14}
+    if not walls:
+        return None
+    bi = max(walls, key=lambda k: walls[k].area)
+    B, wall = house["blocks"][bi], walls[bi]
+    u0, _, u1, _ = wall.bounds
+    deck_y = -fh if B.stories >= 2 and rr.random() < 0.55 else -rr.uniform(1.5, 4.0)
+    w = max(8.0, rr.uniform(0.35, 0.85) * (u1 - u0))
+    w = min(w, u1 - u0 - 1)
+    a = rr.uniform(u0 + 0.5, u1 - w - 0.5)
+    cut, rails, lines = [], [], []
+    rim_h = rr.uniform(0.7, 1.1)
+    cut.append(G.rect(a, deck_y, a + w, deck_y + rim_h))                          # rim joist / deck edge
+    rail_h = rr.uniform(3.0, 3.6)
+    top = deck_y - rail_h
+    rails.append(G.rect(a, top, a + w, top + rr.uniform(0.2, 0.35)))               # top rail
+    rails.append(G.rect(a, deck_y - 0.55, a + w, deck_y - 0.4))                    # bottom rail
+    pw = rr.uniform(0.35, 0.5)
+    n_p = max(1, round(w / rr.uniform(5, 8)))
+    pxs = [a + pw / 2 + (w - pw) * k / n_p for k in range(n_p + 1)]
+    for px in pxs:
+        cut.append(G.rect(px - pw / 2, top - 0.15, px + pw / 2, deck_y))           # railing posts
+        if deck_y > -fh + 0.1:                                                     # ground deck: posts to grade
+            cut.append(G.rect(px - pw / 2 * 0.9, deck_y + rim_h, px + pw / 2 * 0.9, 0))
+    infill = rr.choices(["pickets", "cable"], weights=[75, 25])[0]
+    y_lo, y_hi = deck_y - 0.55, top + 0.35
+    if infill == "pickets":
+        sp = rr.uniform(0.3, 0.5)
+        x = a + sp
+        while x < a + w - 0.1:
+            lines.append(((x, y_hi), (x, y_lo)))
+            x += sp
+    else:
+        sp = rr.uniform(0.25, 0.4)
+        y = y_hi + sp
+        while y < y_lo - 0.05:
+            lines.append(((a, y), (a + w, y)))
+            y += sp
+    stair = None
+    if -deck_y > 1.5 and rr.random() < 0.5:
+        run = -deck_y * rr.uniform(1.0, 1.4)
+        if a + w + run <= u1 + 2:
+            xt, xb = a + w, a + w + run
+        elif a - run >= u0 - 2:
+            xt, xb = a, a - run
+        else:
+            xt = None
+        if xt is not None:
+            stair = (xt, xb)
+            n = max(2, math.ceil(-deck_y / rr.uniform(0.55, 0.65)))
+            dx, dy = (xb - xt) / n, -deck_y / n
+            strg = LineString([(xt, deck_y + 0.4), (xb, 0.4)]).buffer(0.45, cap_style=2).intersection(
+                G.rect(min(xt, xb) - 1, deck_y, max(xt, xb) + 1, 0))
+            if not strg.is_empty:
+                cut.append(strg)                                                    # stringer
+            for k in range(n):                                                      # treads + risers
+                x0, y0 = xt + dx * k, deck_y + dy * k
+                lines.append(((x0, y0), (x0 + dx, y0)))
+                lines.append(((x0 + dx, y0), (x0 + dx, y0 + dy)))
+            hr = rr.uniform(2.8, 3.2)
+            lines.append(((xt, deck_y - hr), (xb, -hr)))                            # handrail
+            lines.append(((xt, deck_y - hr + 0.12), (xb, -hr + 0.12)))
+            for x in (xb,):
+                cut.append(G.rect(x - pw / 2, -hr - 0.15, x + pw / 2, 0))           # newel post
+            sp = rr.uniform(0.35, 0.5) * (1 if xb > xt else -1)
+            x = xt + sp
+            while (x - xb) * (1 if xb > xt else -1) < -0.1:
+                f = (x - xt) / (xb - xt)
+                lines.append(((x, deck_y * (1 - f) - hr), (x, deck_y * (1 - f))))   # stair balusters
+                x += sp
+    depth = rr.uniform(4, 9) if deck_y <= -fh + 0.1 else rr.uniform(6, 12)
+    return {"cut": cut, "rails": rails, "lines": lines, "depth": depth, "deck": (a, a + w, deck_y),
+            "stair": stair, "bi": bi}
+
+
 def build_elevation_fc(house, view, rng):
     spec, faces = _FACES[_CUR[0]]
     blocks, chim = spec["blocks"], spec.get("chimney")
@@ -371,10 +454,17 @@ def build_elevation_fc(house, view, rng):
         surfaces.append(("roof", proof, -1, "porch"))
         trims.append(porch["fascia"])
         trims += porch["posts"]
+    railing = None
+    if getattr(G, "RAILINGS", 0) > 0 and walls_by_block:
+        rr = random.Random(_CUR[0] * 977 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 31 + 7)
+        if rr.random() < G.RAILINGS:
+            railing = _railing(house, view, walls_by_block, fh, rr)
+            if railing is not None:
+                trims += railing["cut"]
     trims = [q for t in trims for q in G.polys_of(t) if q.area > 0.05]
     allp = [p for (_, p, _, _) in surfaces] + trims
     return {"surfaces": surfaces, "trims": trims, "openings": openings, "porch": porch,
-            "extent": unary_union(allp).bounds, "vf": vf}
+            "extent": unary_union(allp).bounds, "vf": vf, "railing": railing}
 
 
 def place_openings(house, B, bi, view, wall, Fs, rng):
@@ -532,6 +622,10 @@ def main():
     ap.add_argument("--roof-lines", type=float, default=0.0,
                     help="Revit elevations: probability the roof is plain tight horizontal lines, 60%% of them over "
                          "looser vertical boards, as on HF14 25 / 27; 0 (default) = byte-identical")
+    ap.add_argument("--railings", type=float, default=0.0,
+                    help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
+                         "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
+                         "0 (default) = byte-identical")
     ap.add_argument("--cedar-shingle", type=float, default=0.5,
                     help="probability a shingle style is drawn as cedar shingles (narrow, vertical joints "
                          "dominant, broken butt lines, keyway tabs) instead of coursed units; real elevations "
@@ -573,6 +667,8 @@ def main():
         flags["soft_shadows"] = args.soft_shadows
     if args.roof_lines > 0:
         flags["roof_lines"] = args.roof_lines
+    if args.railings > 0:
+        flags["railings"] = args.railings
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

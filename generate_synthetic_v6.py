@@ -132,6 +132,9 @@ SOFT_SHADOWS = 0.0
 # Revit elevations: probability the roof is plain horizontal course lines, often over vertical
 # boards, as on HF14 25 / 27 (scripts/revit_render.py). 0 = off, byte-identical pools.
 ROOF_LINES = 0.0
+# Revit elevations: probability a view gets a balcony / deck railing (+ stair) in front of a wall,
+# as on HF14 27 (scripts/generate_synthetic_fc.py _railing). 0 = off, byte-identical pools.
+RAILINGS = 0.0
 # Revit floor plans v2 (scripts/revit_plans.py): covered patios in footprint notches, grey
 # paving beside grey interiors, stronger interior texture, and a ceiling / electrical sheet
 # type with a labelled soffit band (HF14 0, 12). 0 = off, byte-identical pools.
@@ -2848,17 +2851,18 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, faint_lines=0.0, soft_shadows=0.0, roof_lines=0.0, plan_v2=0, plan_source=None, plan_source_p=1.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, faint_lines=0.0, soft_shadows=0.0, roof_lines=0.0, railings=0.0, plan_v2=0, plan_source=None, plan_source_p=1.0):
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
     global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
-    global TRIM_LABEL_PROB, MARKUP, CEDAR_SHINGLE, MASONRY_BASE, FAINT_LINES, SOFT_SHADOWS, ROOF_LINES, PLAN_V2, PLAN_SOURCE, PLAN_SOURCE_P
+    global TRIM_LABEL_PROB, MARKUP, CEDAR_SHINGLE, MASONRY_BASE, FAINT_LINES, SOFT_SHADOWS, ROOF_LINES, RAILINGS, PLAN_V2, PLAN_SOURCE, PLAN_SOURCE_P
     PLAN_V2 = plan_v2
     PLAN_SOURCE, PLAN_SOURCE_P = plan_source, plan_source_p
     MASONRY_BASE = masonry_base
     FAINT_LINES = faint_lines
     SOFT_SHADOWS = soft_shadows
     ROOF_LINES = roof_lines
+    RAILINGS = railings
     TRIM_LABEL_PROB = trim_label_prob
     MARKUP = markup
     CEDAR_SHINGLE = cedar_shingle
