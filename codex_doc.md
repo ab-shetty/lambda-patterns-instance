@@ -35,6 +35,11 @@ session; generator changes only, all on the branch.
      (27% of sheets), faint-lines 18% of line-only (10% of sheets), soft-shadows 48% (two-level
      grey on 19%). Colour-pairs showed 0.5 vs 1.0 is within one-seed noise; tune only if needed.
   3. Then the 2026-10-01 lever below (longer schedule, gentle DR) on the winning pool.
+- **HF14 label fix v1** (`eval_labels/hf14_fixes_v1.json`, `evaluate_refunet_selection.py
+  --label-fixes`): sheet 14's lap panel under window 09 was missed in labelling (labeller
+  confirmed). The fix adds target pixels only -- every box and the question count are unchanged,
+  and scores without the flag are exactly the old ones. `run_revit_2k.sh` now also writes
+  `*_hf14fix.json`; report both for a while. Re-scored numbers: see `synth_progress.md`.
 
 ## Pick up here (2026-10-01, GH200 -- read this first)
 

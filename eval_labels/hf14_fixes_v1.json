@@ -1,0 +1,7 @@
+{
+  "_doc": "Label fixes for the real-world test set, applied only with evaluate_refunet_selection.py --label-fixes. Each fix adds a polygon (native pixels) to the TARGET of every question of that category on that sheet; the label masks used to sample reference boxes, and so every box and the question count, are unchanged. v1 (2026-10-02): HF14 14, the lap panel under window 09 is the same pattern1 siding as the panels either side but was missed when labelling (confirmed by the labeller).",
+  "14": [
+    {"category": "pattern1", "polygon": [[4895, 926], [5042, 926], [5042, 985], [4895, 985]],
+     "why": "panel under window 09: same lap siding as annotations 1 and 2, unlabelled"}
+  ]
+}

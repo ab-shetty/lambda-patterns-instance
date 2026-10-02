@@ -67,11 +67,12 @@ COMMON="--batch-size 8 --num-workers 16 --prefetch-factor 4 --image-max-size 204
   --ref-size 224 --width 128 --model swin_t --lr 2e-4 --backbone-lr-mult 0.1 \
   --train-split 0.99 --domain-random --mask-thresh 0.35 --seed $SEED --pad-grid 512 ${EXTRA:-}"
 
-score() {   # tag checkpoint
-  for I in 2048 4096; do for split in val hf14; do IDX=$VAL; [ $split = hf14 ] && IDX=$HF14
-    local OUT=$E/$1_i${I}_$split.json
+score() {   # tag checkpoint   (hf14fix = HF14 with eval_labels/hf14_fixes_v1.json, 2026-10-02)
+  for I in 2048 4096; do for split in val hf14 hf14fix; do IDX=$VAL; [ $split != val ] && IDX=$HF14
+    local OUT=$E/$1_i${I}_$split.json FIX=""
+    [ $split = hf14fix ] && FIX="--label-fixes eval_labels/hf14_fixes_v1.json"
     [ -f $OUT ] || PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $2 \
-      --indices $IDX --image-max-size $I --ref-size 224 --mask-thresh 0.35 \
+      --indices $IDX --image-max-size $I --ref-size 224 --mask-thresh 0.35 $FIX \
       --metrics-out $OUT > /dev/null 2>&1
   done; done
 }
@@ -127,7 +128,7 @@ done; done
 # plus per-sheet means on the sheets the options target (HF14 25, 27, 14, 02)
 if [[ " $ARMS " == *" revit10kcurroi "* && " $ARMS " == *" revit10kfailroi "* ]]; then
   CU=revit10kcurroi_s$SEED; FA=revit10kfailroi_s$SEED
-  for I in 2048 4096; do for split in val hf14; do
+  for I in 2048 4096; do for split in val hf14 hf14fix; do
     python3 scripts/paired_compare.py --a $E/${CU}_i${I}_$split.json --b $E/${FA}_i${I}_$split.json \
       --label-a curroi --label-b failroi | grep -m2 "paired mean\|better on" | sed "s/^/  [$I $split] failroi vs curroi: /"
     python3 scripts/paired_compare.py --a $E/revit10k_pub_i${I}_$split.json --b $E/${CU}_i${I}_$split.json \

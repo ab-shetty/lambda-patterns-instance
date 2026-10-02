@@ -90,7 +90,7 @@ def load_refunet(checkpoint_path, device):
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                    mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1,
-                   save_probs=None, box_overrides=None):
+                   save_probs=None, box_overrides=None, label_fixes=None):
     """`tta` averages sigmoid maps over dihedral views of image AND reference
     (the reference crop is a piece of the same image, so it turns with it)."""
     device = device or next(model.parameters()).device
@@ -107,6 +107,13 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             masks0 = [render_instance_mask(a["segmentation"], h0, w0).astype(bool)
                       for a in anns]
             categories = [a.get("category_name", "pattern") for a in anns]
+            # --label-fixes: extra TARGET pixels per category (missed labels); the masks
+            # above, which the reference boxes are sampled from, are left as they are
+            fix_masks = {}
+            for fx in (label_fixes or {}).get(str(image_idx), []):
+                m = np.zeros((h0, w0), np.uint8)
+                cv2.fillPoly(m, [np.round(np.array(fx["polygon"], np.float64)).astype(np.int32)], 1)
+                fix_masks[fx["category"]] = fix_masks.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
             scale = image_max_size / max(h0, w0)
             nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
             image = cv2.resize(image0, (nw, nh), interpolation=cv2.INTER_LINEAR)
@@ -167,6 +174,8 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                                         (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
                 target = np.logical_or.reduce(
                     [m for m, c in zip(masks0, categories) if c == category])
+                if category in fix_masks:
+                    target = target | fix_masks[category]
                 intersection = int((prediction & target).sum())
                 union = int((prediction | target).sum())
                 rows.append({"image_index": image_idx,
@@ -193,6 +202,10 @@ def main():
                         help="JSON {image_index: {question_index: [x, y, w, h] | null}} in native "
                              "pixels: replace the automatic reference box of those questions, or "
                              "drop them (null). Other questions are unchanged.")
+    parser.add_argument("--label-fixes", default="",
+                        help="JSON {image_index: [{category, polygon: [[x, y], ...]}]} in native pixels: "
+                             "add missed pixels to the TARGET of every question of that category "
+                             "(eval_labels/hf14_fixes_v1.json). Boxes and questions are unchanged.")
     parser.add_argument("--local-pool", default="",
                         help="score a local synthetic pool (images/ + annotations/) instead of the "
                              "real-world test set; --indices then indexes its sorted sheets "
@@ -222,7 +235,8 @@ def main():
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
                           tta=args.tta, save_probs=args.save_probs or None,
-                          box_overrides=json.loads(Path(args.boxes).read_text()) if args.boxes else None)
+                          box_overrides=json.loads(Path(args.boxes).read_text()) if args.boxes else None,
+                          label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
@@ -231,6 +245,7 @@ def main():
                "image_max_size": args.image_max_size,
                "mask_thresh": args.mask_thresh, "tta": args.tta,
                "boxes": args.boxes or "automatic",
+               "label_fixes": args.label_fixes or "none",
                "n_images": len(indices), "n_reference_selections": len(rows),
                "mean_iou": mean_iou, "selections": rows}
     path = Path(args.metrics_out)
