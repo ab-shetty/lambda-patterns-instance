@@ -204,6 +204,11 @@ no tilted overlapping lap boards, no tapered shingles -- so line work equals our
 the only gain is a few-px joint shadow; ~1 min more FreeCAD per brick sheet. If shadow relief is
 ever needed, build tilted lap boards with Part directly. The rest untried; `Shape.makeParallelProjection` would give exact shadows
 of any solid we add.
+Screen values (judgment, not tuned; measured on 300 Revit elevations): `--roof-lines 0.3` (30%
+of sheets), `--railings 0.15` (per view: 15% of views, 27% of sheets -- 0.3 gave 48%, more than
+real sheets show), `--faint-lines 0.2` (line-only sheets only: 18% of them, 10% of all),
+`--soft-shadows 0.5` (48%; the two-level grey shade on shaded sheets: 19%). Arms
+`revit10kcurroi` / `revit10kfailroi` in `run_revit_2k.sh`.
 12's thin soffit band is the ceiling sheet type added 2026-10-01 (`--plan-v2 1`), after this model.
 Correction to 2026-09-30 below: the 25 / 27 failures were read there as "not paint". The direct
 cause is the horizontal-roof / vertical-siding pair above; paint is still untested at the

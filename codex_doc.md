@@ -1,11 +1,38 @@
 # Handoff
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-10-02, CPU session -- read this first)
+
+Detail: `synth_progress.md` "Synthetic-only failures on HF14 (2026-10-02)". Nothing trained this
+session; generator changes only, all on the branch.
+
+- **Where synthetic-only loses to shipped** (Model Results artifact, hand boxes, 4096): sheets 27,
+  14, 25, 2, 12. Four generator gaps, each now an opt-in flag (off = byte-identical): `--roof-lines`
+  (plain horizontal-line roofs over vertical boards, 25/27), `--railings` (decks / balconies /
+  stairs in front of siding, 27), `--faint-lines` (pale line-only textures, 14), `--soft-shadows`
+  (lighter, neutral, two-level shade from a second sun through `wall_shadows`, 02).
+- **Default changed:** `--openings-per-face 1` (windows / doors no longer cross a bay's corners;
+  23% of Revit elevations had one). `0` reproduces older pools.
+- **Opt-in, untrained:** `--plan-source` (real Swiss Dwellings floor layouts, CC BY 4.0 -- credit
+  Archilyse AG); floor labels now leave out fitted pieces (counters, tubs, vanities, stairs) like
+  the Gemini plans.
+- **GPU runbook, in order** (one seed, ROI add, the 10k recipe, P2=5):
+  1. `EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 "revit10kcurroi revit10kfailroi"`
+     builds both 10k pools if missing (64 workers). `curroi` = today's defaults, the control;
+     `failroi` = + `--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2`.
+     Read failroi vs curroi paired on HF14 @4096 (does the bundle help, especially 25 / 27 / 14 /
+     02), and curroi vs `revit10k-roi-e5` (the default changes since 09-30).
+  2. If the bundle helps: drop-one arms to see which option carries it. The values are judgment,
+     not tuned: per measured 300 sheets they change roof-lines 30% of sheets, railings 15% of views
+     (27% of sheets), faint-lines 18% of line-only (10% of sheets), soft-shadows 48% (two-level
+     grey on 19%). Colour-pairs showed 0.5 vs 1.0 is within one-seed noise; tune only if needed.
+  3. Then the 2026-10-01 lever below (longer schedule, gentle DR) on the winning pool.
 
 ## Pick up here (2026-10-01, GH200 -- read this first)
 

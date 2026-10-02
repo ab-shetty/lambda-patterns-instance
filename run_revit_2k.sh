@@ -29,6 +29,12 @@
 # (published abshetty/floz-refunet-swint-revit2k-roi-e8 / -revit10k-roi-e5). Run with
 #   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitmk50roi
 #   EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 revit10kmk50roi
+# revit10kcurroi / revit10kfailroi (2026-10-02, built here if missing): the 10k recipe on pools
+# rebuilt with TODAY's defaults (plan-v2 1, cedar 0.5, masonry 0.35, openings-per-face 1), without
+# and with the four options aimed at the synthetic-only HF14 failures (synth_progress.md "Synthetic-
+# only failures on HF14"): --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2.
+# failroi vs curroi isolates the four options; curroi vs revit10k-roi-e5 the default changes.
+#   EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 "revit10kcurroi revit10kfailroi"
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 SEED=${1:-7}
@@ -47,8 +53,12 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitcp100roi]=data/synthetic/revitcp100_train2000
                  [revit10kroi]=data/synthetic/revitnew_train10000
                  [revitmk50roi]=data/synthetic/revitmk50_train2000
-                 [revit10kmk50roi]=data/synthetic/revitmk50_train10000)
-declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5")
+                 [revit10kmk50roi]=data/synthetic/revitmk50_train10000
+                 [revit10kcurroi]=data/synthetic/revitcur_train10000
+                 [revit10kfailroi]=data/synthetic/revitfail_train10000)
+declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5"
+                  [revit10kcurroi]="10000"
+                  [revit10kfailroi]="10000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 E=data/evaluations/revit2k; mkdir -p logs $E
