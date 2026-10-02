@@ -181,6 +181,13 @@ below "Log".
   it; a narrow face (3.8-12 ft) left empty gets one centred window per storey. 46 / 150 sheets
   change. `--openings-per-face 0` reproduces earlier pools (12 sheets checked).
 
+- **HF14 label fix v1 (2026-10-02, opt-in `--label-fixes eval_labels/hf14_fixes_v1.json`):** sheet
+  14's lap panel under window 09 added to pattern1's target (missed in labelling; boxes and
+  questions unchanged). Re-scored on CPU, hand boxes, 4096 (without the flag both reproduce the
+  Model Results artifact's sheet-14 means exactly): shipped sheet 14 0.9250 -> 0.9357, HF14
+  0.8466 -> 0.8483; `revit10k-roi-e5` 0.8403 -> 0.8505, HF14 0.8118 -> 0.8134. Six pattern1
+  questions gain ~+0.014 each in both models; the gap between them is unchanged (-0.035).
+
 ## Synthetic-only failures on HF14 (2026-10-02) and the flags aimed at them
 
 From the Model Results artifact (`revit10k-roi-e5` vs shipped, hand boxes, 4096): HF14 0.8118 vs
