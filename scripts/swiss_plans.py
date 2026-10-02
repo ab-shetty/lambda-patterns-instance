@@ -198,12 +198,20 @@ def _thickness(q):
     return min(a, b) if q.area > 0.8 * m.area else None
 
 
-def _names(rooms, entrance, feats, r):
-    """Swiss area types -> the US names the furniture / finish code keys on."""
-    bed = [k for k, (t, q) in enumerate(rooms) if t in ("ROOM", "BEDROOM", "GUESTROOM", "CHILDRENS_ROOM")]
+def _names(rooms, entrance, feats, r, opn=()):
+    """Swiss area types -> the US names the furniture / finish code keys on. `opn`: pairs of areas
+    with no wall between them; a ROOM open to the kitchen or a corridor is the living room."""
+    names = {}
+    hub = {k for k, (t, q) in enumerate(rooms) if t in ("KITCHEN", "KITCHEN_DINING", "CORRIDOR", "LIVING_ROOM",
+                                                         "LIVING_DINING", "DINING", "ROOM_DINING")}
+    for i, j in opn:
+        for a, b in ((i, j), (j, i)):
+            if rooms[a][0] == "ROOM" and b in hub and a not in names:
+                names[a] = r.choice(["LIVING ROOM", "LIVING", "GREAT ROOM"])
+    bed = [k for k, (t, q) in enumerate(rooms) if t in ("ROOM", "BEDROOM", "GUESTROOM", "CHILDRENS_ROOM") and k not in names]
     bed.sort(key=lambda k: -rooms[k][1].area)
     baths = sorted([k for k, (t, q) in enumerate(rooms) if t == "BATHROOM"], key=lambda k: -rooms[k][1].area)
-    names, nb = {}, 1
+    nb = 1
     for i, k in enumerate(bed):
         if i == 0 and r.random() < 0.6:
             names[k] = "PRIMARY BEDROOM"
@@ -252,12 +260,29 @@ def layout(rec, r, zone):
     t_int = sorted(th_int)[len(th_int) // 2] if th_int else 0.5
     entrance = next((q for t, q in ops if t == "ENTRANCE_DOOR"), None)
     feats = [(t, shapely.from_wkb(b)) for t, b in rec["features"]]
-    names = _names(rooms_raw, entrance, feats, r)
+    rq = [max(_polys(q.buffer(0)), key=lambda p: p.area) for _, q in rooms_raw]
+    # open plan: Swiss areas with no wall between them sit a hair apart (~0.05 ft); each area grows
+    # into the wall-free gaps around it (never into a wall or another area), so one finish runs on
+    # across the open side and no blank hairline splits the floor
+    opn = [(i, j) for i in range(len(rq)) for j in range(i + 1, len(rq)) if rq[i].distance(rq[j]) < 0.15]
+    names = _names(rooms_raw, entrance, feats, r, opn)
+    free = foot.difference(walls_full)
+    for k in range(len(rq)):
+        others = unary_union([g for j, g in enumerate(rq) if j != k])
+        add = rq[k].buffer(0.35, join_style=2).intersection(free).difference(others)
+        rq[k] = max(_polys(unary_union([rq[k], add]).buffer(0)), key=lambda p: p.area)
     rooms = []
-    for (t, q), nm in zip(rooms_raw, names):
-        q = max(_polys(q.buffer(0)), key=lambda p: p.area)
+    for (t, _), q, nm in zip(rooms_raw, rq, names):
         rooms.append({"cell": q.buffer(t_int / 2, join_style=2), "inner": q, "kind": "room", "name": nm,
                       "zone": zone(nm), "swiss": t})
+    for _ in range(2):      # a corridor open to a room takes that room's finish (largest neighbour)
+        for i, j in opn:
+            for a, b in ((i, j), (j, i)):
+                if rooms[a]["swiss"] == "CORRIDOR" and rooms[b]["swiss"] != "CORRIDOR" or \
+                        rooms[a]["swiss"] == rooms[b]["swiss"] == "CORRIDOR" and rooms[b]["inner"].area > rooms[a]["inner"].area:
+                    nb_ = [rooms[c]["inner"].area for p_ in opn for c in p_ if a in p_ and c != a]
+                    if rooms[b]["inner"].area >= max(nb_):
+                        rooms[a]["zone"] = rooms[b]["zone"]
     balc = [shapely.from_wkb(b) for _, b in rec["out"]]
     doors, windows, openings, cut = [], [], [], []
     for t, q in ops:
@@ -270,7 +295,13 @@ def layout(rec, r, zone):
         if t == "WINDOW":
             windows.append((o, pos, c, w))
             continue
-        near = [k for k, rm in enumerate(rooms) if rm["inner"].distance(rect) < 0.4]
+        d_ = th / 2 + 0.35          # the rooms either side of the door, probed just past the wall faces
+        sides = [Point(c, pos - d_), Point(c, pos + d_)] if o == "h" else [Point(pos - d_, c), Point(pos + d_, c)]
+        near = []
+        for pt in sides:
+            dk = min((rm["inner"].distance(pt), k) for k, rm in enumerate(rooms))
+            if dk[0] < 0.3 and dk[1] not in near:
+                near.append(dk[1])
         to_out = any(b.distance(rect) < 0.6 for b in balc)
         if to_out:
             dtype = "slider" if w > 5 and r.random() < 0.7 else "swing"
@@ -337,19 +368,19 @@ def _fixture(t, q, walls, r):
     if t == "TOILET":
         out += [R(-0.85, 0, 0.85, 0.75), E(0, 1.55, 0.62, 0.85, "item"), E(0, 1.6, 0.45, 0.62)]
     elif t == "SINK":
-        out += [R(-hu, 0, hu, D)]
+        out += [R(-hu, 0, hu, D, "fit")]
         n = 2 if hu > 1.9 else 1
         for k in range(n):
             a = -hu + 2 * hu * (k + 0.5) / n
             out += [E(a, D * 0.52, min(0.7, hu * 0.7 / n), D * 0.3), E(a, D * 0.52, min(0.5, hu * 0.5 / n), D * 0.2),
                     E(a, D * 0.52, 0.07, 0.07)]
     elif t == "BATHTUB":
-        out += [R(-hu, 0, hu, D), R(-hu + 0.3, 0.3, hu - 0.3, D - 0.3, "line", rad=min(0.6, D * 0.25)),
+        out += [R(-hu, 0, hu, D, "fit"), R(-hu + 0.3, 0.3, hu - 0.3, D - 0.3, "line", rad=min(0.6, D * 0.25)),
                 E(hu - 0.6, D / 2, 0.1, 0.1)]
     elif t == "SHOWER":
-        out += [R(-hu, 0, hu, D), (LineString([P(-hu, 0), P(hu, D)]).buffer(0.02), "line"), E(0, D / 2, 0.12, 0.12)]
+        out += [R(-hu, 0, hu, D, "fit"), (LineString([P(-hu, 0), P(hu, D)]).buffer(0.02), "line"), E(0, D / 2, 0.12, 0.12)]
     elif t == "KITCHEN":
-        out += [R(-hu, 0, hu, D)]
+        out += [R(-hu, 0, hu, D, "fit")]
         if hu > 3:          # sink, range, fridge along the run
             s = r.uniform(-hu * 0.5, hu * 0.1)
             out += [R(s - 1.2, 0.35, s + 1.2, D - 0.35, "line", rad=0.15),
@@ -361,11 +392,11 @@ def _fixture(t, q, walls, r):
             for da, db in ((0.55, 0.6), (1.45, 0.6), (0.55, 1.5), (1.45, 1.5)) if g0 is not None else ():
                 out += [E(g0 + da, min(db, D - 0.4), 0.33, 0.33), E(g0 + da, min(db, D - 0.4), 0.18, 0.18)]
             if fr:
-                out += [R(hu - 3.0, 0, hu, D + 0.3), R(hu - 3.0, D + 0.05, hu, D + 0.3, "line")]
+                out += [R(hu - 3.0, 0, hu, D + 0.3, "fit"), R(hu - 3.0, D + 0.05, hu, D + 0.3, "line")]
         if r.random() < 0.5:                                    # uppers, projected
             out.append((LineString([P(-hu, D * 0.55), P(hu, D * 0.55)]).buffer(0.02), "line"))
     elif t == "STAIRS":
-        out += [(q, "item")]
+        out += [(q, "fit")]
         x0, y0, x1, y1 = q.bounds
         n = int(max(x1 - x0, y1 - y0) / 0.9)
         horiz = (x1 - x0) >= (y1 - y0)
@@ -376,10 +407,10 @@ def _fixture(t, q, walls, r):
             out.append((ln.intersection(q).buffer(0.02), "line"))
     elif t == "ELEVATOR":
         x0, y0, x1, y1 = q.bounds
-        out += [(q, "item"), (LineString([(x0, y0), (x1, y1)]).buffer(0.02), "line"),
+        out += [(q, "fit"), (LineString([(x0, y0), (x1, y1)]).buffer(0.02), "line"),
                 (LineString([(x0, y1), (x1, y0)]).buffer(0.02), "line")]
-    else:
-        out += [(q, "item")]
+    else:                   # built-in cupboards, washing machines: fixed to the wall too
+        out += [(q, "fit")]
     return [p for p in out if p is not None and not p[0].is_empty]
 
 

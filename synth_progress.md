@@ -35,6 +35,16 @@ below "Log".
   last tells were layout (wall stubs, door collisions, odd rooms); real layouts remove those.
   Nothing trained on it yet. Off = byte-identical (checked at plan-v2 1 and 2).
   Ruled out on licence (non-commercial): CubiCasa5K and FloorPlanCAD.
+- **Floor labels follow the Gemini finish plans (2026-10-02; Swiss layouts and `--plan-v2 2` only).**
+  Checked against r4 008 / 038 / 039 / 062: wall-fixed pieces (counters, fridge, vanities, tubs,
+  showers, built-ins, washers, stairs) are left out of the floor label, as notches, with any
+  strip under 0.4 ft between them and the wall; toilets, islands and loose furniture stay in.
+  Swiss areas with no wall between them (open plan, ~0.05 ft apart) now grow into the gap, so
+  one finish is one polygon through the open side and the doorways (653040: 5 floor polygons -> 1);
+  doors find the room on each side of the wall (openings 5 -> 7 of 10). A ROOM open to the
+  kitchen / a corridor is the living room; open corridors take that room's finish. Carpet stipple
+  6x denser, 2 px dots (was 1-3 one-pixel dots per sq ft, read as a blank floor). Plan-v2 0 / 1
+  byte-identical (12 renders checked).
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).

@@ -1649,7 +1649,7 @@ def draw_floor(canvas, poly_px, m, S, W, H, lw):
         G._dlines(layer, x0, y0, S, m["sp"], 45, c, lw)
         G._dlines(layer, x0, y0, S, m["sp"], -45, c, lw)
     elif k == "carpet":
-        G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
+        G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=m.get("r_px", 1))
     elif k == "concrete":
         G._stipple(layer, x0, y0, S, m["density"], c, m["seed"], r_px=1)
         G._stipple(layer, x0, y0, S, m["density"] * 0.15, c, m["seed"] + 1, r_px=2)
@@ -1777,10 +1777,10 @@ def _room_furniture(name, x0, y0, x1, y1, pr, clip=None):
     best, best_n = [], -1
     for _ in range(5):
         out = _room_furniture0(name, x0, y0, x1, y1, pr)
-        n = sum(1 for q, k in out if k == "item" and q.within(clip))
+        n = sum(1 for q, k in out if k in ("item", "fit") and q.within(clip))
         if n > best_n:
             best, best_n = out, n
-        if out and n == sum(1 for q, k in out if k == "item"):
+        if out and n == sum(1 for q, k in out if k in ("item", "fit")):
             break
     return best
 
@@ -1903,7 +1903,7 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
     elif "DINING" in name and w > 8 and h > 8:
         out.extend(_dining(x0 + w / 2, y0 + h / 2, pr))
     elif "KITCHEN" in name and w > 8 and h > 8:
-        R(0, 0, w, 2.1); R(0, 2.1, 2.1, h * pr.uniform(0.5, 0.9))                      # L counter
+        R(0, 0, w, 2.1, "fit"); R(0, 2.1, 2.1, h * pr.uniform(0.5, 0.9), "fit")        # L counter
         R(0, 0, w, 2.1, "line"); R(0.05, 1.95, w - 0.05, 2.1, "line")                  # nosing
         sx = w * pr.uniform(0.3, 0.6)
         R(sx, 0.35, sx + 1.25, 1.65, "line", rad=0.15); R(sx + 1.35, 0.35, sx + 2.6, 1.65, "line", rad=0.15)
@@ -1913,7 +1913,7 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
             R(rx + 0.1, 0.15, rx + 2.4, 1.95, "line")
             for dx, dy in [(0.7, 0.6), (1.7, 0.6), (0.7, 1.5), (1.7, 1.5)]:
                 E(rx + dx, dy, 0.36, 0.36, "line"); E(rx + dx, dy, 0.2, 0.2, "line")
-        R(w - 3.2, 0, w - 0.2, 2.6)                                                      # fridge
+        R(w - 3.2, 0, w - 0.2, 2.6, "fit")                                               # fridge
         out.append((LineString([tr(0, 1.15), tr(w, 1.15)]).buffer(0.02), "line"))      # uppers (projected)
         R(w - 3.2, 2.35, w - 0.2, 2.6, "line")                                          # fridge door
         if w > 12 and h > 11:
@@ -1927,18 +1927,18 @@ def _room_furniture1(name, x0, y0, x1, y1, pr):
                 E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.6, 0.6); E(ix - 2.2 + 2.2 * k, iy + 2.3, 0.35, 0.35, "line")
     elif any(k in name for k in ("BATH", "POWDER")) and w > 4.5 and h > 4.5:
         vw = min(w - 0.6, pr.choice([3.0, 5.0, 6.0]))
-        R(0.2, 0.2, 0.2 + vw, 2.0)                                                       # vanity
+        R(0.2, 0.2, 0.2 + vw, 2.0, "fit")                                                # vanity
         nb = 1 if vw < 4.5 else 2
         for k in range(nb):
             basin(0.2 + vw * (k + 0.5) / nb, 1.05)
         toilet(w - 1.3, h - 0.2, -1)
         if "POWDER" not in name and h > 7:
             if pr.random() < 0.55 and w > 6:
-                R(0.2, h - 2.7, 5.2, h - 0.2)                                               # tub
+                R(0.2, h - 2.7, 5.2, h - 0.2, "fit")                                        # tub
                 R(0.5, h - 2.4, 4.9, h - 0.5, "line", rad=0.6)
                 E(4.4, h - 1.45, 0.1, 0.1, "line")
             else:
-                R(0.2, h - 3.4, 3.4, h - 0.2)                                               # shower
+                R(0.2, h - 3.4, 3.4, h - 0.2, "fit")                                        # shower
                 P([(0.2, h - 3.4), (3.4, h - 0.2), (0.2, h - 0.2)], "line")
                 E(1.8, h - 1.8, 0.12, 0.12, "line")
     elif any(k in name for k in ("OFFICE", "STUDY")) and w > 7 and h > 7:
@@ -1998,16 +1998,20 @@ def _dining(cx, cy, pr):
 
 def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
     """solid: furniture blocks filled white with a soft drop shadow (rendered sheets, HF14 0);
-    otherwise outlines only, so the floor pattern shows through."""
+    otherwise outlines only, so the floor pattern shows through. 'fit' pieces are items fixed to
+    the wall (counters, vanities, tubs, showers, stairs): returned as drawn, so the floor label can
+    leave them out as the Gemini finish plans do."""
     skip = False
-    placed = []
+    placed, fitted = [], []
     for q, kind in pieces:
-        if kind == "item":              # an item's detail lines follow it: drop them with it
+        if kind in ("item", "fit"):     # an item's detail lines follow it: drop them with it
             skip = clip is not None and not q.within(clip) or \
                 any(q.intersection(o).area > 0.02 * min(q.area, o.area) for o in placed)
             if not skip:
                 placed.append(q)
-        if skip and kind == "line" or clip is not None and not q.within(clip) or kind == "item" and skip:
+                if kind == "fit":
+                    fitted.append(q)
+        if skip and kind == "line" or clip is not None and not q.within(clip) or kind in ("item", "fit") and skip:
             continue
         g = V.geom(q)
         if kind == "rug":           # a rug covers the floor pattern: light fill, border band, patterned field
@@ -2038,6 +2042,7 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
                     _shade_soft(canvas, affinity.translate(g, d, d).difference(g), 0.85, W, H, max(1, int(0.12 * V.S)))
                 G.cv_fill(canvas, g, (pr.randint(246, 255),) * 3)
             G.cv_outline(canvas, g, ink, lw)
+    return fitted
 
 
 def _butt_joints(canvas, poly_px, sp_ft, angle, S, colour, lw, rng):
@@ -2242,7 +2247,10 @@ def compose_floor(image_id, seed, mode_weights):
                 m["jit"] = p3.uniform(0.12, 0.35)
             elif m["kind"] == "concrete":
                 m["tri"] = p3.random() < 0.7
-            m["line"] = G.mix(m["line"], m["base"], k_l)
+            elif m["kind"] == "carpet":         # 1-3 one-pixel dots per sq ft read as a blank floor
+                m["density"] *= 6
+                m["r_px"] = 2
+            m["line"] = G.mix(m["line"], m["base"], k_l * (0.4 if m["kind"] == "carpet" else 1.0))
 
     # ---- layout
     allg = unary_union([foot] + hard_polys + ([soffit] if soffit is not None else []))
@@ -2594,6 +2602,7 @@ def compose_floor(image_id, seed, mode_weights):
 
     # ---- fixtures, tags, text
     sf = r.random() < 0.5
+    fitted = []         # counters, vanities, tubs, showers, stairs as drawn: left out of the floor labels
     for rm in rooms:
         x0, y0, x1, y1 = rm["inner"].bounds
         if sheet != "underfloor" and v3:
@@ -2602,7 +2611,7 @@ def compose_floor(image_id, seed, mode_weights):
                 clip = clip.difference(stair_u.buffer(0.3))
             fname = rm["name"]
             if swiss is not None:       # rooms with real fittings: furniture around them, never a second kitchen / bath
-                fit = [q for q, k in swiss["fixtures"] if k == "item" and q.intersects(rm["inner"])]
+                fit = [q for q, k in swiss["fixtures"] if k in ("item", "fit") and q.intersects(rm["inner"])]
                 if fit:
                     clip = clip.difference(unary_union(fit).buffer(0.4))
                     fname = "DINING" if "DINING" in fname else ("LIVING" if "LIVING" in fname else "")
@@ -2611,16 +2620,17 @@ def compose_floor(image_id, seed, mode_weights):
                 _draw_furniture(canvas, V, [q for q in pieces if q[1] != "rug"],
                                 G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False, W, H, p3, clip=clip)
             elif p3.random() < 0.9:
-                _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
-                                "shadow" if wall_sh else True,
-                                W, H, p3, clip=clip)
+                fitted += _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
+                                          "shadow" if wall_sh else True,
+                                          W, H, p3, clip=clip)
         if sheet != "underfloor" and swiss is not None and rm is rooms[-1]:      # the real fitted pieces
             fx = swiss["fixtures"]
             if sheet == "ceiling":
                 _draw_furniture(canvas, V, fx, G.mix(ink, (255, 255, 255), p3.uniform(0.5, 0.7)), lw_thin * 0.8, False,
                                 W, H, p3)
             else:
-                _draw_furniture(canvas, V, fx, ink, lw_thin * p3.uniform(0.7, 0.95), "shadow" if wall_sh else True, W, H, p3)
+                fitted += _draw_furniture(canvas, V, fx, ink, lw_thin * p3.uniform(0.7, 0.95), "shadow" if wall_sh else True,
+                                          W, H, p3)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
                     not (stair_u is not None and rm["inner"].intersects(stair_u)):   # rectangles, no stair
@@ -2724,6 +2734,17 @@ def compose_floor(image_id, seed, mode_weights):
              "ceiling": ["REFLECTED CEILING PLAN", "ELECTRICAL PLAN", "LIGHTING / RCP PLAN", "MECHANICAL PLAN"]}[sheet]
     _title(canvas, tq, V, ex0, ey1 + bot * 0.55, ex0 + (ex1 - ex0) * r.uniform(0.3, 0.6), r.choice(title), r, ink,
            lw_thin, size)
+    if fitted:          # fitted pieces are drawn opaque over the floor: not floor (Gemini finish plans)
+        cut = V.geom(unary_union(fitted))
+        near = cut.buffer(2)
+
+        def _cut(g):        # and any strip under 0.4 ft left between a piece and the wall
+            g = g.difference(cut)
+            thin = g.difference(g.buffer(-0.2 * S, join_style=2).buffer(0.2 * S, join_style=2))
+            drop = [q for q in G.polys_of(thin) if q.intersects(near)]
+            return g.difference(unary_union(drop)) if drop else g
+        labelled = [(n, _cut(g) if n.startswith("floor") else g) for n, g in labelled]
+        labelled = [(n, g) for n, g in labelled if not g.is_empty]
     if not labelled:
         raise RuntimeError("no labelled region")
     canvas = _finish(canvas, tq, r)
