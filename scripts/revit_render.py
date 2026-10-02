@@ -377,6 +377,46 @@ def compose_revit(image_id, seed, mode_weights):
         distinct_looks(styles, shaded, app, fam_seed, S_guess)
     pair_fam = plant_colour_pair(styles, shaded, app, fam_seed, S_guess, bool(spec.get("chimney"))) \
         if G.COLOUR_PAIRS > 0 else None
+    # --roof-lines P (2026-10-02): HF14 25 / 27 draw the roof in elevation as plain, tight
+    # horizontal course lines (no joints) over walls of looser vertical boards; our roofs were
+    # asphalt / shingle / tile rows with joints, or standing seam -- VERTICAL lines -- so a
+    # horizontal-lines roof never met vertical siding, and the synthetic-only model merges the two
+    # (25 q02 0.986 shipped -> 0.719, 27 q04 0.977 -> 0.563). P of the sheets: the roof is plain
+    # horizontal lines at 0.25-0.45 ft; 60% of those also get a vertical-board wall at >= 1.6x the
+    # spacing. Any lap wall is kept >= 1.6x apart from the roof. Own RNG: P = 0 is byte-identical.
+    if getattr(G, "ROOF_LINES", 0) > 0:
+        rl = random.Random(fam_seed * 71 + 43)
+        if rl.random() < G.ROOF_LINES:
+            ro = G.make_style(rl, "lap", app, fam_seed + 3, S_guess, "roof", roof=True)
+            ro.params = {"sp": rl.uniform(0.25, 0.45), "shadow": False}
+            _finish_style(ro, shaded, app)
+            styles["roof"] = ro
+            if rl.random() < 0.6:
+                fam = "main" if styles["main"].kind != "flat" else ("accent" if "accent" in styles else None)
+                if fam is not None:
+                    vk = rl.choice(["vertical", "bb", "bb"])
+                    wv = G.make_style(rl, vk, app, fam_seed + 1, S_guess, fam)
+                    wv.params["sp"] = max(wv.params["sp"], ro.params["sp"] * rl.uniform(1.6, 2.6))
+                    _finish_style(wv, shaded, app)
+                    styles[fam] = wv
+            for f, st in styles.items():
+                if f != "roof" and st.kind == "lap" and max(st.params["sp"], ro.params["sp"]) / \
+                        min(st.params["sp"], ro.params["sp"]) < 1.6:
+                    st.params["sp"] = ro.params["sp"] * 1.6 if st.params["sp"] >= ro.params["sp"] else \
+                        ro.params["sp"] / 1.6
+    # --faint-lines P (2026-10-02): HF14 14 draws its textures in barely-there grey (brick tile
+    # lines ~240 on white paper, stucco left blank); line-only Revit sheets only ever drew pattern
+    # lines at 110-175, and the synthetic-only model takes the faint tile for the blank stucco
+    # beside it (14 q06 0.987 shipped -> 0.555). P of the line-only sheets draw every pattern in a
+    # pale grey, a little apart per family, in a finer pen. Own RNG: P = 0 is byte-identical.
+    if getattr(G, "FAINT_LINES", 0) > 0 and not shaded:
+        fr = random.Random(fam_seed * 53 + 29)
+        if fr.random() < G.FAINT_LINES:
+            fv = fr.randint(190, 228)
+            k_lw = fr.uniform(0.55, 0.9)
+            for st in styles.values():
+                v = max(170, min(236, fv + fr.randint(-8, 8)))
+                st.line, st.lw = (v,) * 3, max(1.0, st.lw * k_lw)
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):
@@ -453,6 +493,26 @@ def compose_revit(image_id, seed, mode_weights):
     sun = (r.choice([1, -1]) * r.uniform(0.6, 1.2), r.uniform(0.9, 1.7))
     shadow_k = r.uniform(0.55, 0.75) if not shaded else r.uniform(0.55, 0.7)
     shadows_on = r.random() < 0.85
+    # --soft-shadows P (2026-10-02): HF14 02's porch is cream lap siding (246, 242, 230) that
+    # turns a lighter, NEUTRAL grey in shade (199, 200, 195: x0.81, tint gone) with a darker
+    # second level where shadows overlap (167, 162, 156: x0.68); ours were one x0.55-0.75
+    # multiply that keeps the hue, and the synthetic-only model misses the shaded siding
+    # (02 q00 0.888 shipped -> 0.729). P of the sheets: shade x0.76-0.88 toward grey, plus a
+    # second sun a little off the first whose overlap is the dark level. Own RNG: 0 = identical.
+    soft = None
+    if getattr(G, "SOFT_SHADOWS", 0) > 0:
+        sr = random.Random(fam_seed * 61 + 37)
+        if sr.random() < G.SOFT_SHADOWS:
+            sun2 = (sun[0] * sr.uniform(0.4, 0.8) + sr.uniform(-0.4, 0.4), sun[1] * sr.uniform(1.2, 1.8))
+            soft = {"k1": sr.uniform(0.76, 0.88), "k2": sr.uniform(0.62, 0.75), "desat": sr.uniform(0.3, 0.7),
+                    "sun2": sun2, "two": shaded and sr.random() < 0.8}
+
+    def _shade(sel, k):
+        px = canvas[sel].astype(np.float32)
+        if soft is not None:
+            lum = px @ np.float32([0.114, 0.587, 0.299])          # canvas is BGR
+            px = px * (1 - soft["desat"]) + lum[:, None] * soft["desat"]
+        canvas[sel] = np.clip(px * k, 0, 255).astype(np.uint8)
     labelled = []
     num = 1
     for i, (v, e, title) in enumerate(elevs):
@@ -495,7 +555,18 @@ def compose_revit(image_id, seed, mode_weights):
                 for q in G.polys_of(unary_union(parts)):
                     m = np.maximum(m, G.poly_mask(V.geom(q), W, H))
                 sel = m > 127
-                canvas[sel] = (canvas[sel].astype(np.float32) * shadow_k).astype(np.uint8)
+                if soft is None:
+                    canvas[sel] = (canvas[sel].astype(np.float32) * shadow_k).astype(np.uint8)
+                else:
+                    _shade(sel, soft["k1"])
+                    sh2 = wall_shadows(v, faces, e["vf"], soft["sun2"]) if soft["two"] else None
+                    if sh2 is not None and sh is not None:      # where both suns are blocked: the dark level
+                        m2 = np.zeros((H, W), np.uint8)
+                        for q in G.polys_of(sh2.intersection(sh)):
+                            m2 = np.maximum(m2, G.poly_mask(V.geom(q), W, H))
+                        sel2 = m2 > 127
+                        canvas[sel2] = np.clip(canvas[sel2].astype(np.float32) * (soft["k2"] / soft["k1"]),
+                                               0, 255).astype(np.uint8)
         # openings (frames, glass, sills, swing lines) over the shadow, recess shadow re-applied on glass
         for o in e["openings"]:
             G.draw_opening(canvas, V, o, house, app, S, r, (255, 255, 255))
@@ -507,7 +578,10 @@ def compose_revit(image_id, seed, mode_weights):
                 for qq in G.polys_of(q):
                     m = np.maximum(m, G.poly_mask(V.geom(qq), W, H))
             sel = m > 127
-            canvas[sel] = (canvas[sel].astype(np.float32) * shadow_k).astype(np.uint8)
+            if soft is None:
+                canvas[sel] = (canvas[sel].astype(np.float32) * shadow_k).astype(np.uint8)
+            else:
+                _shade(sel, soft["k1"])
         # thin edges: every visible face boundary and trim
         for (fam, poly, bi, kind) in e["surfaces"]:
             _outline_geom(canvas, V.geom(poly), ink, lw_thin)

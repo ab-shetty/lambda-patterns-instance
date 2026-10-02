@@ -173,6 +173,25 @@ below "Log".
 - **Backbone:** swin transfers best and fits worst, stable across LRs;
   material separability of frozen features does not predict transfer.
 
+## Synthetic-only failures on HF14 (2026-10-02) and the flags aimed at them
+
+From the Model Results artifact (`revit10k-roi-e5` vs shipped, hand boxes, 4096): HF14 0.8118 vs
+0.8466, while val is 0.898 vs 0.819. The loss sits on five sheets: 27 (-1.06 summed IoU), 14
+(-0.68), 25 (-0.47), 2 (-0.31), 12 (-0.30); synth gains on 0 (+0.63) and 18 (+0.46). Four failures,
+each now with an opt-in flag (own RNG each; all 0 = byte-identical, 12 sheets checked):
+
+| failure (real sheet) | what the generator lacked | flag |
+|---|---|---|
+| tight horizontal roof lines merged with looser vertical siding, both unpainted (25 q01/q02, 27 q02-q04: 0.94-0.99 shipped -> 0.39-0.72) | roofs were rows with joints or standing seam (vertical lines); a plain horizontal-lines roof never met vertical boards (lap + vertical walls do pair: 51 / 300 sheets) | `--roof-lines P` |
+| railing / stair in front of siding (27: deck balusters over lap read as a grid; stair + rail over vertical boards) | Revit elevations have porch posts but no railings or exterior stairs; labels run on behind them | not built yet (FreeCAD `ArchStairs` / `ArchFence` or Part solids) |
+| faint line-only texture taken for blank paper (14 q06 brick tile 0.987 -> 0.555 picks blank stucco) | line-only pattern lines were 110-175 grey; 14's are ~240 | `--faint-lines P` |
+| siding in porch shade missed (2 q00/q01 0.88 -> 0.73) | shade was one x0.55-0.75 multiply keeping the hue; 02's is x0.81 and neutral grey (246,242,230 -> 199,200,195) with a x0.68 overlap level | `--soft-shadows P` (two suns through `wall_shadows`, the 3D massing's projection) |
+
+12's thin soffit band is the ceiling sheet type added 2026-10-01 (`--plan-v2 1`), after this model.
+Correction to 2026-09-30 below: the 25 / 27 failures were read there as "not paint". The direct
+cause is the horizontal-roof / vertical-siding pair above; paint is still untested at the
+2048 GPU recipe. None of these flags is trained yet.
+
 ## Generator flags (`generate_synthetic_v6.py`, all default-off, v6d byte-identical when off)
 
 | flag | status |

@@ -523,6 +523,15 @@ def main():
     ap.add_argument("--masonry-base", type=float, default=0.35,
                     help="Revit elevations: probability the base band is a brick / stone / block wainscot "
                          "instead of concrete or flat. Default 0.35 since 2026-10-01; 0 reproduces earlier pools")
+    ap.add_argument("--faint-lines", type=float, default=0.0,
+                    help="Revit line-only elevations: probability every pattern is drawn in pale grey "
+                         "(190-228, finer pen), as on HF14 14; 0 (default) = byte-identical")
+    ap.add_argument("--soft-shadows", type=float, default=0.0,
+                    help="Revit elevations: probability shadows are lighter (x0.76-0.88), neutral grey and two-level "
+                         "(overlap darker), as on HF14 02; 0 (default) = byte-identical")
+    ap.add_argument("--roof-lines", type=float, default=0.0,
+                    help="Revit elevations: probability the roof is plain tight horizontal lines, 60%% of them over "
+                         "looser vertical boards, as on HF14 25 / 27; 0 (default) = byte-identical")
     ap.add_argument("--cedar-shingle", type=float, default=0.5,
                     help="probability a shingle style is drawn as cedar shingles (narrow, vertical joints "
                          "dominant, broken butt lines, keyway tabs) instead of coursed units; real elevations "
@@ -558,6 +567,12 @@ def main():
         flags["markup"] = args.markup
     flags["cedar_shingle"] = args.cedar_shingle
     flags["masonry_base"] = args.masonry_base
+    if args.faint_lines > 0:
+        flags["faint_lines"] = args.faint_lines
+    if args.soft_shadows > 0:
+        flags["soft_shadows"] = args.soft_shadows
+    if args.roof_lines > 0:
+        flags["roof_lines"] = args.roof_lines
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)
