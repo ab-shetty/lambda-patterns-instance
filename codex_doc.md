@@ -26,8 +26,10 @@ session; generator changes only, all on the branch.
   1. `EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 "revit10kcurroi revit10kfailroi"`
      builds both 10k pools if missing (64 workers). `curroi` = today's defaults, the control;
      `failroi` = + `--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2`.
-     Read failroi vs curroi paired on HF14 @4096 (does the bundle help, especially 25 / 27 / 14 /
-     02), and curroi vs `revit10k-roi-e5` (the default changes since 09-30).
+     The script prints both comparisons (failroi vs curroi = the four options; curroi vs
+     `revit10k-roi-e5`, pulled from the Hub and scored = the default changes since 09-30) and
+     per-sheet 4096 HF14 means for 25 / 27 / 14 / 02. Scores use the automatic boxes; add
+     `--boxes eval_boxes/hand_v1.json` runs if comparing to the Model Results artifact.
   2. If the bundle helps: drop-one arms to see which option carries it. The values are judgment,
      not tuned: per measured 300 sheets they change roof-lines 30% of sheets, railings 15% of views
      (27% of sheets), faint-lines 18% of line-only (10% of sheets), soft-shadows 48% (two-level

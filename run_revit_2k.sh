@@ -103,6 +103,14 @@ for A in $ARMS; do
   echo "== done $A"
 done
 
+# 10k pair (2026-10-02): also score the published 10k control, so the runbook's two comparisons print
+R10=data/runs/ck_pub/revit10k-roi-e5.pth
+if [[ " $ARMS " == *" revit10kcurroi "* ]]; then
+  [ -f $R10 ] || PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py \
+    --repo abshetty/floz-refunet-swint-revit10k-roi-e5 --out $R10
+  score revit10k_pub $R10
+fi
+
 for I in 2048 4096; do for split in val hf14; do
   for A in v6d_s7 revit_s$SEED $(for a in $ARMS; do [ $a = revit ] || echo ${a}_s$SEED; done); do
     python3 -c "import json,numpy as np;d=json.load(open('$E/${A}_i${I}_$split.json'));print(f'infer $I $split  $A  {np.mean([r[\"iou\"] for r in d[\"selections\"]]):.4f}')"
@@ -114,3 +122,25 @@ for I in 2048 4096; do for split in val hf14; do
     done
   done
 done; done
+
+# the 10k pair: failroi vs curroi (the four options), curroi vs the published 10k (default changes),
+# plus per-sheet means on the sheets the options target (HF14 25, 27, 14, 02)
+if [[ " $ARMS " == *" revit10kcurroi "* && " $ARMS " == *" revit10kfailroi "* ]]; then
+  CU=revit10kcurroi_s$SEED; FA=revit10kfailroi_s$SEED
+  for I in 2048 4096; do for split in val hf14; do
+    python3 scripts/paired_compare.py --a $E/${CU}_i${I}_$split.json --b $E/${FA}_i${I}_$split.json \
+      --label-a curroi --label-b failroi | grep -m2 "paired mean\|better on" | sed "s/^/  [$I $split] failroi vs curroi: /"
+    python3 scripts/paired_compare.py --a $E/revit10k_pub_i${I}_$split.json --b $E/${CU}_i${I}_$split.json \
+      --label-a revit10k-roi-e5 --label-b curroi | grep -m2 "paired mean\|better on" | sed "s/^/  [$I $split] curroi vs revit10k-roi-e5: /"
+  done; done
+  python3 - "$E" "$CU" "$FA" <<'PY'
+import json, sys, collections
+E, cu, fa = sys.argv[1:]
+for tag in ("revit10k_pub", cu, fa):
+    d = json.load(open(f"{E}/{tag}_i4096_hf14.json"))["selections"]
+    by = collections.defaultdict(list)
+    for r in d:
+        by[r["image_index"]].append(r["iou"])
+    print(f"  4096 hf14 {tag:28s}", "  ".join(f"{i}: {sum(by[i]) / len(by[i]):.3f}" for i in (25, 27, 14, 2) if by[i]))
+PY
+fi
