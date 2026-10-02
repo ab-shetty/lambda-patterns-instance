@@ -45,6 +45,10 @@ below "Log".
   kitchen / a corridor is the living room; open corridors take that room's finish. Carpet stipple
   6x denser, 2 px dots (was 1-3 one-pixel dots per sq ft, read as a blank floor). Plan-v2 0 / 1
   byte-identical (12 renders checked).
+  Kept on purpose (2026-10-02): on rendered sheets the paving and the unlabelled interior can be
+  the same pattern at near-equal spacing, told apart only by tone (653038: white deck boards vs
+  grey planks, base 255 vs 223). The v2 grey-paving rule runs after `_separate` and can bring the
+  tones closer still. These are hard cases the model should learn; don't "fix" them.
 
 - **Shipped model unchanged: HF14 0.8440** (below). The Revit source in the real
   mix did NOT beat it (2026-09-30: 0.8367, -0.007 p=0.58; val 0.784 vs 0.815).
