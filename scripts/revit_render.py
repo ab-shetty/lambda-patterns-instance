@@ -407,8 +407,9 @@ def compose_revit(image_id, seed, mode_weights):
     # --faint-lines P (2026-10-02): HF14 14 draws its textures in barely-there grey (brick tile
     # lines ~240 on white paper, stucco left blank); line-only Revit sheets only ever drew pattern
     # lines at 110-175, and the synthetic-only model takes the faint tile for the blank stucco
-    # beside it (14 q06 0.987 shipped -> 0.555). P of the line-only sheets draw every pattern in a
-    # pale grey, a little apart per family, in a finer pen. Own RNG: P = 0 is byte-identical.
+    # beside it (14 q06 0.987 shipped -> 0.555). P of the line-only sheets draw every line pattern in
+    # a pale grey, a little apart per family, in a finer pen; dot patterns (stucco, concrete) keep
+    # their weight -- faint sparse dots read as blank paper. Own RNG: P = 0 is byte-identical.
     if getattr(G, "FAINT_LINES", 0) > 0 and not shaded:
         fr = random.Random(fam_seed * 53 + 29)
         if fr.random() < G.FAINT_LINES:
@@ -416,6 +417,8 @@ def compose_revit(image_id, seed, mode_weights):
             k_lw = fr.uniform(0.55, 0.9)
             for st in styles.values():
                 v = max(170, min(236, fv + fr.randint(-8, 8)))
+                if st.kind in ("stipple", "stucco", "concrete", "dots"):
+                    continue        # sparse pale dots vanish at 2048: a labelled wall that reads blank
                 st.line, st.lw = (v,) * 3, max(1.0, st.lw * k_lw)
 
     label_fams = {"main"}
