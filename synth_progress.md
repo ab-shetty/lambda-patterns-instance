@@ -198,7 +198,11 @@ each now with an opt-in flag (own RNG each; all 0 = byte-identical, 12 sheets ch
 Railings are a 2D overlay with a depth, not FreeCAD solids: in the fused massing they would hide
 the wall and cut its label, which 27's labels do not. FreeCAD 2026.09 (`/opt/fc`, BIM) also has
 `ArchStairs` (stairs + railings), `ArchFence`, `ArchCovering` (cladding / tile patterns on faces)
-and `ArchTruss` / `ArchFrame` -- untried; `Shape.makeParallelProjection` would give exact shadows
+and `ArchTruss` / `ArchFrame`. **ArchCovering tried and dropped (2026-10-02):** headless it lays
+real 3D tiles (10x8 ft wall: lap 1 s, brick 480 solids 11 s), but every tile is a flat box --
+no tilted overlapping lap boards, no tapered shingles -- so line work equals our 2D patterns and
+the only gain is a few-px joint shadow; ~1 min more FreeCAD per brick sheet. If shadow relief is
+ever needed, build tilted lap boards with Part directly. The rest untried; `Shape.makeParallelProjection` would give exact shadows
 of any solid we add.
 12's thin soffit band is the ceiling sheet type added 2026-10-01 (`--plan-v2 1`), after this model.
 Correction to 2026-09-30 below: the 25 / 27 failures were read there as "not paint". The direct
