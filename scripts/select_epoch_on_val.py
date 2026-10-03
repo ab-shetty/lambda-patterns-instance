@@ -19,14 +19,15 @@ import numpy as np
 import torch
 
 from refmask2former import load_parquet_records
-from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, load_refunet
+from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, hand_boxes, load_refunet
 
 VALIDATION = "4,5,6,8,9,10,13,15,17,19,20,21,22,26"
 
 
 def _mean_iou(model, records, indices, size, ref, thresh, device, tta=1):
     rows = evaluate_model(model, records, indices, image_max_size=size,
-                          ref_size=ref, mask_thresh=thresh, device=device, tta=tta)
+                          ref_size=ref, mask_thresh=thresh, device=device, tta=tta,
+                          box_overrides=hand_boxes())
     return float(np.mean([r["iou"] for r in rows])), len(rows)
 
 

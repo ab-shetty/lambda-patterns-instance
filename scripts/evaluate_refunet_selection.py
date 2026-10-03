@@ -22,6 +22,13 @@ from refmask2former.ref_dino_unet import BACKBONES as DINO_BACKBONES
 from refmask2former.ref_dino_unet import RefDinoUNet
 
 HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
+# Default reference boxes on the real sheets: the hand-reviewed set (moved where the
+# automatic box was unrealistic, the rest kept as drawn). `--boxes auto` = automatic only.
+HAND_BOXES = Path(__file__).resolve().parent.parent / "eval_boxes" / "hand_v1.json"
+
+
+def hand_boxes():
+    return json.loads(HAND_BOXES.read_text())
 
 
 def _dihedral(t, hflip, k):
@@ -198,10 +205,12 @@ def main():
     parser.add_argument("--metrics-out", required=True)
     parser.add_argument("--tta", type=int, default=1, choices=(1, 2, 4, 8),
                         help="dihedral test-time augmentation views to average")
-    parser.add_argument("--boxes", default="",
-                        help="JSON {image_index: {question_index: [x, y, w, h] | null}} in native "
-                             "pixels: replace the automatic reference box of those questions, or "
-                             "drop them (null). Other questions are unchanged.")
+    parser.add_argument("--boxes", default="hand",
+                        help="'hand' (default on the real sheets) = eval_boxes/hand_v1.json; 'auto' = "
+                             "automatic boxes only (the protocol before 2026-10-03); or a JSON "
+                             "{image_index: {question_index: [x, y, w, h] | null}} in native pixels "
+                             "replacing those questions' automatic boxes, or dropping them (null). "
+                             "--local-pool always uses automatic boxes.")
     parser.add_argument("--label-fixes", default="",
                         help="JSON {image_index: [{category, polygon: [[x, y], ...]}]} in native pixels: "
                              "add missed pixels to the TARGET of every question of that category "
@@ -231,11 +240,15 @@ def main():
     ckpt_args = checkpoint.get("args", {}) or {}
     if args.save_probs:
         Path(args.save_probs).mkdir(parents=True, exist_ok=True)
+    boxes_path = ("" if args.local_pool or args.boxes == "auto" else
+                  "eval_boxes/hand_v1.json" if args.boxes == "hand" else args.boxes)
+    box_overrides = (json.loads((HAND_BOXES if args.boxes == "hand" else Path(boxes_path)).read_text())
+                     if boxes_path else None)
     rows = evaluate_model(model, records, indices, args.image_max_size,
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
                           tta=args.tta, save_probs=args.save_probs or None,
-                          box_overrides=json.loads(Path(args.boxes).read_text()) if args.boxes else None,
+                          box_overrides=box_overrides,
                           label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
@@ -244,7 +257,7 @@ def main():
                                                     checkpoint.get("epoch")),
                "image_max_size": args.image_max_size,
                "mask_thresh": args.mask_thresh, "tta": args.tta,
-               "boxes": args.boxes or "automatic",
+               "boxes": boxes_path or "automatic",
                "label_fixes": args.label_fixes or "none",
                "n_images": len(indices), "n_reference_selections": len(rows),
                "mean_iou": mean_iou, "selections": rows}

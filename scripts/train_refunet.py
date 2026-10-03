@@ -20,7 +20,7 @@ from refmask2former.ref_attn_unet import RefCrossAttnUNet
 from refmask2former.ref_swin_unet import RefSwinUNet
 from refmask2former.ref_dino_unet import BACKBONES as DINO_BACKBONES
 from refmask2former.ref_dino_unet import RefDinoUNet
-from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model
+from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, hand_boxes
 
 
 def parse_args():
@@ -436,7 +436,8 @@ def main():
         rows = evaluate_model(base_model, real_records, real_indices,
                               args.image_max_size, args.ref_size,
                               args.mask_thresh, device,
-                              scale_matched_ref=args.scale_matched_ref)
+                              scale_matched_ref=args.scale_matched_ref,
+                              box_overrides=hand_boxes())
         real_iou = float(np.mean([row["iou"] for row in rows]))
         state = {"model": base_model.state_dict(), "epoch": local_epoch,
                  "actual_epoch": actual_epoch, "args": vars(args),

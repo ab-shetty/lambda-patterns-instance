@@ -24,7 +24,25 @@ byte-comparable to older ones). **Every run before
 2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
 `train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
 
-## Current best (2026-10-03): HF14 0.8816
+## Default protocol (2026-10-03): your hand-placed boxes
+
+`evaluate_refunet_selection.py` (and the per-epoch / val-selection scoring in `train_refunet.py`,
+`select_epoch_on_val.py`, `average_checkpoints.py`) now uses `eval_boxes/hand_v1.json` by default:
+the 88 moved boxes and 6 dropped questions from the Reference Box Editor; every box not moved or
+dropped is the automatic box, unchanged. HF14 = 51 questions, val = 72. `--boxes auto` gives the
+older automatic-only protocol (every number below this section that does not say "hand" used it);
+`--local-pool` always uses automatic boxes.
+
+| model | HF14 hand | val hand | HF14 auto |
+|---|---:|---:|---:|
+| `synpre-realmix-lr5e5-e22` (best) | **0.8738** | 0.9087* | 0.8816 |
+| `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
+| `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
+
+*epoch picked on val (automatic boxes), so optimistic. 4096, threshold 0.35, CPU-scored
+2026-10-03; per-question view in the Model Results artifact.
+
+## Current best (2026-10-03): HF14 0.8816 (automatic boxes; 0.8738 with hand boxes)
 
 Synthetic pretraining, then a gentle real-mix fine-tune. swin_t, trained at 2048, inference at
 4096, ROI add, one seed: `abshetty/floz-refunet-swint-synpre-realmix-lr5e5-e22` (private Hub;
@@ -48,7 +66,7 @@ PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swin
   --out data/runs/ck_best/lr5e5-e22.pth
 PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint data/runs/ck_best/lr5e5-e22.pth \
   --indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 --image-max-size 4096 --ref-size 224 --mask-thresh 0.35
-# mean_iou 0.8816
+# mean_iou 0.8738 (default hand boxes); add --boxes auto for 0.8816
 ```
 
 Previous best, 0.8440 (2026-09-28): `abshetty/floz-refunet-swint-mixr4-roiadd-swa15`, re-scored

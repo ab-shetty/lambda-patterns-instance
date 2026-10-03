@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from refmask2former import load_parquet_records
-from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, load_refunet
+from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, hand_boxes, load_refunet
 from scripts.select_epoch_on_val import VALIDATION
 
 
@@ -55,9 +55,11 @@ def main():
         torch.save({"model": avg, "args": ck.get("args", {}), "actual_epoch": f"avg{a}-{b}"}, out_ck)
         model, _ = load_refunet(str(out_ck), device)
         v = float(np.mean([r["iou"] for r in evaluate_model(model, records, val_idx, args.image_max_size,
-                                                             224, args.mask_thresh, device)]))
+                                                             224, args.mask_thresh, device,
+                                                             box_overrides=hand_boxes())]))
         h = float(np.mean([r["iou"] for r in evaluate_model(model, records, hf_idx, args.image_max_size,
-                                                             224, args.mask_thresh, device)]))
+                                                             224, args.mask_thresh, device,
+                                                             box_overrides=hand_boxes())]))
         del model
         torch.cuda.empty_cache()
         results.append({"run": run.name, "window": win, "val": v, "hf14": h, "checkpoint": str(out_ck)})

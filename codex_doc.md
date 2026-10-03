@@ -7,6 +7,16 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-10-03, CPU session -- read this first)
+
+- **Hand boxes are now the default** in `evaluate_refunet_selection.py` and in the scoring inside
+  `train_refunet.py` / `select_epoch_on_val.py` / `average_checkpoints.py` (`eval_boxes/hand_v1.json`;
+  boxes not moved or dropped stay automatic, unchanged). `--boxes auto` = the old protocol. Quote
+  hand-box numbers from now on; table in `startup.md`.
+- Best model with hand boxes: **HF14 0.8738** (auto 0.8816), shipped 0.8466, synthetic-only 10k
+  0.8118. Worst HF14 sheets for the best model: 27 (0.718, below shipped 0.817), 12 (0.766),
+  25 (0.802, below shipped 0.841), 0 (0.809), 23 (0.840, below shipped 0.931).
+
 ## Pick up here (2026-10-03, GH200 -- read this first)
 
 Detail: `synth_progress.md` "2026-10-02/03". **New best HF14 0.8816** (`startup.md`): synthetic

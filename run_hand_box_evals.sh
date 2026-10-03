@@ -20,7 +20,7 @@ echo "$JOBS" | while read -r N CK SP BX; do
   [ -f $OUT ] && continue
   echo "PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $CK --indices ${SPLIT[$SP]} \
     --image-max-size $SIZE --ref-size 224 --mask-thresh 0.35 --metrics-out $OUT \
-    $([ $BX = hand ] && echo --boxes $BOXES) > logs/handbox_${N}_${SP}_${BX}_$SIZE.log 2>&1"
+    --boxes $([ $BX = hand ] && echo $BOXES || echo auto) > logs/handbox_${N}_${SP}_${BX}_$SIZE.log 2>&1"
 done | xargs -P $P -I{} bash -c {}
 
 python3 - $E $SIZE "$@" <<'PY'
