@@ -761,3 +761,18 @@ Only one 2048 training fits on the GPU; four 64-sheet no-DR arms together OOM.
 **5e-5 e22 0.8816** (val 0.9009), 2e-5 e25 0.8739. Soup of the 2e-4 and 5e-5 models: val 0.9051
 (best), HF14 0.8753. WiSE (synthetic <-> fine-tuned, alpha 0.5 / 0.7 / 0.85): val 0.895-0.898,
 not read on HF14. Published: `abshetty/floz-refunet-swint-synpre-realmix-lr5e5-e22`.
+
+**64 mined sheets memorised for 240 passes (`ck_overfit64_roiaddnodr_mined64_e240`, ROI add, no
+DR):** IoU **0.906** vs ceiling 0.950 (60 passes: 0.843). Wrong-family selection 0.058 -> 0.006,
+wrong regions / q 0.52 -> 0.00, missed regions / q 1.19 -> 0.17; what remains is boundary (fp_bg
+0.028, fn 0.028). The architecture can learn the hard look-alike discrimination; grouping is a
+step / coverage problem, the residual is edge precision (resolution). Width / selfattn /
+corr-grid stay closed (all tested before, negative or parity).
+
+**Why 18's teal brick base and grey roof merge (measured):** dE76 14.7 between their mean colours,
+the same size as each region's own lightness sd (13.8-15.7); the roof is darker (L 39 vs 50) and
+less saturated -- what a Revit shadow does to one family (`wall_shadows`, `--soft-shadows`'s
+neutral grey), which training shows on about half of the shaded sheets. The 2026-09-24 recolour
+probe already showed the model uses colour. Untested cleanly: the offline `--strong`
+augmentation still grayscales 15% of every real / generated / Gemini copy (the one no-gray run
+also changed the synthetic data). Next: `--gray-prob 0` mix + the 5e-5 fine-tune, paired vs 0.8816.

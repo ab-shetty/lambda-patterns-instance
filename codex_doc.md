@@ -17,10 +17,15 @@ pretraining on mined Revit sheets with a long schedule, then a 5e-5 real-mix fin
   steps are the bigger lever. The four failure options help at 2k (+0.025) and don't stack with mining.
 - **Noise at 0.85:** single-checkpoint differences sd ~0.024 (a few flip-prone questions);
   compare late-epoch averages / SWA weights (se ~0.0075), not single checkpoints.
-- **Fit:** 64 mined sheets memorise to 0.843 in 60 passes (ceiling 0.95); the fit ladder says
-  that is still the step regime. A 240-epoch arm (`ck_overfit64_roiaddnodr_mined64_e240`) was
-  running at handoff: above ~0.93 = budget, ~0.85 = model. Width / selfattn / corr-grid were
-  tested before (all negative or parity) -- see `synth_progress.md` before re-proposing them.
+- **Fit:** 64 mined sheets memorise to 0.843 in 60 passes and **0.906 in 240** (ceiling 0.95);
+  wrong-family picks go to ~0, the rest is boundary. Grouping is steps / coverage, not the
+  architecture. Width / selfattn / corr-grid were tested before (negative or parity).
+- **Next, in order:** (1) targeted synthetic for the shared failures -- labelled masonry base next
+  to a labelled shingle roof (18 / val 17, now ~2 in 120 sheets), vertical boards next to a
+  horizontal-line roof and railings over lap (25 / 27); (2) `--gray-prob 0` real mix + the 5e-5
+  fine-tune, paired vs 0.8816 (one clean change; the 09-24 no-gray run was confounded);
+  (3) longer / larger synthetic pretraining; (4) 3072-4096 training for thin targets.
+  Mined pools rebuild from `pool_manifests/`.
 - Remaining failures: 18's roof vs masonry base and 27 / 25 vertical boards vs horizontal-line
   roof (every model); the fine-tune trades synthetic wins on line-only markup for real ones.
 - Ops: queue GPU jobs on files a job writes last, never on `$!` after `setsid` (it is the
