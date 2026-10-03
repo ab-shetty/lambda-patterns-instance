@@ -35,6 +35,12 @@
 # only failures on HF14"): --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2.
 # failroi vs curroi isolates the four options; curroi vs revit10k-roi-e5 the default changes.
 #   EXTRA="--roi-ref --roi-ref-mode add" P2=5 ./run_revit_2k.sh 7 "revit10kcurroi revit10kfailroi"
+# revitcurroi / revitfailroi (2026-10-02): the same two pools at 2k (ids 0-1999), the 2k ROI screen
+# recipe (P2=8). 10k vs 2k ROI was flat on HF14 (+0.001 / +0.016 n.s.), so screen here first;
+# curroi vs the published revit2k-roi-e8 measures the default changes since 09-30.
+#   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 "revitcurroi revitfailroi"
+# revithardroi (2026-10-02): 1,000 revitcurroi sheets + 1,000 mined semi-hard fresh sheets
+# (built by run_hard_mine.sh / build_hard_pool.py, not here); paired control revitcurroi.
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 SEED=${1:-7}
@@ -55,10 +61,16 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitmk50roi]=data/synthetic/revitmk50_train2000
                  [revit10kmk50roi]=data/synthetic/revitmk50_train10000
                  [revit10kcurroi]=data/synthetic/revitcur_train10000
-                 [revit10kfailroi]=data/synthetic/revitfail_train10000)
+                 [revit10kfailroi]=data/synthetic/revitfail_train10000
+                 [revitcurroi]=data/synthetic/revitcur_train2000
+                 [revitfailroi]=data/synthetic/revitfail_train2000
+                 [revithardroi]=data/synthetic/revitcur_hard2000
+                 [revithardfailroi]=data/synthetic/revitfail_hard2000)
 declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5"
                   [revit10kcurroi]="10000"
-                  [revit10kfailroi]="10000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2")
+                  [revit10kfailroi]="10000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
+                  [revitcurroi]="2000"
+                  [revitfailroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 E=data/evaluations/revit2k; mkdir -p logs $E

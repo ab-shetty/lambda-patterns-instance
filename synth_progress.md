@@ -700,3 +700,64 @@ some means (revit10k 0.886 -> 0.898 with paired +0.0003). Compare paired, not me
 
 Next: the long schedule with `--dr-scale-min 0.7` on more sheets (2k from scratch ~4.3 h,
 or continue the 500-sheet e90 on 2k for ~30 epochs, ~1.5 h).
+
+### 2026-10-02/03 -- failure options, hard mining, long schedule, synthetic pretraining: HF14 0.8733
+
+One seed (7) throughout, swin_t, 2048 training, ROI add, HF14 / val at 4096 unless noted. Pools:
+`generate_synthetic_fc.py --revit --revit-plans --shaped --mode-weights 66,16,18 --seed 6`.
+
+**2k screen (`run_revit_2k.sh`, 1+8 epochs), paired vs `revitcurroi` (today's defaults, 0.7801):**
+the four failure options (`revitfailroi`, `--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5
+--faint-lines 0.2`) 0.8051 (+0.025, p=0.09; targeted sheets 14/27/2 up, 18 down); hard mining
+(`revithardroi`) 0.8335 (+0.053, p=0.0005 at e8; +0.037 averaged over e5-8); both
+(`revithardfailroi`) 0.8156. The three treatments are indistinguishable from each other.
+Every val loss in this table is val 17 alone (-4.7 summed IoU); without 17 all move with HF14.
+
+**Hard mining (`scripts/build_hard_pool.py`, `run_hard_mine.sh`).** The screen model scores a
+fresh pool (ids 100000+) with the HF14 protocol at 2048; questions under the naive resolution
+ceiling (0.85) are dropped (0.4-2% of them on Revit); sheet hardness = mean over families of
+(1 - family IoU); 1,000 sheets drawn from the hardness top 30% minus the hardest 1%, added to the
+control pool's first 1,000. Mined sheets: 75% line-only elevations, failures 2/3 over-selection.
+The mined model fits its own mined sheets no better than unseen band sheets (0.778 vs 0.779 one
+question per family): underfit, not memorised.
+
+**Long schedule (`run_hard_long.sh`: 30-epoch fresh cosine from the 2k e8, `--dr-scale-min 0.7`).**
+Fit climbs with steps (seen-mined 0.770 -> 0.831, fresh 0.830 -> 0.860, e18 -> e38). HF14
+single checkpoints 0.80-0.85. **At long schedule mining is null:** late-epoch-averaged (e29-38,
+@2048 per-epoch diagnostic) hard - control = -0.005 +- 0.0075.
+
+**Noise at this level (measured, 2048, last 10 epochs, LR ~0):** one checkpoint's HF14 sd 0.009-
+0.024; difference of two single checkpoints sd 0.024, driven by ~5 flip-prone questions (sd
+0.11-0.24 each, median question 0.034). Averaging 10 epochs' per-question scores brings the
+difference se to 0.0075. HF14's 52-question sampling se (~0.017) is separate and irreducible.
+Compare late-epoch averages or SWA weights, not single checkpoints.
+
+**SWA of the long runs (14 candidates, 4096):** `ck_long_hardfail` swa16-20 HF14 **0.8668**
+synthetic-only (best val without 17: 0.904); plain val prefers `ck_long_fail` swa33-38 (val 0.879,
+HF14 0.8405). Published: `abshetty/floz-refunet-swint-longhardfail-swa16-20`, `...-longhardfail-e18`.
+
+**Synthetic pretraining + real-mix fine-tune: HF14 0.8733.** `run_restart_swa.sh` from the
+swa16-20 model on `data/mixed/realmix_revithard` (`run_build_realmix.sh`: revitfail_hard2000 + real
+86 x18 + generated 28 x18 + Gemini r2-r4 168 x18 = 7,076). Validation is flat over restart e24-27
+(0.882-0.890); SWA 24-26 is best on val under both rules (0.8964; 0.9228 without 17), HF14 read
+once: **0.8733**, +0.029 paired vs shipped 0.8440 (re-scored here exactly; p=0.19), +0.007 vs
+its synthetic init. Published: `abshetty/floz-refunet-swint-synpre-realmix-swa24-26`.
+The fine-tune loses synthetic wins on line-only markup (27 q3 0.94 -> 0.51, 25 q1 0.90 -> 0.52)
+while gaining 18 / 12 / 0; per-question best of {new, synthetic, shipped} would be 0.9125.
+
+**Failure groups (best synthetic model, panels via `failure_panels.py`):** masonry base vs grey
+shingle roof (val 17 brick, HF 18 roof; the shipped model fails it too); railing pickets over lap
+(27 q1, only `--railings` moves it); vertical boards vs horizontal-line roof (25 q1, 27 q2; every
+model 0.5-0.6); basketweave floor (7); thin soffit band (12). Steps fixed basketweave and val 17
+brick (0.89-0.90 at long schedule); 18's roof and 27's boards survive every model.
+
+**Also:** `generate_synthetic_fc.py` runs the FreeCAD massing on `--workers` processes (byte-
+identical to serial on 48 sheets; massing 7 s -> 1 s on 16, 6,000 houses ~14 min -> seconds).
+64-sheet memorisation with capacity arms (width 256, swin_s, swin_b) was queued and stopped for
+the deadline: never run (`run_overfit64.sh` arms `roiaddnodr_*`, pool `revitfail_mined64`).
+Only one 2048 training fits on the GPU; four 64-sheet no-DR arms together OOM.
+
+**Fine-tune LR (same synthetic start and mix, validation-chosen, 4096):** 2e-4 SWA 24-26 0.8733,
+**5e-5 e22 0.8816** (val 0.9009), 2e-5 e25 0.8739. Soup of the 2e-4 and 5e-5 models: val 0.9051
+(best), HF14 0.8753. WiSE (synthetic <-> fine-tuned, alpha 0.5 / 0.7 / 0.85): val 0.895-0.898,
+not read on HF14. Published: `abshetty/floz-refunet-swint-synpre-realmix-lr5e5-e22`.

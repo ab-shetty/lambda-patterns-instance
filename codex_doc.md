@@ -1,11 +1,30 @@
 # Handoff
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
+
+## Pick up here (2026-10-03, GH200 -- read this first)
+
+Detail: `synth_progress.md` "2026-10-02/03". **New best HF14 0.8816** (`startup.md`): synthetic
+pretraining on mined Revit sheets with a long schedule, then a 5e-5 real-mix fine-tune.
+
+- Synthetic-only best: 0.8668 (`...-longhardfail-swa16-20`); shipped 0.8440 re-scored exactly.
+- **Hard mining** helps at 2k / 9 epochs (+0.037 averaged) and is null at a 30-epoch schedule;
+  steps are the bigger lever. The four failure options help at 2k (+0.025) and don't stack with mining.
+- **Noise at 0.85:** single-checkpoint differences sd ~0.024 (a few flip-prone questions);
+  compare late-epoch averages / SWA weights (se ~0.0075), not single checkpoints.
+- **Fit:** 64 mined sheets memorise to 0.843 in 60 passes (ceiling 0.95); the fit ladder says
+  that is still the step regime. A 240-epoch arm (`ck_overfit64_roiaddnodr_mined64_e240`) was
+  running at handoff: above ~0.93 = budget, ~0.85 = model. Width / selfattn / corr-grid were
+  tested before (all negative or parity) -- see `synth_progress.md` before re-proposing them.
+- Remaining failures: 18's roof vs masonry base and 27 / 25 vertical boards vs horizontal-line
+  roof (every model); the fine-tune trades synthetic wins on line-only markup for real ones.
+- Ops: queue GPU jobs on files a job writes last, never on `$!` after `setsid` (it is the
+  wrapper); one 2048 training fills the 96 GB GPU. FreeCAD massing now runs on `--workers`.
 
 ## Pick up here (2026-10-02, CPU session -- read this first)
 

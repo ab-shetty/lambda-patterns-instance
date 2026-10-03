@@ -24,7 +24,37 @@ byte-comparable to older ones). **Every run before
 2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
 `train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
 
-## Current best (2026-09-28, unchanged 2026-09-30): HF14 0.8440
+## Current best (2026-10-03): HF14 0.8816
+
+Synthetic pretraining, then a gentle real-mix fine-tune. swin_t, trained at 2048, inference at
+4096, ROI add, one seed: `abshetty/floz-refunet-swint-synpre-realmix-lr5e5-e22` (private Hub;
+round-trip verified).
+
+1. Synthetic-only start: `abshetty/floz-refunet-swint-longhardfail-swa16-20` (HF14 0.8668),
+   the weight average of restart epochs 16-20 of `run_hard_long.sh` on the mined Revit pool
+   `revitfail_hard2000` (see `synth_progress.md` 2026-10-02/03).
+2. `run_restart_swa.sh` with `EXTRA="--roi-ref --roi-ref-mode add --lr 5e-5"` on
+   `data/mixed/realmix_revithard` (`run_build_realmix.sh`: the mined Revit pool + real 86 x18 +
+   generated 28 x18 + Gemini r2-r4 168 x18 = 7,076), restart epoch 22 chosen on validation
+   (0.9009), HF14 read once: **0.8816**, about +0.038 over 0.8440.
+
+Fine-tune LR, same start and mix, validation-chosen: 2e-4 SWA 24-26 0.8733, **5e-5 0.8816**,
+2e-5 0.8739. A 50/50 weight soup of the 2e-4 and 5e-5 models has the best validation of all
+(0.9051) and HF14 0.8753; WiSE interpolations toward the synthetic weights did not help. Picking
+across every candidate on validation therefore gives 0.8753 -- the 0.006 gap is noise.
+
+```bash
+PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-synpre-realmix-lr5e5-e22 \
+  --out data/runs/ck_best/lr5e5-e22.pth
+PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint data/runs/ck_best/lr5e5-e22.pth \
+  --indices 12,16,27,7,11,25,23,1,18,2,0,3,14,24 --image-max-size 4096 --ref-size 224 --mask-thresh 0.35
+# mean_iou 0.8816
+```
+
+Previous best, 0.8440 (2026-09-28): `abshetty/floz-refunet-swint-mixr4-roiadd-swa15`, re-scored
+exactly on 2026-10-03.
+
+## Previous best (2026-09-28): HF14 0.8440
 
 swin_t, 282-source mix (`v6dmix_plus_r4`), trained at 2048, **inference at
 4096**, with the image-box reference (`--roi-ref --roi-ref-mode add`: the

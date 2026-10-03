@@ -22,6 +22,7 @@ import sys
 import tempfile
 import time
 from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
 
 import numpy as np
 from shapely import affinity
@@ -188,7 +189,15 @@ def massing_spec(image_id, seed, house):
     return spec
 
 
-def run_freecad(specs):
+def run_freecad(specs, procs=1):
+    """Each house is built independently, so `procs` freecadcmd processes on contiguous
+    chunks give the same faces as one process (a single one uses ~2 cores)."""
+    if procs > 1 and len(specs) > 1:
+        size = -(-len(specs) // min(procs, len(specs)))
+        chunks = [specs[k:k + size] for k in range(0, len(specs), size)]
+        with ThreadPool(len(chunks)) as tp:
+            parts = tp.map(run_freecad, chunks)
+        return {k: v for part in parts for k, v in part.items()}
     with tempfile.TemporaryDirectory() as td:
         src, dst = os.path.join(td, "in.json"), os.path.join(td, "out.json")
         json.dump(specs, open(src, "w"))
@@ -728,7 +737,7 @@ def main():
     ids = list(range(args.start, args.start + args.n))
     t0 = time.time()
     specs = [massing_spec(i, args.seed, house_for(i, args.seed, mw)) for i in ids]
-    raw = run_freecad(specs)
+    raw = run_freecad(specs, procs=args.workers)
     faces = {s["id"]: (s, raw[str(s["id"])]) for s in specs if isinstance(raw.get(str(s["id"])), list)}
     print(f"massing {len(faces)}/{len(ids)} in {time.time() - t0:.0f}s", flush=True)
     ok, modes = 0, {}
