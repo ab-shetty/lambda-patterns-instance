@@ -238,6 +238,26 @@ vertical boards.
   (staggered shakes next to uneven-spaced boards, both uncoloured): cedar shingle + vertical/bb on
   the same sheet in 2 / 80 Revit sheets, both coloured; 0 / 80 on line-only sheets.
 
+## Tiny reference boxes in training and in the mined pool (2026-10-04, CPU)
+
+Training draws its reference like the evaluator: a family, then any one of its instances, then a box
+fully inside that instance (`--ref-min-side` 0 = slivers allowed). Mining (`build_hard_pool.py`)
+ranks sheets by automatic-box IoU and filters only on target resolution, never on the box. Measured
+on 399 regenerated fresh sheets (ids 100000-100399, the `revitfail` flags; 98 of them mined):
+
+| | questions / sheet | eval box side @2048 median | < 16 px | < 32 px | training draw, largest box that fits < 32 px |
+|---|---:|---:|---:|---:|---:|
+| fresh, mined | 14.2 | 42 | 17% | 40% | 24% |
+| fresh, not mined | 7.9 | 57 | 10% | 27% | 12% |
+| real 28, automatic boxes | 4.6 | 85 | 0% | 5% | |
+| real 28, hand boxes | 4.4 | 76 | 0% | 5% | |
+| Gemini 20, automatic boxes | 7.8 | 107 | 1% | 13% | |
+
+Revit sheets ask about slivers far more than real ones (window-cut pieces), and mining doubled
+that: part of what it picked as "hard" is unanswerable tiny references. Untested whether it hurt
+(mining +0.037 at 2k / 9 epochs, null at 30). Fix candidates: a box-size filter in mining
+(drop questions whose box < 32 px @2048 from hardness), and `--ref-min-side` in training.
+
 ## Best model on 20 Gemini plans it trained on (2026-10-04, CPU)
 
 20 random plans from Gemini r2-r4 (seed 20261004), automatic boxes (no hand boxes exist), 4096:
