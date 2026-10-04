@@ -221,6 +221,31 @@ Correction to 2026-09-30 below: the 25 / 27 failures were read there as "not pai
 cause is the horizontal-roof / vertical-siding pair above; paint is still untested at the
 2048 GPU recipe. None of these flags is trained yet.
 
+## HF14 25 / 27: shingle roof vs unpainted vertical boards (2026-10-04, CPU)
+
+The best model (`synpre-realmix-lr5e5-e22`, hand boxes) trails shipped only on 25 / 27, and only on
+three questions: 27 q3 0.48 vs 0.94, 25 q3 0.73 vs 0.91, 27 q4 0.90 vs 0.98 (~+0.014 HF14 if fixed).
+In each it over-selects: with the reference on the shingle-roof band it also takes the unpainted
+vertical boards.
+- Not colour: re-scored in greyscale, shipped keeps 0.96 / 0.95 and the best model is unchanged.
+- Inherited from synthetic pretraining: synthetic-only 10k 0.51 on 27 q3; the 2e-4 fine-tune
+  (`synpre-realmix-swa24-26`) 0.455; v6d-only (`swint-v6d-e8`) 0.307. Shipped's skill comes from its
+  real / generated / Gemini data, not v6d.
+- The generators make similar-looking pairs as often as the real sheets (look-alike descriptor from
+  `question_difficulty.py`, share of questions >= 0.95: real 28 12%, v6d 18%, Revit 14%; >= 0.98:
+  8% / 7% / 2%, Revit's `distinct_looks`). The best model scores 0.92 on the 18 real questions >= 0.95;
+  the four in 0.90-0.95 are exactly this pair (0.59). What is missing is the drafting convention
+  (staggered shakes next to uneven-spaced boards, both uncoloured): cedar shingle + vertical/bb on
+  the same sheet in 2 / 80 Revit sheets, both coloured; 0 / 80 on line-only sheets.
+
+## Best model on 20 Gemini plans it trained on (2026-10-04, CPU)
+
+20 random plans from Gemini r2-r4 (seed 20261004), automatic boxes (no hand boxes exist), 4096:
+**mean 0.809 over 156 questions** (sheet-mean 0.797); 44% of questions >= 0.90, 13% < 0.60; 6 of
+20 sheets >= 0.90. Worst questions are about half unrealistic automatic boxes (on a porch railing,
+a post, a sliver) and half real confusions: same texture in two colours that the labels treat as two
+families (17), roof vs wall (0), a plan floor vs hatching (4). Not near 0.90, even on training data.
+
 ## Generator flags (`generate_synthetic_v6.py`, all default-off, v6d byte-identical when off)
 
 | flag | status |
