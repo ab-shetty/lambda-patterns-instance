@@ -526,7 +526,8 @@ def compose_revit(image_id, seed, mode_weights):
         V = G.View(S, (cx + left_room - x0) * S, (cy + top_room - y0) * S)
         opening_polys = unary_union([o["poly"] for o in e["openings"]]) if e["openings"] else None
         label_holes = unary_union([G.label_hole(o, app) for o in e["openings"]]) if e["openings"] else None
-        trim_cut = unary_union(e["trims"]) if (G.TRIM_CUT and e["trims"]) else None
+        lt = e.get("label_trims", e["trims"])          # every trim but the standing posts
+        trim_cut = unary_union(lt) if (G.TRIM_CUT and lt) else None
         # surfaces: pattern fills
         for (fam, poly, bi, kind) in e["surfaces"]:
             p = poly.difference(opening_polys) if opening_polys is not None else poly
@@ -544,6 +545,12 @@ def compose_revit(image_id, seed, mode_weights):
         # trims: white boards
         for tp in e["trims"]:
             G.cv_fill(canvas, V.geom(tp), (255, 255, 255) if not shaded else (242, 242, 240))
+        # downspouts: on the wall, under the shadows and the railing; the wall label runs on behind
+        for ds in e.get("downspouts", []):
+            dsc = (255, 255, 255) if not shaded else G.mix(app["trim"], (60, 60, 60), 0.35)
+            for qq in G.polys_of(ds):
+                G.cv_fill(canvas, V.geom(qq), dsc)
+                _outline_geom(canvas, V.geom(qq), ink, lw_thin)
         # cast shadows (walls) + window recesses
         if shadows_on:
             sh = wall_shadows(v, faces, e["vf"], sun)

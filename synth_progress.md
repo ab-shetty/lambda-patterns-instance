@@ -6,6 +6,13 @@ references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
 ## Current state (2026-10-01)
+- **Default changed 2026-10-04: `generate_synthetic_fc.py --cut-standing 0` (Revit elevations).**
+  Porch posts, railing / deck posts and newel posts are drawn as before but stay inside the wall
+  label -- the wall continues behind them, as every hand-labelled sheet draws it (Gemini, real 02 /
+  27). Every pool before this (since `--trim-cut` on 2026-09-29, incl. `revitfail_hard2000`, the
+  best model's pretraining pool) cut them out. Images are byte-identical; `--cut-standing 1`
+  reproduces earlier pools exactly (40/40 images and labels). Audit below ("Label cuts vs the hand
+  labels"). New opt-in `--downspouts P` (default 0 = byte-identical).
 - **Default changed 2026-10-01: `generate_synthetic_fc.py --cedar-shingle 0.5`.** Half of shingle
   styles are drawn as cedar shingles (vertical joints dominant, like HF14 25/27) instead of
   brick-like courses. Pools generated before this commit reproduce only with `--cedar-shingle 0`.
@@ -198,7 +205,7 @@ each now with an opt-in flag (own RNG each; all 0 = byte-identical, 12 sheets ch
 | failure (real sheet) | what the generator lacked | flag |
 |---|---|---|
 | tight horizontal roof lines merged with looser vertical siding, both unpainted (25 q01/q02, 27 q02-q04: 0.94-0.99 shipped -> 0.39-0.72) | roofs were rows with joints or standing seam (vertical lines); a plain horizontal-lines roof never met vertical boards (lap + vertical walls do pair: 51 / 300 sheets) | `--roof-lines P` |
-| railing / stair in front of siding (27: deck balusters over lap read as a grid; stair + rail over vertical boards) | Revit elevations have porch posts but no railings or exterior stairs; labels run on behind them | `--railings P`: balcony (2nd floor) or raised deck across part of a wall, pickets or cables, half with a stair to grade; rim / posts / stringer are trims (cut), rails, balusters, treads and handrail are drawn over and the wall label runs on behind; on shaded sheets the deck + railing shadow is cast `depth` ft out by the same sun as `wall_shadows` |
+| railing / stair in front of siding (27: deck balusters over lap read as a grid; stair + rail over vertical boards) | Revit elevations have porch posts but no railings or exterior stairs | `--railings P`: balcony (2nd floor) or raised deck across part of a wall, pickets or cables, half with a stair to grade; rim / stringer are trims (cut), posts are drawn as trims but stay in the wall label (since 2026-10-04, `--cut-standing 0`), rails, balusters, treads and handrail are drawn over and the wall label runs on behind; on shaded sheets the deck + railing shadow is cast `depth` ft out by the same sun as `wall_shadows` |
 | faint line-only texture taken for blank paper (14 q06 brick tile 0.987 -> 0.555 picks blank stucco) | line-only pattern lines were 110-175 grey; 14's are ~240 | `--faint-lines P` (line patterns only: faint sparse stucco dots read as blank paper, so dot kinds keep their weight) |
 | siding in porch shade missed (2 q00/q01 0.88 -> 0.73) | shade was one x0.55-0.75 multiply keeping the hue; 02's is x0.81 and neutral grey (246,242,230 -> 199,200,195) with a x0.68 overlap level | `--soft-shadows P` (two suns through `wall_shadows`, the 3D massing's projection) |
 
@@ -265,6 +272,32 @@ that: part of what it picked as "hard" is unanswerable tiny references. Untested
 20 sheets >= 0.90. Worst questions are about half unrealistic automatic boxes (on a porch railing,
 a post, a sliver) and half real confusions: same texture in two colours that the labels treat as two
 families (17), roof vs wall (0), a plan floor vs hatching (4). Not near 0.90, even on training data.
+
+## Label cuts vs the hand labels (2026-10-04, CPU)
+
+Every element the Revit renderer draws over a wall, checked against the Gemini labels (~10 plans)
+and real 02 / 03 / 05 / 08-10 / 13 / 14 / 27 at full resolution. The hand-label rule: a wall label
+runs on behind anything standing in front of it with no pattern of its own; flat trim bands and
+openings are left out.
+
+| element | Revit before | hand labels | now |
+|---|---|---|---|
+| porch posts | cut (`--trim-cut`) | wall continues (Gemini 15, #60; real 02) | **kept** |
+| railing / deck posts, newel | cut (`--railings`) | wall continues (real 27) | **kept** |
+| stair stringer | cut | wall continues (real 27) | cut (edge case, left) |
+| windows / doors / garage + casing, head | cut | cut | cut |
+| belts, porch beam, eave fascia, rake, deck rim | cut | cut (Gemini #10 / #45 / #60, real 27) | cut |
+| porch roof | its own roof label | same | same |
+| pickets, handrails, treads, shadows, leaders / text, jutting sills | kept | kept | kept |
+| downspouts / gutters, porch furniture, wall lights | not drawn | wall label runs over them (real 02 / 03 / 05) | `--downspouts P` (opt-in) |
+
+Nothing found that Revit keeps and the hand labels cut. 40-sheet check (`--railings 0.5`): 28 / 40
+sheets gain label (319 tall strips, median 5:1); the only removed pixels are <= 3 px polygon-
+simplification jitter on merged shapes. Where a post stands in front of an opening or belt that part
+stays unlabelled. `--downspouts P`: per visible block wall end, with probability P, a pipe from just
+under the wall top to grade with a kick-out shoe, skipped within 1 ft of an opening, drawn under the
+shadows and the railing (so it shades with the wall), never cut from the label. Not checked: roof
+plans (ridges, hips, vents, skylights) and Revit floor plans.
 
 ## Generator flags (`generate_synthetic_v6.py`, all default-off, v6d byte-identical when off)
 

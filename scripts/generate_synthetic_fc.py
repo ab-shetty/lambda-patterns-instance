@@ -54,6 +54,15 @@ def house_for(image_id, seed, mw):
 
 
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
+# --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
+# railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
+# label -- the wall continues behind them, as every hand-labelled sheet draws it (real 02, 27;
+# Gemini). Flat trim (belts, fascia, rim board, stair stringer) is still cut. 1 = earlier pools.
+CUT_STANDING = [False]
+# --downspouts P (2026-10-04, default 0 = byte-identical): probability a wall end gets a
+# downspout from the eave to grade, drawn over the siding with the wall label running behind
+# it, as on the real rendered elevations (02, 03, 05). Own RNG per view.
+DOWNSPOUTS = [0.0]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -278,15 +287,48 @@ def classify(F, blocks, chim):
     return ("trim", None)           # rake boards / fascia: slab edges outside every footprint
 
 
+def _downspouts(house, view, walls_by_block, openings):
+    """--downspouts P (2026-10-04): at each end of each visible block wall, with probability P, a
+    downspout runs from the top of the wall (under the eave) to grade, with a kick-out shoe at the
+    bottom. Drawn over the siding (revit_render), never cut from the wall label -- the wall
+    continues behind it, as on the real rendered elevations. Skips an end where an opening is
+    within a foot. Own RNG per view: P = 0 is byte-identical."""
+    dr = random.Random(_CUR[0] * 991 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 37 + 11)
+    occ = unary_union([o["poly"] for o in openings]).buffer(1.0) if openings else None
+    out = []
+    for bi in sorted(walls_by_block):
+        wall = unary_union([F["vis"] for F in walls_by_block[bi]])
+        if wall.is_empty or wall.bounds[2] - wall.bounds[0] < 6:
+            continue
+        u0, _, u1, _ = wall.bounds
+        pw = dr.uniform(0.22, 0.32)
+        for end in (0, 1):
+            if dr.random() >= DOWNSPOUTS[0]:
+                continue
+            x = u0 + dr.uniform(0.15, 0.5) if end == 0 else u1 - dr.uniform(0.15, 0.5) - pw
+            col = wall.intersection(G.rect(x, 1, x + pw, -200))
+            if col.is_empty:
+                continue
+            y_top = col.bounds[1] + 0.05                    # just under the wall's top at this x
+            pipe = G.rect(x, y_top, x + pw, -0.35)
+            if occ is not None and pipe.intersects(occ):
+                continue
+            shoe_dx = pw * 1.6 * (1 if end == 0 else -1)    # kick-out away from the corner
+            shoe = G.rect(min(x, x + shoe_dx), -0.35 - pw * 0.9, max(x + pw, x + pw + shoe_dx), -0.05)
+            out.append(unary_union([pipe, shoe]))
+    return out
+
+
 # ----------------------------------------------------------------------------
 # the v6 elevation dict, from visible faces
 # ----------------------------------------------------------------------------
 def _railing(house, view, walls_by_block, fh, rr):
     """--railings (2026-10-02): a balcony or raised deck with a railing (and half the time an
     exterior stair) standing in front of a wall, as on HF14 27. Solid boards -- rim joist,
-    posts, stair stringer -- are trims (cut out of the labels, like the porch posts); the
-    rails, balusters / cables, treads and handrail are drawn over the siding and the wall
-    label runs on behind them, as the annotators drew it. `depth` = distance in front of the
+    posts, stair stringer -- are drawn as trims; the rim and stringer are cut out of the labels,
+    the posts ("standing") only under --cut-standing 1. The rails, balusters / cables, treads
+    and handrail are drawn over the siding and the wall label runs on behind them, as the
+    annotators drew it. `depth` = distance in front of the
     wall, so revit_render casts the shadow by the same sun vector as wall_shadows."""
     walls = {bi: unary_union([F["vis"] for F in Fs]) for bi, Fs in walls_by_block.items()}
     walls = {bi: w for bi, w in walls.items() if not w.is_empty and w.bounds[2] - w.bounds[0] > 14}
@@ -299,7 +341,7 @@ def _railing(house, view, walls_by_block, fh, rr):
     w = max(8.0, rr.uniform(0.35, 0.85) * (u1 - u0))
     w = min(w, u1 - u0 - 1)
     a = rr.uniform(u0 + 0.5, u1 - w - 0.5)
-    cut, rails, lines = [], [], []
+    cut, rails, lines, standing = [], [], [], []
     rim_h = rr.uniform(0.7, 1.1)
     cut.append(G.rect(a, deck_y, a + w, deck_y + rim_h))                          # rim joist / deck edge
     rail_h = rr.uniform(3.0, 3.6)
@@ -311,8 +353,10 @@ def _railing(house, view, walls_by_block, fh, rr):
     pxs = [a + pw / 2 + (w - pw) * k / n_p for k in range(n_p + 1)]
     for px in pxs:
         cut.append(G.rect(px - pw / 2, top - 0.15, px + pw / 2, deck_y))           # railing posts
+        standing.append(cut[-1])
         if deck_y > -fh + 0.1:                                                     # ground deck: posts to grade
             cut.append(G.rect(px - pw / 2 * 0.9, deck_y + rim_h, px + pw / 2 * 0.9, 0))
+            standing.append(cut[-1])
     infill = rr.choices(["pickets", "cable"], weights=[75, 25])[0]
     y_lo, y_hi = deck_y - 0.55, top + 0.35
     if infill == "pickets":
@@ -353,6 +397,7 @@ def _railing(house, view, walls_by_block, fh, rr):
             lines.append(((xt, deck_y - hr + 0.12), (xb, -hr + 0.12)))
             for x in (xb,):
                 cut.append(G.rect(x - pw / 2, -hr - 0.15, x + pw / 2, 0))           # newel post
+                standing.append(cut[-1])
             sp = rr.uniform(0.35, 0.5) * (1 if xb > xt else -1)
             x = xt + sp
             while (x - xb) * (1 if xb > xt else -1) < -0.1:
@@ -361,7 +406,7 @@ def _railing(house, view, walls_by_block, fh, rr):
                 x += sp
     depth = rr.uniform(4, 9) if deck_y <= -fh + 0.1 else rr.uniform(6, 12)
     return {"cut": cut, "rails": rails, "lines": lines, "depth": depth, "deck": (a, a + w, deck_y),
-            "stair": stair, "bi": bi}
+            "stair": stair, "bi": bi, "standing": standing}
 
 
 def build_elevation_fc(house, view, rng):
@@ -465,6 +510,7 @@ def build_elevation_fc(house, view, rng):
         surfaces.append(("roof", proof, -1, "porch"))
         trims.append(porch["fascia"])
         trims += porch["posts"]
+    standing = list(porch["posts"]) if porch else []
     railing = None
     if getattr(G, "RAILINGS", 0) > 0 and walls_by_block:
         rr = random.Random(_CUR[0] * 977 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 31 + 7)
@@ -472,10 +518,17 @@ def build_elevation_fc(house, view, rng):
             railing = _railing(house, view, walls_by_block, fh, rr)
             if railing is not None:
                 trims += railing["cut"]
+                standing += railing["standing"]
+    downspouts = _downspouts(house, view, walls_by_block, openings) if DOWNSPOUTS[0] > 0 else []
+    # labels are cut by every trim except the standing posts (unless --cut-standing 1); the
+    # drawing still uses every trim, so images do not change
+    label_trims = trims if CUT_STANDING[0] else [t for t in trims if not any(t is q for q in standing)]
     trims = [q for t in trims for q in G.polys_of(t) if q.area > 0.05]
+    label_trims = [q for t in label_trims for q in G.polys_of(t) if q.area > 0.05]
     allp = [p for (_, p, _, _) in surfaces] + trims
-    return {"surfaces": surfaces, "trims": trims, "openings": openings, "porch": porch,
-            "extent": unary_union(allp).bounds, "vf": vf, "railing": railing}
+    return {"surfaces": surfaces, "trims": trims, "label_trims": label_trims, "openings": openings,
+            "porch": porch, "extent": unary_union(allp).bounds, "vf": vf, "railing": railing,
+            "downspouts": downspouts}
 
 
 def place_openings(house, B, bi, view, wall, Fs, rng):
@@ -608,6 +661,8 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     SHAPED[0] = shaped
     flags = dict(flags)
     OPENINGS_PER_FACE[0] = bool(flags.pop("openings_per_face", 1))
+    CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
+    DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.0))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -680,6 +735,12 @@ def main():
     ap.add_argument("--openings-per-face", type=int, choices=[0, 1], default=1,
                     help="1 (default since 2026-10-02) = every window / door sits on one planar wall face, never "
                          "across the corner of a projecting bay or wing; 0 reproduces earlier pools")
+    ap.add_argument("--cut-standing", type=int, choices=[0, 1], default=0,
+                    help="0 (default since 2026-10-04) = porch / railing / newel posts stay inside the wall label "
+                         "(the wall continues behind them); 1 cuts them out, reproducing earlier pools")
+    ap.add_argument("--downspouts", type=float, default=0.0,
+                    help="Revit elevations: probability a wall end gets a downspout (eave to grade) drawn over the "
+                         "siding, the wall label running behind it; 0 (default) = byte-identical")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -728,6 +789,9 @@ def main():
     if args.railings > 0:
         flags["railings"] = args.railings
     flags["openings_per_face"] = args.openings_per_face
+    flags["cut_standing"] = args.cut_standing
+    if args.downspouts > 0:
+        flags["downspouts"] = args.downspouts
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)
