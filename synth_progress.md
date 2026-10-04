@@ -6,6 +6,20 @@ references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
 ## Current state (2026-10-01)
+- **Defaults changed 2026-10-04 (with `--cut-standing 0` below): `--plan-v2 2`, `--downspouts 0.05`,
+  `--ref-exclude 1`.** (a) Floor plans get furniture in every room (solid on rendered sheets),
+  patio furniture, framing, and the floor labels that leave out wall-fixed pieces -- until now
+  those labels and all furniture applied only to `--plan-v2 2` / `--plan-source` pools, i.e. no
+  trained pool. (b) Downspouts on ~5% of wall ends. (c) Each annotation file carries
+  `ref_exclude` (pixel rings): posts, railing panels, exterior stairs, downspouts, solid furniture,
+  rugs -- inside the labels (the material continues behind them), but training
+  (`refmask2former/dataset.py`) and the local-pool evaluator / mining draw REFERENCE boxes from
+  the label minus them (`reference_region`; whole instance if nothing is left). Real / Gemini
+  records have no field: unchanged. Measured: floor-plan boxes > 50% on furniture 10.1% -> 0%,
+  elevation boxes > 50% on posts / railings / downspouts 4.5% -> 1.9% (pieces wholly behind a
+  railing). Mining scores on new pools are not comparable with old ones. Earlier pools:
+  `--plan-v2 1 --cut-standing 1 --downspouts 0 --ref-exclude 0` (byte-identical, 40 elevations +
+  150 floor plans checked).
 - **Default changed 2026-10-04: `generate_synthetic_fc.py --cut-standing 0` (Revit elevations).**
   Porch posts, railing / deck posts and newel posts are drawn as before but stay inside the wall
   label -- the wall continues behind them, as every hand-labelled sheet draws it (Gemini, real 02 /
@@ -298,6 +312,20 @@ stays unlabelled. `--downspouts P`: per visible block wall end, with probability
 under the wall top to grade with a kick-out shoe, skipped within 1 ft of an opening, drawn under the
 shadows and the railing (so it shades with the wall), never cut from the label. Not checked: roof
 plans (ridges, hips, vents, skylights) and Revit floor plans.
+
+## Roof and floor plan label cuts vs the hand labels (2026-10-04, CPU)
+
+Rule (a contractor's takeoff): label where the material is actually installed -- holes where it
+is not (openings, skylights, chimneys, fixed cabinets / tubs), continuous behind things standing
+in front of it (posts, railings, downspouts, freestanding furniture, rugs).
+- Roof plans: grid lines, text, slope arrows, gutters, walls-below stay inside the label (both).
+  Skylights: synthetic and Gemini cut them (Gemini also cuts vents); real 1 / 16 (HF14) and 11
+  (val) keep them inside the roof label -- by the takeoff rule the real labels are the outliers
+  (small areas; not changed). Flat roofs: synthetic labels 60%; real 15 / 16 leave them out,
+  Gemini sometimes labels them as their own family.
+- Floor plans: real 0 labels patio paving with the patio furniture inside; 12 the soffit band;
+  7 the under-floor area with its text. Synthetic: wall-fixed pieces cut, freestanding inside (as
+  Gemini). Furniture boxes: see defaults above (`ref_exclude`).
 
 ## Generator flags (`generate_synthetic_v6.py`, all default-off, v6d byte-identical when off)
 

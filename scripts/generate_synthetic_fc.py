@@ -59,10 +59,16 @@ OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # label -- the wall continues behind them, as every hand-labelled sheet draws it (real 02, 27;
 # Gemini). Flat trim (belts, fascia, rim board, stair stringer) is still cut. 1 = earlier pools.
 CUT_STANDING = [False]
-# --downspouts P (2026-10-04, default 0 = byte-identical): probability a wall end gets a
-# downspout from the eave to grade, drawn over the siding with the wall label running behind
-# it, as on the real rendered elevations (02, 03, 05). Own RNG per view.
-DOWNSPOUTS = [0.0]
+# --downspouts P (2026-10-04, default 0.05): probability a wall end gets a downspout from the
+# eave to grade, drawn over the siding with the wall label running behind it, as on the real
+# rendered elevations (02, 03, 05). Own RNG per view; 0 = earlier pools.
+DOWNSPOUTS = [0.05]
+# --ref-exclude (default 1, 2026-10-04): each annotation file carries "ref_exclude", pixel
+# polygons of things standing in front of a labelled surface with no pattern of their own --
+# posts, railing panels, exterior stairs, downspouts, solid furniture and rugs. They stay inside
+# the labels (the material continues behind them); training and mining draw REFERENCE boxes
+# from the label minus these, so a reference is never a crop of a post or a bed. 0 = omit.
+REF_EXCLUDE = [True]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -287,6 +293,19 @@ def classify(F, blocks, chim):
     return ("trim", None)           # rake boards / fascia: slab edges outside every footprint
 
 
+def ref_exclude_rings(geoms_px, W, H):
+    """--ref-exclude: pixel polygons (already in image coordinates) -> the annotation file's
+    "ref_exclude" list of flat outer rings, clipped to the image; [] when off or empty."""
+    if not REF_EXCLUDE[0] or not geoms_px:
+        return []
+    u = unary_union([g.buffer(0) for g in geoms_px]).intersection(box(0, 0, W, H))
+    out = []
+    for q in G.polys_of(u):
+        if q.area >= 16:
+            out.append([round(v, 1) for c in q.exterior.coords[:-1] for v in c])
+    return out
+
+
 def _downspouts(house, view, walls_by_block, openings):
     """--downspouts P (2026-10-04): at each end of each visible block wall, with probability P, a
     downspout runs from the top of the wall (under the eave) to grade, with a kick-out shoe at the
@@ -341,7 +360,7 @@ def _railing(house, view, walls_by_block, fh, rr):
     w = max(8.0, rr.uniform(0.35, 0.85) * (u1 - u0))
     w = min(w, u1 - u0 - 1)
     a = rr.uniform(u0 + 0.5, u1 - w - 0.5)
-    cut, rails, lines, standing = [], [], [], []
+    cut, rails, lines, standing, excl = [], [], [], [], []
     rim_h = rr.uniform(0.7, 1.1)
     cut.append(G.rect(a, deck_y, a + w, deck_y + rim_h))                          # rim joist / deck edge
     rail_h = rr.uniform(3.0, 3.6)
@@ -357,6 +376,7 @@ def _railing(house, view, walls_by_block, fh, rr):
         if deck_y > -fh + 0.1:                                                     # ground deck: posts to grade
             cut.append(G.rect(px - pw / 2 * 0.9, deck_y + rim_h, px + pw / 2 * 0.9, 0))
             standing.append(cut[-1])
+    excl.append(G.rect(a, top - 0.15, a + w, deck_y))                              # the railing panel
     infill = rr.choices(["pickets", "cable"], weights=[75, 25])[0]
     y_lo, y_hi = deck_y - 0.55, top + 0.35
     if infill == "pickets":
@@ -393,6 +413,7 @@ def _railing(house, view, walls_by_block, fh, rr):
                 lines.append(((x0, y0), (x0 + dx, y0)))
                 lines.append(((x0 + dx, y0), (x0 + dx, y0 + dy)))
             hr = rr.uniform(2.8, 3.2)
+            excl.append(Polygon([(xt, deck_y - hr - 0.15), (xb, -hr - 0.15), (xb, 0.0), (xt, deck_y)]).buffer(0))
             lines.append(((xt, deck_y - hr), (xb, -hr)))                            # handrail
             lines.append(((xt, deck_y - hr + 0.12), (xb, -hr + 0.12)))
             for x in (xb,):
@@ -406,7 +427,7 @@ def _railing(house, view, walls_by_block, fh, rr):
                 x += sp
     depth = rr.uniform(4, 9) if deck_y <= -fh + 0.1 else rr.uniform(6, 12)
     return {"cut": cut, "rails": rails, "lines": lines, "depth": depth, "deck": (a, a + w, deck_y),
-            "stair": stair, "bi": bi, "standing": standing}
+            "stair": stair, "bi": bi, "standing": standing, "ref_excl": standing + excl}
 
 
 def build_elevation_fc(house, view, rng):
@@ -520,6 +541,7 @@ def build_elevation_fc(house, view, rng):
                 trims += railing["cut"]
                 standing += railing["standing"]
     downspouts = _downspouts(house, view, walls_by_block, openings) if DOWNSPOUTS[0] > 0 else []
+    ref_excl = (list(porch["posts"]) if porch else []) + (railing["ref_excl"] if railing else []) + downspouts
     # labels are cut by every trim except the standing posts (unless --cut-standing 1); the
     # drawing still uses every trim, so images do not change
     label_trims = trims if CUT_STANDING[0] else [t for t in trims if not any(t is q for q in standing)]
@@ -528,7 +550,7 @@ def build_elevation_fc(house, view, rng):
     allp = [p for (_, p, _, _) in surfaces] + trims
     return {"surfaces": surfaces, "trims": trims, "label_trims": label_trims, "openings": openings,
             "porch": porch, "extent": unary_union(allp).bounds, "vf": vf, "railing": railing,
-            "downspouts": downspouts}
+            "downspouts": downspouts, "ref_excl": ref_excl}
 
 
 def place_openings(house, B, bi, view, wall, Fs, rng):
@@ -662,7 +684,8 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     flags = dict(flags)
     OPENINGS_PER_FACE[0] = bool(flags.pop("openings_per_face", 1))
     CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
-    DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.0))
+    DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.05))
+    REF_EXCLUDE[0] = bool(flags.pop("ref_exclude", 1))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -708,12 +731,14 @@ def main():
     ap.add_argument("--distinct-looks", type=int, default=1, choices=[0, 1],
                     help="1 = Revit elevations never label two look-alike families or a plain (patternless) "
                          "family (default); 0 = pre-2026-09-29 pools")
-    ap.add_argument("--plan-v2", type=int, default=1, choices=[0, 1, 2],
+    ap.add_argument("--plan-v2", type=int, default=2, choices=[0, 1, 2],
                     help="--revit-plans floor plans v2: covered patios in footprint notches, grey paving beside "
                          "grey interiors, stronger interior texture, and a ceiling / electrical sheet type (15%%) "
-                         "with a labelled soffit band. Default 1 since 2026-10-01; 0 reproduces earlier pools. "
-                         "2 = v3 on top: furniture in every room (solid with shadows on rendered sheets, ghosted "
-                         "under ceiling plans), patio furniture, and framing cropped to the drawing")
+                         "with a labelled soffit band; 0 reproduces pools before 2026-10-01. "
+                         "2 (default since 2026-10-04) = v3 on top: furniture in every room (solid with shadows on "
+                         "rendered sheets, ghosted under ceiling plans), patio furniture, framing cropped to the "
+                         "drawing, and floor labels that leave out wall-fixed pieces (counters, tubs, vanities); "
+                         "1 reproduces pools from 2026-10-01 to 2026-10-03")
     ap.add_argument("--plan-source", default=None,
                     help="--revit-plans floor plans: a layouts file from scripts/swiss_plans.py (real Swiss Dwellings "
                          "apartments, CC BY 4.0 -- credit Archilyse AG) used instead of the procedural layout; "
@@ -738,9 +763,12 @@ def main():
     ap.add_argument("--cut-standing", type=int, choices=[0, 1], default=0,
                     help="0 (default since 2026-10-04) = porch / railing / newel posts stay inside the wall label "
                          "(the wall continues behind them); 1 cuts them out, reproducing earlier pools")
-    ap.add_argument("--downspouts", type=float, default=0.0,
+    ap.add_argument("--downspouts", type=float, default=0.05,
                     help="Revit elevations: probability a wall end gets a downspout (eave to grade) drawn over the "
-                         "siding, the wall label running behind it; 0 (default) = byte-identical")
+                         "siding, the wall label running behind it. Default 0.05 since 2026-10-04; 0 = earlier pools")
+    ap.add_argument("--ref-exclude", type=int, choices=[0, 1], default=1,
+                    help="1 (default) = annotation files carry ref_exclude (posts, railings, stairs, downspouts, solid "
+                         "furniture, rugs) so reference boxes avoid them; 0 omits it (earlier pools' files)")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -790,8 +818,8 @@ def main():
         flags["railings"] = args.railings
     flags["openings_per_face"] = args.openings_per_face
     flags["cut_standing"] = args.cut_standing
-    if args.downspouts > 0:
-        flags["downspouts"] = args.downspouts
+    flags["downspouts"] = args.downspouts
+    flags["ref_exclude"] = args.ref_exclude
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

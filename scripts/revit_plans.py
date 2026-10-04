@@ -434,6 +434,8 @@ def _shade_soft(canvas, geom_px, k, W, H, blur_px):
 def _annotations(labelled, S, W, H, image_id, mode, colour):
     fam_ids, anns = {}, []
     min_area = max(400, (0.02 * S) ** 2 * 100)
+    excl = [p for fam, p in labelled if fam == "_refexcl"]
+    labelled = [(fam, p) for fam, p in labelled if fam != "_refexcl"]
     for fam, p in labelled:
         for q in G.polys_of(p.buffer(0)):
             if q.area < min_area:
@@ -450,9 +452,13 @@ def _annotations(labelled, S, W, H, image_id, mode, colour):
                          "family": fam, "segmentation": [outer] + holes, "num_holes": len(holes),
                          "bbox": [round(bx0, 1), round(by0, 1), round(bx1 - bx0, 1), round(by1 - by0, 1)],
                          "area": round(q.area, 1)})
-    return {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
-            "mode": mode, "appearance": "colour" if colour else "mono_normal",
-            "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
+    out = {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
+           "mode": mode, "appearance": "colour" if colour else "mono_normal",
+           "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
+    rx = FC.ref_exclude_rings(excl, W, H)
+    if rx:
+        out["ref_exclude"] = rx
+    return out
 
 
 def _finish(canvas, tq, r):
@@ -1996,11 +2002,13 @@ def _dining(cx, cy, pr):
     return out
 
 
-def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
+def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None, solid_out=None):
     """solid: furniture blocks filled white with a soft drop shadow (rendered sheets, HF14 0);
     otherwise outlines only, so the floor pattern shows through. 'fit' pieces are items fixed to
     the wall (counters, vanities, tubs, showers, stairs): returned as drawn, so the floor label can
-    leave them out as the Gemini finish plans do."""
+    leave them out as the Gemini finish plans do. solid_out (a list) collects the pixel geometry of
+    every piece / rug drawn solid -- they hide the floor pattern, so --ref-exclude keeps reference
+    boxes off them while the floor label runs on underneath."""
     skip = False
     placed, fitted = [], []
     for q, kind in pieces:
@@ -2014,6 +2022,8 @@ def _draw_furniture(canvas, V, pieces, ink, lw, solid, W, H, pr, clip=None):
         if skip and kind == "line" or clip is not None and not q.within(clip) or kind in ("item", "fit") and skip:
             continue
         g = V.geom(q)
+        if solid and solid_out is not None and kind in ("item", "fit", "rug"):
+            solid_out.append(g)
         if kind == "rug":           # a rug covers the floor pattern: light fill, border band, patterned field
             if solid:
                 G.cv_fill(canvas, g, (pr.randint(236, 250),) * 3)
@@ -2086,7 +2096,7 @@ def _frame_crop(canvas, labelled, focus_px, pr):
         q = g.buffer(0).intersection(clip)
         if not q.is_empty and q.area > 400:
             lab.append((fam, affinity.translate(q, -x0, -y0)))
-    if not lab:
+    if not any(f != "_refexcl" for f, _ in lab):
         return None
     return np.ascontiguousarray(canvas[y0:y1, x0:x1]), lab
 
@@ -2271,6 +2281,7 @@ def compose_floor(image_id, seed, mode_weights):
     lw_pat = max(0.8, lw_thin * r.uniform(0.55, 0.8))
     app = {"ink": ink, "text_px": size, "outline_lw": lw_thin}
     labelled = []
+    solid_px = []        # --ref-exclude: solid furniture / rugs (inside the floor labels)
 
     # ---- hardscape
     if hard_polys:
@@ -2303,7 +2314,7 @@ def compose_floor(image_id, seed, mode_weights):
                 if p.area > 90 and min(bx[2] - bx[0], bx[3] - bx[1]) > 7 and p3.random() < 0.55:
                     c = p.representative_point()
                     _draw_furniture(canvas, V, _dining(c.x, c.y, p3), ink, lw_thin, p3.random() < 0.5, W, H, p3,
-                                    clip=p.buffer(-0.3))
+                                    clip=p.buffer(-0.3), solid_out=solid_px)
 
     # ---- soffit band (ceiling sheets): soffit boards running along each stretch
     if soffit is not None:
@@ -2622,7 +2633,7 @@ def compose_floor(image_id, seed, mode_weights):
             elif p3.random() < 0.9:
                 fitted += _draw_furniture(canvas, V, pieces, ink, lw_thin * p3.uniform(0.6, 0.9),
                                           "shadow" if wall_sh else True,
-                                          W, H, p3, clip=clip)
+                                          W, H, p3, clip=clip, solid_out=solid_px)
         if sheet != "underfloor" and swiss is not None and rm is rooms[-1]:      # the real fitted pieces
             fx = swiss["fixtures"]
             if sheet == "ceiling":
@@ -2630,7 +2641,7 @@ def compose_floor(image_id, seed, mode_weights):
                                 W, H, p3)
             else:
                 fitted += _draw_furniture(canvas, V, fx, ink, lw_thin * p3.uniform(0.7, 0.95), "shadow" if wall_sh else True,
-                                          W, H, p3)
+                                          W, H, p3, solid_out=solid_px)
         if sheet != "underfloor":
             if not v3 and rm["inner"].area > 0.9 * (x1 - x0) * (y1 - y0) and \
                     not (stair_u is not None and rm["inner"].intersects(stair_u)):   # rectangles, no stair
@@ -2748,6 +2759,8 @@ def compose_floor(image_id, seed, mode_weights):
     if not labelled:
         raise RuntimeError("no labelled region")
     canvas = _finish(canvas, tq, r)
+    if solid_px and FC.REF_EXCLUDE[0]:
+        labelled.append(("_refexcl", unary_union([g.buffer(0) for g in solid_px])))
     if v3 and p3.random() < 0.8:
         ring = pad * (p3.uniform(0.35, 1.0) if (grid_on or dims_on) else p3.uniform(0, 0.5))
         fc = _frame_crop(canvas, labelled, V.geom(allg.buffer(ring, join_style=2)), p3)

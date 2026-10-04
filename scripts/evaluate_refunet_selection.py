@@ -13,8 +13,9 @@ import torch
 from PIL import Image
 
 from refmask2former import load_parquet_records
-from refmask2former.dataset import (_normalize_chw, render_instance_mask,
-                                    sample_reference_box, scale_matched_reference)
+from refmask2former.dataset import (_normalize_chw, exclusion_mask, reference_region,
+                                    render_instance_mask, sample_reference_box,
+                                    scale_matched_reference)
 from refmask2former.ref_unet import RefUNet
 from refmask2former.ref_attn_unet import RefCrossAttnUNet
 from refmask2former.ref_swin_unet import RefSwinUNet
@@ -114,6 +115,8 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             masks0 = [render_instance_mask(a["segmentation"], h0, w0).astype(bool)
                       for a in anns]
             categories = [a.get("category_name", "pattern") for a in anns]
+            # synthetic pools: reference boxes stay off posts / railings / furniture (ref_exclude)
+            excl = exclusion_mask(rec.get("ref_exclude") if isinstance(rec, dict) else None, h0, w0)
             # --label-fixes: extra TARGET pixels per category (missed labels); the masks
             # above, which the reference boxes are sampled from, are left as they are
             fix_masks = {}
@@ -127,7 +130,7 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             image_tensor = _normalize_chw(image).unsqueeze(0).to(device)
             for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
                 rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
-                x, y, w, h = sample_reference_box(ref_mask, 128, 512, rng=rng)
+                x, y, w, h = sample_reference_box(reference_region(ref_mask, excl), 128, 512, rng=rng)
                 # --boxes: a hand-placed box (native pixels) replaces the automatic one;
                 # null drops the question. The rng draw above still happens, so every
                 # other question keeps its automatic box exactly.
@@ -231,7 +234,7 @@ def main():
         for f in sorted((pool / "annotations").glob("*.json")):
             ann = json.loads(f.read_text())
             records.append({"image": (pool / "images" / ann["image"]["file_name"]).read_bytes(),
-                            "annotations": ann["annotations"]})
+                            "annotations": ann["annotations"], "ref_exclude": ann.get("ref_exclude")})
     else:
         records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
                                        config="real-world-test", split="test")

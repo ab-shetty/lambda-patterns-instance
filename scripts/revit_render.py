@@ -517,6 +517,7 @@ def compose_revit(image_id, seed, mode_weights):
             px = px * (1 - soft["desat"]) + lum[:, None] * soft["desat"]
         canvas[sel] = np.clip(px * k, 0, 255).astype(np.uint8)
     labelled = []
+    excl_px = []        # --ref-exclude: posts, railings, stairs, downspouts (inside the labels)
     num = 1
     for i, (v, e, title) in enumerate(elevs):
         col, row = i % cols, i // cols
@@ -526,6 +527,7 @@ def compose_revit(image_id, seed, mode_weights):
         V = G.View(S, (cx + left_room - x0) * S, (cy + top_room - y0) * S)
         opening_polys = unary_union([o["poly"] for o in e["openings"]]) if e["openings"] else None
         label_holes = unary_union([G.label_hole(o, app) for o in e["openings"]]) if e["openings"] else None
+        excl_px += [V.geom(q) for q in e.get("ref_excl", [])]
         lt = e.get("label_trims", e["trims"])          # every trim but the standing posts
         trim_cut = unary_union(lt) if (G.TRIM_CUT and lt) else None
         # surfaces: pattern fills
@@ -703,6 +705,10 @@ def compose_revit(image_id, seed, mode_weights):
                          "family": fam, "segmentation": [outer] + holes, "num_holes": len(holes),
                          "bbox": [round(bx0, 1), round(by0, 1), round(bx1 - bx0, 1), round(by1 - by0, 1)],
                          "area": round(q.area, 1)})
-    return canvas, {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
-                    "mode": "elevation", "appearance": "colour" if shaded else "markup" if mk is not None else "mono_normal",
-                    "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
+    out = {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
+           "mode": "elevation", "appearance": "colour" if shaded else "markup" if mk is not None else "mono_normal",
+           "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
+    rx = FC.ref_exclude_rings(excl_px, W, H)
+    if rx:
+        out["ref_exclude"] = rx
+    return canvas, out

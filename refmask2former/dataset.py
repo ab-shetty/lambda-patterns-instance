@@ -40,6 +40,30 @@ def render_instance_mask(segmentation, height, width):
     return mask
 
 
+def exclusion_mask(ref_exclude, height, width):
+    """Synthetic pools' "ref_exclude" (flat outer rings, pixels): things standing in front of a
+    labelled surface with no pattern of their own (posts, railings, stairs, downspouts, solid
+    furniture, rugs). None when the record has none (real / Gemini sheets)."""
+    if not ref_exclude:
+        return None
+    m = np.zeros((height, width), np.uint8)
+    for ring in ref_exclude:
+        pts = np.array(ring, dtype=np.float32).reshape(-1, 2).astype(np.int32)
+        cv2.fillPoly(m, [pts], 1)
+    return m
+
+
+def reference_region(mask, excl, min_side=16):
+    """Where a REFERENCE box may go: the instance mask minus `excl`, unless that leaves no room
+    for a `min_side` square (an instance mostly behind furniture), then the whole mask. The
+    target is never changed -- the material continues behind these things."""
+    if excl is None:
+        return mask
+    m = ((np.asarray(mask) > 0) & (excl == 0)).astype(np.uint8)
+    dt = cv2.distanceTransform(np.pad(m, 1), cv2.DIST_C, 3)
+    return m if 2 * dt.max() - 1 >= min_side else mask
+
+
 def sample_reference_box(mask, min_size=128, max_size=512, rng=None):
     """Random box fully inside a single instance mask. Returns (x, y, w, h).
     Pass `rng` (a random.Random) to make the box DETERMINISTIC (eval); None uses
@@ -340,6 +364,8 @@ class InstanceSegDataset(Dataset):
     def __getitem__(self, i):
         image, anns = self._load(i)
         h0, w0 = image.shape[:2]
+        rec = self.records[self.indices[i]]
+        excl = exclusion_mask(rec.get("ref_exclude") if isinstance(rec, dict) else None, h0, w0)
 
         # Render instance masks at original resolution.
         masks = [render_instance_mask(a["segmentation"], h0, w0) for a in anns]
@@ -363,7 +389,7 @@ class InstanceSegDataset(Dataset):
             ref_patches, ref_matches, multi_boxes = [], [], []
             for fam in fams:
                 cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam], masks)
-                bx, by, bw, bh = sample_reference_box(masks[random.choice(cand)],
+                bx, by, bw, bh = sample_reference_box(reference_region(masks[random.choice(cand)], excl),
                                                       self.min_patch, self.max_patch)
                 ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
                 multi_boxes.append((bx, by, bw, bh))
@@ -395,11 +421,11 @@ class InstanceSegDataset(Dataset):
                 # (val 17: a thin stone band selects the dark roof) or
                 # under-commits. The default sampler prefers >= 128 px, so tiny
                 # references only occur on thin regions; draw some on purpose.
-                bx, by, bw, bh = sample_reference_box(masks[ref_idx], 16, random.randint(32, 96),
-                                                      rng=ref_rng)
+                bx, by, bw, bh = sample_reference_box(reference_region(masks[ref_idx], excl), 16,
+                                                      random.randint(32, 96), rng=ref_rng)
             else:
-                bx, by, bw, bh = sample_reference_box(masks[ref_idx], self.min_patch,
-                                                      self.max_patch, rng=ref_rng)
+                bx, by, bw, bh = sample_reference_box(reference_region(masks[ref_idx], excl),
+                                                      self.min_patch, self.max_patch, rng=ref_rng)
             ref_patch = image[by:by + bh, bx:bx + bw].copy()
             ref_match = np.array([1.0 if c == target_cat else 0.0 for c in cats], np.float32)
             # WHERE the user drew is real product input and was being discarded:
@@ -681,7 +707,8 @@ def load_local_records(root):
         img_path = os.path.join(root, "images", ann["image"]["file_name"])
         # Store the PATH, not the bytes: lazy decode in _load keeps RAM flat for
         # large local datasets (loading all bytes OOMs at ~thousands of images).
-        recs.append({"image_path": img_path, "annotations": ann["annotations"]})
+        recs.append({"image_path": img_path, "annotations": ann["annotations"],
+                     "ref_exclude": ann.get("ref_exclude")})
     return recs
 
 

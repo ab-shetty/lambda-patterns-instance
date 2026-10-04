@@ -2924,6 +2924,12 @@ def tight_crop(canvas, ann, rng):
                              bbox=[round(bx0, 1), round(by0, 1), round(bx1 - bx0, 1), round(by1 - by0, 1)],
                              area=round(q.area, 1)))
     ann = dict(ann, annotations=anns)
+    if ann.get("ref_exclude"):      # --ref-exclude regions follow the crop
+        rx = []
+        for ring in ann["ref_exclude"]:
+            q0 = affinity.translate(Polygon(list(zip(ring[0::2], ring[1::2]))).buffer(0), -x0, -y0).intersection(clip)
+            rx += [[round(v, 1) for c in q.exterior.coords[:-1] for v in c] for q in polys_of(q0) if q.area >= 16]
+        ann["ref_exclude"] = rx
     ann["image"] = dict(ann["image"], width=int(x1 - x0), height=int(y1 - y0))
     return canvas, ann
 
