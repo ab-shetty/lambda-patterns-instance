@@ -54,14 +54,15 @@ def exclusion_mask(ref_exclude, height, width):
 
 
 def reference_region(mask, excl, min_side=16):
-    """Where a REFERENCE box may go: the instance mask minus `excl`, unless that leaves no room
-    for a `min_side` square (an instance mostly behind furniture), then the whole mask. The
-    target is never changed -- the material continues behind these things."""
+    """Where a REFERENCE box may go: the instance mask minus `excl`. None when that leaves no
+    room for a `min_side` square -- the piece is hidden behind a railing / furniture, nobody would
+    pick a reference there, so the instance is never a reference (it stays in the target: the
+    material continues behind these things). Without `excl` (real / Gemini sheets), the mask."""
     if excl is None:
         return mask
     m = ((np.asarray(mask) > 0) & (excl == 0)).astype(np.uint8)
     dt = cv2.distanceTransform(np.pad(m, 1), cv2.DIST_C, 3)
-    return m if 2 * dt.max() - 1 >= min_side else mask
+    return m if 2 * dt.max() - 1 >= min_side else None
 
 
 def sample_reference_box(mask, min_size=128, max_size=512, rng=None):
@@ -370,6 +371,16 @@ class InstanceSegDataset(Dataset):
         # Render instance masks at original resolution.
         masks = [render_instance_mask(a["segmentation"], h0, w0) for a in anns]
         cats = [a.get("category_name", "pattern") for a in anns]
+        # Reference regions (synthetic ref_exclude): pieces wholly hidden behind a railing /
+        # furniture are never references; their family is asked from another piece, or not at
+        # all. Targets keep every piece. A sheet with no visible piece at all keeps the masks.
+        regions = masks
+        if excl is not None:
+            rg = [reference_region(m, excl) for m in masks]
+            if any(r is not None for r in rg):
+                regions = rg
+        ok = {j for j, r in enumerate(regions) if r is not None}
+        ok_cats = {cats[j] for j in ok}
 
         # Pick a target pattern and a reference patch cropped from one of its
         # instances. Training (augment) uses the global RNG for reference variety;
@@ -383,13 +394,13 @@ class InstanceSegDataset(Dataset):
             # one-question-per-plan training reaches each plan's ~12 questions
             # a few times over a whole run. Here a sample carries K distinct
             # families (fewer if the plan has fewer; q_valid marks padding).
-            unique_cats = list(dict.fromkeys(cats))
+            unique_cats = [c for c in dict.fromkeys(cats) if c in ok_cats]
             fams = (random.sample(unique_cats, self.refs_per_image)
                     if len(unique_cats) > self.refs_per_image else unique_cats)
             ref_patches, ref_matches, multi_boxes = [], [], []
             for fam in fams:
-                cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam], masks)
-                bx, by, bw, bh = sample_reference_box(reference_region(masks[random.choice(cand)], excl),
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam and j in ok], masks)
+                bx, by, bw, bh = sample_reference_box(regions[random.choice(cand)],
                                                       self.min_patch, self.max_patch)
                 ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
                 multi_boxes.append((bx, by, bw, bh))
@@ -402,10 +413,10 @@ class InstanceSegDataset(Dataset):
             ref_box_mask = np.zeros((h0, w0), np.uint8)   # anchor unused (anchor-free)
         elif len(anns) > 0:
             _rc = ref_rng if ref_rng is not None else random
-            unique_cats = list(dict.fromkeys(cats))
+            unique_cats = [c for c in dict.fromkeys(cats) if c in ok_cats]
             repeated_cats = [c for c in unique_cats if cats.count(c) >= 2]
             if self.ref_sample == "instance":
-                ref_idx = _rc.randrange(len(cats))
+                ref_idx = sorted(ok)[_rc.randrange(len(ok))]
                 target_cat = cats[ref_idx]
             else:
                 if (self.augment and repeated_cats and
@@ -413,7 +424,7 @@ class InstanceSegDataset(Dataset):
                     target_cat = _rc.choice(repeated_cats)
                 else:
                     target_cat = _rc.choice(unique_cats)
-                cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat], masks)
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat and j in ok], masks)
                 ref_idx = _rc.choice(cand)
             if self.augment and self.small_ref_prob > 0 and random.random() < self.small_ref_prob:
                 # Tiny user rectangles are where real plans fail (2026-09-24):
@@ -421,10 +432,10 @@ class InstanceSegDataset(Dataset):
                 # (val 17: a thin stone band selects the dark roof) or
                 # under-commits. The default sampler prefers >= 128 px, so tiny
                 # references only occur on thin regions; draw some on purpose.
-                bx, by, bw, bh = sample_reference_box(reference_region(masks[ref_idx], excl), 16,
+                bx, by, bw, bh = sample_reference_box(regions[ref_idx], 16,
                                                       random.randint(32, 96), rng=ref_rng)
             else:
-                bx, by, bw, bh = sample_reference_box(reference_region(masks[ref_idx], excl),
+                bx, by, bw, bh = sample_reference_box(regions[ref_idx],
                                                       self.min_patch, self.max_patch, rng=ref_rng)
             ref_patch = image[by:by + bh, bx:bx + bw].copy()
             ref_match = np.array([1.0 if c == target_cat else 0.0 for c in cats], np.float32)

@@ -18,7 +18,8 @@ here.
   `--downspouts P` is new and opt-in. Details: `synth_progress.md` "Label cuts vs the hand labels".
 - **More defaults changed (2026-10-04): `--plan-v2 2` (furniture + floor labels without fixed
   pieces), `--downspouts 0.05`, `--ref-exclude 1`** (reference boxes kept off posts / railings /
-  stairs / downspouts / solid furniture / rugs; targets unchanged). New pools differ from every
+  stairs / downspouts / solid furniture / rugs; pieces wholly hidden behind them are never
+  references, local-pool scores skip them; targets unchanged). New pools differ from every
   trained pool in these; rebuild old pools with `--plan-v2 1 --cut-standing 1 --downspouts 0
   --ref-exclude 0`. `--plan-source` (Swiss layouts) is still opt-in: screen it explicitly.
 - Best model with hand boxes: **HF14 0.8738** (auto 0.8816), shipped 0.8466, synthetic-only 10k

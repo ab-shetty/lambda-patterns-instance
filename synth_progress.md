@@ -14,10 +14,12 @@ below "Log".
   `ref_exclude` (pixel rings): posts, railing panels, exterior stairs, downspouts, solid furniture,
   rugs -- inside the labels (the material continues behind them), but training
   (`refmask2former/dataset.py`) and the local-pool evaluator / mining draw REFERENCE boxes from
-  the label minus them (`reference_region`; whole instance if nothing is left). Real / Gemini
-  records have no field: unchanged. Measured: floor-plan boxes > 50% on furniture 10.1% -> 0%,
-  elevation boxes > 50% on posts / railings / downspouts 4.5% -> 1.9% (pieces wholly behind a
-  railing). Mining scores on new pools are not comparable with old ones. Earlier pools:
+  the label minus them (`reference_region`). A piece wholly hidden behind them is never a
+  reference: training asks its family from another visible piece (or another family), the
+  local-pool evaluator / mining skip that question; it stays in every target. Real / Gemini
+  records have no field: unchanged (same RNG draws). Measured: floor-plan boxes > 50% on
+  furniture 10.1% -> 0%; elevation boxes > 10% on posts / railings / downspouts 11.7% -> 0%
+  (18 / 486 elevation and 2 / 507 floor-plan pieces skipped as hidden; no family lost). Mining scores on new pools are not comparable with old ones. Earlier pools:
   `--plan-v2 1 --cut-standing 1 --downspouts 0 --ref-exclude 0` (byte-identical, 40 elevations +
   150 floor plans checked).
 - **Default changed 2026-10-04: `generate_synthetic_fc.py --cut-standing 0` (Revit elevations).**

@@ -130,7 +130,10 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             image_tensor = _normalize_chw(image).unsqueeze(0).to(device)
             for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
                 rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
-                x, y, w, h = sample_reference_box(reference_region(ref_mask, excl), 128, 512, rng=rng)
+                region = reference_region(ref_mask, excl)
+                if region is None:      # piece wholly behind a railing / furniture: not a question
+                    continue
+                x, y, w, h = sample_reference_box(region, 128, 512, rng=rng)
                 # --boxes: a hand-placed box (native pixels) replaces the automatic one;
                 # null drops the question. The rng draw above still happens, so every
                 # other question keeps its automatic box exactly.
