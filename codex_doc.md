@@ -37,7 +37,16 @@ One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Det
   photographed look is unintended), `--pale-ink`, `--revit-view-weights`; `--tight-crop` now screened:
   tight-crop + pale-ink 0.25 + views 50,45,5 = Gemini -0.013 (auto boxes), HF14 +0.010, val +0.014 (noise) --
   framing is not the lever. `run_hard_mine.sh SRC=failswiss NOTRAIN=1`; `publish_refunet.py` parallel-safe.
-- **Next, in order:** (1) generator: same line pattern, different fill tone / colour as separate labelled
+- **Unfair training questions in the mined pool (inspected 2026-10-06):** training-style reference boxes on 200 base
+  vs 200 mined sheets of `revitfailswiss_hard2000`: pieces whose largest box is < 32 px @2048 are 27.0% (base) vs
+  35.7% (mined), < 16 px 10.3% vs 12.0%. In 40 random mined boxes ~1 in 7 is a question no user would ask: gable /
+  porch slivers (mostly blank paper + one line, s1795 q1, s1755 q0, s1390 q34), boxes on trim or blank band edges
+  (s1765 q5, s1000 q8), a generator room tag inside the box (s1040 q4 "BATH 2"). Fixes, before the next long run:
+  (a) train with `--ref-min-side 24` (exists, off by default: references only from pieces fitting a 24 px square
+  when the family has one; slivers stay in the targets); (b) generator writes its own text (room tags, callouts)
+  into `ref_exclude`, as Tesseract does for real data; (c) optional: a box-size filter in `build_hard_pool.py`
+  so slivers don't count as "hard" (not implemented).
+- **Next, in order:** (0) fixes (a)-(b) above for every new pool / run; (1) generator: same line pattern, different fill tone / colour as separate labelled
   families on one sheet (measure how often pools have them; `--colour-pairs`, `distinct_looks`); grey-wash vs
   bare-line framing plans; (2) another long restart of longswiss-swa37-41 on a freshly mined pool (steps have
   paid every time); (3) done: r4 v2 generated (only #091 changed), wired into run_build_realmix.sh and the gemini30 pool; best synthetic on Gemini30 now 0.8255.
