@@ -336,8 +336,9 @@ in front of it (posts, railings, downspouts, freestanding furniture, rugs).
 
 ## Do the real-mix labels teach the 25 / 27 loss? (2026-10-06, CPU)
 
-Checked every label overlay of the fine-tune's real 86 and Gemini r2-r4 168 (generated 28 not
-checked: Roboflow key missing in that session -- add them next session).
+Checked every label overlay of the fine-tune's real 86, Gemini r2-r4 168 and generated 28.
+The generated 28 are commercial elevations, wall sections, details and floor plans: no 25 / 27-type
+sheet, no shingle / board pair; many labels are thin slivers or detail layers.
 - No label teaches it: different materials are separate families wherever shingle siding and
   vertical boards share a sheet (Gemini #151, #161, #165, #97, #129); same-looking shingles (roof +
   siding) share one (#151), consistent with the rest.

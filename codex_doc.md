@@ -45,7 +45,7 @@ Nothing trained. Evaluation and generator defaults changed; every trained pool p
    0.899 -> 0.538). Worth trying in the step-2 fine-tune: a larger synthetic share in the mix, or
    fewer fine-tune epochs; a targeted generator option is secondary.
    Labels checked (real 86 + Gemini 168): they don't teach it, and no 25 / 27-type sheet is in the
-   mix (drift). Check the generated 28 too (needs `ROBOFLOW_API_KEY`). Real / Gemini training
+   mix (drift; generated 28 checked too). Real / Gemini / generated training
    reference boxes are often unrealistic (slivers, labels over doors / posts) -- unaddressed.
 
 The GH200 list's item (1) is superseded: `--masonry-base` is a default since 10-01, and
@@ -72,6 +72,9 @@ pretraining on mined Revit sheets with a long schedule, then a 5e-5 real-mix fin
   Mined pools rebuild from `pool_manifests/`.
 - Remaining failures: 18's roof vs masonry base and 27 / 25 vertical boards vs horizontal-line
   roof (every model); the fine-tune trades synthetic wins on line-only markup for real ones.
+- Ops (cloud CPU sessions): Roboflow is authenticated by the session proxy -- call the REST API with
+  NO api_key (`curl https://api.roboflow.com/perceive-ai/<project>/<ver>/coco-segmentation`, then the
+  export link); passing a key gets 400 and the `roboflow` package fails. Hugging Face works the same.
 - Ops: queue GPU jobs on files a job writes last, never on `$!` after `setsid` (it is the
   wrapper); one 2048 training fills the 96 GB GPU. FreeCAD massing now runs on `--workers`.
 
