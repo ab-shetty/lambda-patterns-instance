@@ -98,9 +98,11 @@ def load_refunet(checkpoint_path, device):
 
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                    mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1,
-                   save_probs=None, box_overrides=None, label_fixes=None):
+                   save_probs=None, box_overrides=None, label_fixes=None, q_batch=8):
     """`tta` averages sigmoid maps over dihedral views of image AND reference
-    (the reference crop is a piece of the same image, so it turns with it)."""
+    (the reference crop is a piece of the same image, so it turns with it).
+    `q_batch` > 0: models with `forward_cached` (swin) run the image backbone once per
+    sheet and view and the questions `q_batch` at a time; 0 = one full forward each."""
     device = device or next(model.parameters()).device
     transforms = tta_transforms(tta)
     rows = []
@@ -128,6 +130,8 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
             nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
             image = cv2.resize(image0, (nw, nh), interpolation=cv2.INTER_LINEAR)
             image_tensor = _normalize_chw(image).unsqueeze(0).to(device)
+            # 1) the sheet's questions: reference box per labelled instance
+            questions = []
             for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
                 rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
                 region = reference_region(ref_mask, excl)
@@ -152,52 +156,73 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                 else:
                     crop = cv2.resize(crop, (ref_size, ref_size),
                                       interpolation=cv2.INTER_LINEAR)
-                reference = _normalize_chw(crop).unsqueeze(0).to(device)
+                questions.append((ref_idx, category, (x, y, w, h), _normalize_chw(crop)))
+
+            def box_plane(x, y, w, h):
                 # The anchor plane must be built the same way here as in the
                 # dataset, or an anchored model is evaluated without the input it
                 # was trained on. Built at native size, then resized with the
                 # image so it stays pixel-aligned.
-                ref_box = None
-                if getattr(model, "anchor", False) or getattr(model, "roi_ref", False):
-                    box_native = np.zeros((h0, w0), np.uint8)
-                    box_native[y:y + h, x:x + w] = 1
-                    ref_box = torch.from_numpy(
-                        cv2.resize(box_native, (nw, nh),
-                                   interpolation=cv2.INTER_NEAREST)
-                    ).float()[None, None].to(device)
+                box_native = np.zeros((h0, w0), np.uint8)
+                box_native[y:y + h, x:x + w] = 1
+                return torch.from_numpy(cv2.resize(box_native, (nw, nh),
+                                                   interpolation=cv2.INTER_NEAREST)).float()[None, None]
+
+            use_box = getattr(model, "anchor", False) or getattr(model, "roi_ref", False)
+            # 2) probabilities. Swin models: the image backbone runs ONCE per sheet and TTA
+            # view (it does not depend on the reference); questions go through the
+            # reference encoder + decoder `q_batch` at a time. Others: one forward each.
+            cached = q_batch > 0 and hasattr(model, "forward_cached")
+            feats = {}
+            targets = {}
+            for c0 in range(0, len(questions), q_batch if cached else 1):
+                chunk = questions[c0:c0 + (q_batch if cached else 1)]
+                refs = torch.stack([q[3] for q in chunk]).to(device)
+                boxes = torch.cat([box_plane(*q[2]) for q in chunk]).to(device) if use_box else None
                 with torch.autocast("cuda", dtype=torch.bfloat16,
                                     enabled=device.type == "cuda"):
                     acc = None
                     for hf, k in transforms:
                         img_t = _dihedral(image_tensor, hf, k)
-                        ref_t = _dihedral(reference, hf, k)
-                        box_t = _dihedral(ref_box, hf, k) if ref_box is not None else None
-                        prob_t = model(img_t, ref_t, ref_box=box_t).sigmoid()
-                        prob = _dihedral_inv(prob_t.float(), hf, k)[0, 0]
+                        ref_t = _dihedral(refs, hf, k)
+                        box_t = _dihedral(boxes, hf, k) if boxes is not None else None
+                        if cached:
+                            if (hf, k) not in feats:
+                                feats[(hf, k)] = model.features(img_t)
+                            logit = model.forward_cached(feats[(hf, k)], img_t.shape[-2:], ref_t, box_t)
+                        else:
+                            logit = model(img_t, ref_t, ref_box=box_t)
+                        prob = _dihedral_inv(logit.sigmoid().float(), hf, k)[:, 0]
                         acc = prob if acc is None else acc + prob
-                    probability = acc / len(transforms)
-                if save_probs:
-                    # Inference-resolution probability, quantised to uint8, for offline
-                    # ensembling / threshold sweeps (scripts/ensemble_selection.py).
-                    np.savez_compressed(
-                        Path(save_probs) / f"{image_idx:03d}_{ref_idx:03d}.npz",
-                        prob=(probability.float().cpu().numpy() * 255).round().astype(np.uint8))
-                pred_small = probability > mask_thresh
-                prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
-                                        (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
-                target = np.logical_or.reduce(
-                    [m for m, c in zip(masks0, categories) if c == category])
-                if category in fix_masks:
-                    target = target | fix_masks[category]
-                intersection = int((prediction & target).sum())
-                union = int((prediction | target).sum())
-                rows.append({"image_index": image_idx,
-                             "reference_instance": ref_idx,
-                             "category": category,
-                             "reference_box_native": [x, y, w, h],
-                             "iou": intersection / max(union, 1),
-                             "prediction_pixels": int(prediction.sum()),
-                             "target_pixels": int(target.sum())})
+                    probs = acc / len(transforms)
+                # 3) score each question
+                for (ref_idx, category, (x, y, w, h), _), probability in zip(chunk, probs):
+                    if save_probs:
+                        # Inference-resolution probability, quantised to uint8, for offline
+                        # ensembling / threshold sweeps (scripts/ensemble_selection.py).
+                        np.savez_compressed(
+                            Path(save_probs) / f"{image_idx:03d}_{ref_idx:03d}.npz",
+                            prob=(probability.float().cpu().numpy() * 255).round().astype(np.uint8))
+                    pred_small = probability > mask_thresh
+                    prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
+                                            (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
+                    if category not in targets:
+                        target = np.logical_or.reduce(
+                            [m for m, c in zip(masks0, categories) if c == category])
+                        if category in fix_masks:
+                            target = target | fix_masks[category]
+                        targets[category] = (target, int(target.sum()))
+                    target, target_pixels = targets[category]
+                    intersection = int((prediction & target).sum())
+                    prediction_pixels = int(prediction.sum())
+                    union = prediction_pixels + target_pixels - intersection
+                    rows.append({"image_index": image_idx,
+                                 "reference_instance": ref_idx,
+                                 "category": category,
+                                 "reference_box_native": [x, y, w, h],
+                                 "iou": intersection / max(union, 1),
+                                 "prediction_pixels": prediction_pixels,
+                                 "target_pixels": target_pixels})
     return rows
 
 
@@ -217,6 +242,9 @@ def main():
                              "{image_index: {question_index: [x, y, w, h] | null}} in native pixels "
                              "replacing those questions' automatic boxes, or dropping them (null). "
                              "--local-pool always uses automatic boxes.")
+    parser.add_argument("--q-batch", type=int, default=8,
+                        help="questions per batch on one cached image backbone (swin models); 0 = the "
+                             "old one-forward-per-question path. Lower it if 4096 runs out of GPU memory")
     parser.add_argument("--label-fixes", default="",
                         help="JSON {image_index: [{category, polygon: [[x, y], ...]}]} in native pixels: "
                              "add missed pixels to the TARGET of every question of that category "
@@ -254,7 +282,7 @@ def main():
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
                           tta=args.tta, save_probs=args.save_probs or None,
-                          box_overrides=box_overrides,
+                          box_overrides=box_overrides, q_batch=args.q_batch,
                           label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",

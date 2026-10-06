@@ -22,6 +22,11 @@ here.
   references, local-pool scores skip them; targets unchanged). New pools differ from every
   trained pool in these; rebuild old pools with `--plan-v2 1 --cut-standing 1 --downspouts 0
   --ref-exclude 0`. `--plan-source` (Swiss layouts) is still opt-in: screen it explicitly.
+- **Eval speed-up (`evaluate_refunet_selection.py --q-batch 8`, default):** swin models run the
+  image backbone once per sheet / TTA view and the questions 8 at a time through the reference
+  encoder + decoder (`RefSwinUNet.forward_cached`); targets once per family. Bit-for-bit the same
+  IoUs as `--q-batch 0` (old path; probs within 1/255), CPU 1.6-1.8x; on GPU expect more (batched
+  decoder). Applies to training's per-epoch diagnostic and mining too. Lower it if 4096 OOMs.
 - Best model with hand boxes: **HF14 0.8738** (auto 0.8816), shipped 0.8466, synthetic-only 10k
   0.8118. Worst HF14 sheets for the best model: 27 (0.718, below shipped 0.817), 12 (0.766),
   25 (0.802, below shipped 0.841), 0 (0.809), 23 (0.840, below shipped 0.931).

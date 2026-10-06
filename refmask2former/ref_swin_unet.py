@@ -169,6 +169,19 @@ class RefSwinUNet(nn.Module):
         return F.interpolate(logits, size=image_size, mode="bilinear",
                              align_corners=False)
 
+    def forward_cached(self, image_features, image_size, references, boxes=None):
+        """Evaluation: K questions on one image whose `features` were computed ONCE
+        (batch 1). Same maths as `forward` per question; the backbone is skipped."""
+        k = references.shape[0]
+        image_features = [f.expand(k, -1, -1, -1) for f in image_features]
+        reference_features = self.features(references)
+        prototypes = [f.mean((-2, -1)) for f in reference_features]
+        if self.roi_ref and boxes is not None:
+            prototypes = self.roi_prototypes(image_features, boxes, prototypes)
+        logits = self.decode(image_features, prototypes, reference_features)
+        return F.interpolate(logits, size=image_size, mode="bilinear",
+                             align_corners=False)
+
     def parameter_groups(self, lr, backbone_lr_mult=0.1):
         backbone_ids = {id(p) for p in self.stages.parameters()}
         backbone = [p for p in self.parameters() if id(p) in backbone_ids]
