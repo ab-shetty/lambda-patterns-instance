@@ -942,4 +942,11 @@ One seed (7), swin_t, 2048, ROI add; hand boxes @4096 unless noted. Pools `gener
 - Gemini failure modes of the best synthetic model (Gemini Failure Review artifact): r4 #078 tan vs olive lap
   (14% of loss), r3 #048 (11%), r4 #016 (10%), r4 #041 + #091 single-family sheets (12%; #091 was a label error,
   fixed upstream). The model matches line texture and under-uses fill tone / colour.
+- **Same texture, different colour is rare in the pools (measured, 400 fresh sheets, long-pool flags + Swiss):**
+  of 253 elevations, 24 (9.5%) have two labelled families of the same texture kind, and only 13 (5.1%) with a
+  colour difference (CIELAB dE >= 10) -- and those are far apart (dE 32-114: roof vs wall seams, chimney vs
+  wall stone). Subtle pairs like Gemini r4 #078 (tan vs olive lap, one sheet) are essentially absent; tone
+  pairs on line-only sheets (grey-washed fill vs bare lines, r4 #041) were not measured. Next generator change:
+  plant same-kind pairs at dE ~12-35 on colour sheets and wash-vs-bare tone pairs on line-only plans and
+  elevations, both labelled as separate families; screen with Gemini30 hand boxes + HF14 + val.
 
