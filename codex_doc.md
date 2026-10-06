@@ -1,35 +1,52 @@
 # Handoff
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Pick up here (2026-10-03, CPU session -- read this first)
+## Pick up here (2026-10-03 to 10-06, CPU session -- read this first; supersedes the GH200 "Next" list below)
 
-- **Hand boxes are now the default** in `evaluate_refunet_selection.py` and in the scoring inside
+Nothing trained. Evaluation and generator defaults changed; every trained pool predates them.
+
+**What changed**
+- **Hand boxes are the default** in `evaluate_refunet_selection.py` and the scoring inside
   `train_refunet.py` / `select_epoch_on_val.py` / `average_checkpoints.py` (`eval_boxes/hand_v1.json`;
-  boxes not moved or dropped stay automatic, unchanged). `--boxes auto` = the old protocol. Quote
-  hand-box numbers from now on; table in `startup.md`.
-- **Label default changed (`--cut-standing 0`):** Revit porch / railing / newel posts now stay inside
-  the wall label like the hand labels; every earlier pool, the best model's included, cut them.
-  `--downspouts P` is new and opt-in. Details: `synth_progress.md` "Label cuts vs the hand labels".
-- **More defaults changed (2026-10-04): `--plan-v2 2` (furniture + floor labels without fixed
-  pieces), `--downspouts 0.05`, `--ref-exclude 1`** (reference boxes kept off posts / railings /
-  stairs / downspouts / solid furniture / rugs; pieces wholly hidden behind them are never
-  references, local-pool scores skip them; targets unchanged). New pools differ from every
-  trained pool in these; rebuild old pools with `--plan-v2 1 --cut-standing 1 --downspouts 0
-  --ref-exclude 0`. `--plan-source` (Swiss layouts) is still opt-in: screen it explicitly.
-- **Eval speed-up (`evaluate_refunet_selection.py --q-batch 8`, default):** swin models run the
-  image backbone once per sheet / TTA view and the questions 8 at a time through the reference
-  encoder + decoder (`RefSwinUNet.forward_cached`); targets once per family. Bit-for-bit the same
-  IoUs as `--q-batch 0` (old path; probs within 1/255), CPU 1.6-1.8x; on GPU expect more (batched
-  decoder). Applies to training's per-epoch diagnostic and mining too. Lower it if 4096 OOMs.
-- Best model with hand boxes: **HF14 0.8738** (auto 0.8816), shipped 0.8466, synthetic-only 10k
-  0.8118. Worst HF14 sheets for the best model: 27 (0.718, below shipped 0.817), 12 (0.766),
-  25 (0.802, below shipped 0.841), 0 (0.809), 23 (0.840, below shipped 0.931).
+  boxes not moved or dropped stay automatic). `--boxes auto` = the old protocol. Best model:
+  **HF14 0.8738 hand** (0.8816 auto); shipped 0.8466; table in `startup.md`.
+- **Eval speed-up:** `--q-batch 8` (default) runs the swin image backbone once per sheet / TTA view and
+  batches questions (`RefSwinUNet.forward_cached`); identical IoUs to `--q-batch 0`, CPU 1.6-1.8x.
+- **Generator defaults** (`GEN_VERSION 2026-10-04`, details `synth_progress.md` "Current state"):
+  `--cut-standing 0` (posts stay in wall labels), `--plan-v2 2` (furniture; floor labels without
+  fixed pieces), `--downspouts 0.05`, `--ref-exclude 1` (reference boxes never on posts / railings /
+  stairs / downspouts / solid furniture / rugs; hidden pieces never references). Old pools:
+  `--plan-v2 1 --cut-standing 1 --downspouts 0 --ref-exclude 0`.
+- **Pool guard:** pools carry `generator_version`; `run_revit_2k.sh`, `run_hard_mine.sh`,
+  `run_hard_long.sh`, `run_build_realmix.sh`, `run_fit_sweep.sh` STOP on a pool from older defaults
+  (`scripts/pool_guard.sh`; `ALLOW_STALE_POOLS=1` to reuse one on purpose). The pools on the GPU
+  disk (`revitfail_*`, `revitcur_*`, `realmix_revithard`, `fit_fresh150_*`) are all stale: move them
+  aside first, e.g. `for p in data/synthetic/revit{fail,cur}_* data/synthetic/fit_fresh150_* data/mixed/realmix_revithard; do mv $p ${p}_pre1004; done`.
+
+**Next, in order**
+1. Pull; re-score the best model once (`startup.md` command, now hand boxes, expect 0.8738) and time
+   `--q-batch 8` vs `0` on two sheets at 4096 (lower `--q-batch` on OOM).
+2. **The 0.8738 recipe on new-default pools** (one bundled change: label + reference corrections),
+   same flags as before: `run_revit_2k.sh 7 revitfailroi` (screen + miner), `SRC=fail NFRESH=4000
+   SHARDS=8 ./run_hard_mine.sh 7`, `run_hard_long.sh` on the new `revitfail_hard2000` (as
+   `ck_long_hardfail`, SWA 16-20), `run_build_realmix.sh` + `run_restart_swa.sh` with `--lr 5e-5`
+   (`startup.md`). Compare late-epoch averages / SWA vs 0.8738 (hand boxes), not single checkpoints.
+3. Then, one change each, paired: `--plan-source` (Swiss layouts, opt-in); a mining filter for
+   tiny reference boxes (`synth_progress.md` "Tiny reference boxes": mining doubled sliver
+   questions; not implemented); `--gray-prob 0` in the real mix.
+4. HF14 25 / 27 (shingle roof vs unpainted vertical boards): the **real-mix fine-tune** loses what the
+   synthetic start had (swa16-20, hand boxes: 27 q3 0.906 -> 0.479, 25 q3 0.949 -> 0.725, 25 q1
+   0.899 -> 0.538). Worth trying in the step-2 fine-tune: a larger synthetic share in the mix, or
+   fewer fine-tune epochs; a targeted generator option is secondary.
+
+The GH200 list's item (1) is superseded: `--masonry-base` is a default since 10-01, and
+`--roof-lines` / `--railings` were already in the best model's pool.
 
 ## Pick up here (2026-10-03, GH200 -- read this first)
 

@@ -53,6 +53,10 @@ def house_for(image_id, seed, mw):
     return G.make_house(rng)
 
 
+# Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
+# written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
+# pool built by an older version instead of silently training on it.
+GEN_VERSION = "2026-10-04"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -842,7 +846,8 @@ def main():
             if (i + 1) % 50 == 0 or i + 1 == len(ids):
                 print(f"{i + 1}/{len(ids)} ok={ok} {time.time() - t0:.0f}s {modes}", flush=True)
     with open(os.path.join(args.out, "generation_manifest.json"), "w") as fo:
-        json.dump({"generator": "scripts/generate_synthetic_fc.py", "n": args.n, "seed": args.seed,
+        json.dump({"generator": "scripts/generate_synthetic_fc.py", "generator_version": GEN_VERSION,
+                   "n": args.n, "seed": args.seed,
                    "start": args.start, "ok": ok, "modes": modes, "mode_weights": mw, "flags": flags, "revit": args.revit,
                    "revit_plans": args.revit_plans, "shaped": args.shaped}, fo, indent=2)
 

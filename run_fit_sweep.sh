@@ -27,6 +27,7 @@
 #        SMOKE=1 (tiny CPU-sized run of the whole chain, for checking the script only)
 set -euo pipefail
 cd "$(dirname "$0")"
+. scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 STAGES=${1:-A}
 SEED=${SEED:-7}
 P2A=${P2A:-15}
@@ -49,7 +50,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 REVIT="--seed 6 --revit --revit-plans --shaped --mode-weights 66,16,18 --workers $WORKERS"
 
 gen() {   # out start n
-  [ -f $1/generation_manifest.json ] || python3 scripts/generate_synthetic_fc.py --out $1 \
+  need_pool $1 && python3 scripts/generate_synthetic_fc.py --out $1 \
     --start $2 --n $3 $REVIT > logs/gen_$(basename $1).log 2>&1
 }
 first_n() {   # src out n: the first n sheets (sorted ids) as hard links

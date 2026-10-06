@@ -3,6 +3,7 @@
 # real 86 x18 + generated 28 x18 + Gemini r2-r4 168 x18 (as v6dmix_plus_r4) + a synthetic
 # pool given as $1 (default the mined Revit pool the long synthetic model trained on).
 set -euo pipefail
+. scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 SYN=${1:-data/synthetic/revitfail_hard2000}
 OUT=${2:-data/mixed/realmix_revithard}
 RF=data/roboflow; mkdir -p $RF logs
@@ -52,6 +53,7 @@ augment18 $RF/floz-real-pool-v2-clean $RF/floz-real-pool-v2-strong18 &
 augment18 $RF/floz-genreal-v1-clean $RF/floz-genreal-v1-strong18 &
 augment18 $RF/floz-gen-gemini-r234-clean $RF/floz-gen-gemini-r234-strong18 &
 wait
-[ -d $OUT ] || python3 scripts/merge_local_datasets.py --out $OUT --sources $SYN \
+need_pool $SYN && { echo "STOP: synthetic pool $SYN missing" >&2; exit 3; }
+need_pool $OUT && python3 scripts/merge_local_datasets.py --out $OUT --sources $SYN \
   $RF/floz-real-pool-v2-strong18 $RF/floz-genreal-v1-strong18 $RF/floz-gen-gemini-r234-strong18 > /dev/null
 echo "$OUT: $(ls $OUT/images | wc -l) images, $(ls $OUT/annotations | wc -l) annotations"

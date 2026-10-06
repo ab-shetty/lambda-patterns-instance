@@ -251,15 +251,20 @@ three questions: 27 q3 0.48 vs 0.94, 25 q3 0.73 vs 0.91, 27 q4 0.90 vs 0.98 (~+0
 In each it over-selects: with the reference on the shingle-roof band it also takes the unpainted
 vertical boards.
 - Not colour: re-scored in greyscale, shipped keeps 0.96 / 0.95 and the best model is unchanged.
-- Inherited from synthetic pretraining: synthetic-only 10k 0.51 on 27 q3; the 2e-4 fine-tune
-  (`synpre-realmix-swa24-26`) 0.455; v6d-only (`swint-v6d-e8`) 0.307. Shipped's skill comes from its
-  real / generated / Gemini data, not v6d.
+- ~~Inherited from synthetic pretraining~~ **Wrong (corrected 2026-10-06): the real-mix fine-tune
+  causes it.** The best model's own synthetic start (`longhardfail-swa16-20`, hand boxes, 4096) gets
+  27 q3 0.906, 25 q3 0.949, 25 q1 0.899 (best: 0.479 / 0.725 / 0.538; shipped 0.944 / 0.907 /
+  0.514). The 10k synthetic model (0.51) and v6d-only (0.307) fail, the long mined one does not;
+  both fine-tunes (5e-5 and 2e-4 `synpre-realmix-swa24-26`, 0.455) lose it. Same as the GH200 note
+  "the fine-tune trades synthetic wins on line-only markup for real ones".
 - The generators make similar-looking pairs as often as the real sheets (look-alike descriptor from
   `question_difficulty.py`, share of questions >= 0.95: real 28 12%, v6d 18%, Revit 14%; >= 0.98:
   8% / 7% / 2%, Revit's `distinct_looks`). The best model scores 0.92 on the 18 real questions >= 0.95;
   the four in 0.90-0.95 are exactly this pair (0.59). What is missing is the drafting convention
   (staggered shakes next to uneven-spaced boards, both uncoloured): cedar shingle + vertical/bb on
   the same sheet in 2 / 80 Revit sheets, both coloured; 0 / 80 on line-only sheets.
+  (So the pair is rare in the pools, yet the long mined synthetic model learned it; the lever is
+  keeping it through the fine-tune, not -- or not only -- more synthetic.)
 
 ## Tiny reference boxes in training and in the mined pool (2026-10-04, CPU)
 

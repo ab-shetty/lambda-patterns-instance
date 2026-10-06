@@ -11,6 +11,7 @@
 #   EXTRA="--roi-ref --roi-ref-mode add" ./run_hard_mine.sh [seed]          (SRC=cur, as run)
 #   EXTRA="--roi-ref --roi-ref-mode add" SRC=fail NFRESH=4000 SHARDS=8 ./run_hard_mine.sh 7
 set -euo pipefail
+. scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 SEED=${1:-7}
 SRC=${SRC:-cur}
 NFRESH=${NFRESH:-6000}
@@ -24,7 +25,7 @@ HARD=data/synthetic/revit${SRC}_hard2000
 M=data/evaluations/hardmine; [ $SRC = cur ] || M=$M/$SRC; mkdir -p logs $M
 [ -f $MINER ] || { echo "missing miner $MINER (run run_revit_2k.sh revit${SRC}roi first)"; exit 1; }
 
-[ -f $FRESH/generation_manifest.json ] || python3 scripts/generate_synthetic_fc.py --out $FRESH \
+need_pool $FRESH && python3 scripts/generate_synthetic_fc.py --out $FRESH \
   --n $NFRESH --start 100000 --seed 6 --revit --revit-plans --shaped --workers 64 \
   --mode-weights 66,16,18 ${GENFLAGS[$SRC]} > logs/gen_$(basename $FRESH).log 2>&1
 
@@ -39,7 +40,8 @@ for S in $(seq 0 $((SHARDS - 1))); do
 done
 wait
 
-[ -f $HARD/hard_pool_manifest.json ] || PYTHONPATH=. python3 scripts/build_hard_pool.py \
+need_pool $BASE && { echo "STOP: base pool $BASE missing (run_revit_2k.sh revit${SRC}roi first)" >&2; exit 3; }
+need_pool $HARD && PYTHONPATH=. python3 scripts/build_hard_pool.py \
   --fresh-pool $FRESH --scored $M/fresh_shard*.json --base-pool $BASE \
   --base-n 1000 --hard-n 1000 --out $HARD | tee logs/hardmine_${SRC}_build.log
 

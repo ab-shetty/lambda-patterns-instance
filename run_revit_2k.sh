@@ -43,6 +43,7 @@
 # (built by run_hard_mine.sh / build_hard_pool.py, not here); paired control revitcurroi.
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
+. scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 SEED=${1:-7}
 P2=${P2:-8}          # phase-2 epochs (the documented recipe: 8 of a planned 9)
 ARMS=${2:-"r8 revit r8revit"}
@@ -102,7 +103,7 @@ fi
 
 for A in $ARMS; do
   CK=data/runs/ck_2k_${A}_r2048_s$SEED
-  if [ -n "${BUILD[$A]:-}" ] && [ ! -f ${POOL[$A]}/generation_manifest.json ]; then
+  if [ -n "${BUILD[$A]:-}" ] && need_pool ${POOL[$A]}; then
     set -- ${BUILD[$A]}; N=$1; shift
     python3 scripts/generate_synthetic_fc.py --out ${POOL[$A]} --n $N --seed 6 --revit --revit-plans \
       --shaped --workers 64 --mode-weights 66,16,18 "$@" > logs/gen_$(basename ${POOL[$A]}).log 2>&1

@@ -128,6 +128,8 @@ def main():
     h = np.array(list(hardness.values()))
     summary = {
         "fresh_pool": str(fresh), "scored": args.scored, "base_pool": str(base),
+        "generator_version": json.loads((fresh / "generation_manifest.json").read_text()).get("generator_version", "none")
+        if (fresh / "generation_manifest.json").exists() else "none",
         "base_n": len(base_anns), "hard_n": len(mined), "hard_frac": args.hard_frac,
         "exclude_top": args.exclude_top, "min_ceiling": args.min_ceiling,
         "image_max_size": args.image_max_size, "seed": args.seed,

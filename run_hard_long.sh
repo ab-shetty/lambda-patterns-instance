@@ -15,6 +15,7 @@
 #   EXTRA="--roi-ref --roi-ref-mode add" POOL=data/synthetic/revitcur_hard2000 \
 #     INIT=data/runs/ck_2k_revithardroi_r2048_s7/epoch_8.pth CK=data/runs/ck_long_hardcur ./run_hard_long.sh
 set -euo pipefail
+. scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 EP=${EP:-30}; SCHED=${SCHED:-$((EP + 1))}; DR=${DR:-0.7}; SCORE_EVERY=${SCORE_EVERY:-10}; SEED=${SEED:-7}
 TAG=$(basename $CK)
 FRESH=data/synthetic/fit_fresh150_$(echo "${GEN:-none}" | md5sum | cut -c1-8)
@@ -23,7 +24,7 @@ HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 O=data/evaluations/long/$TAG; mkdir -p logs $O
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-[ -f $FRESH/generation_manifest.json ] || python3 scripts/generate_synthetic_fc.py --out $FRESH \
+need_pool $FRESH && python3 scripts/generate_synthetic_fc.py --out $FRESH \
   --n 150 --start 300000 --seed 6 --revit --revit-plans --shaped --workers 64 \
   --mode-weights 66,16,18 ${GEN:-} > logs/gen_$(basename $FRESH).log 2>&1
 
