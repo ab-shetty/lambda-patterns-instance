@@ -23,3 +23,7 @@ shapely>=2.0.0
 # Labelling assist (labeling_assist.md): SAM 3 box-prompt -> polygon.
 # Not needed for the product model; `facebook/sam3` is a gated HF repo.
 transformers>=4.50.0
+
+# Text regions for real / Gemini reference exclusion (scripts/text_mask.py, run_build_realmix.sh TX=1);
+# also needs the tesseract binary: sudo apt-get install -y tesseract-ocr
+pytesseract>=0.3.10

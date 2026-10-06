@@ -23,8 +23,11 @@ def main() -> None:
     parser.add_argument("--target-long", type=int, default=0,
                         help="resize augmented sources to this long side; 0 keeps size")
     parser.add_argument("--seed", type=int, default=5858)
-    parser.add_argument("--gray-prob", type=float, default=0.15,
-                        help="--strong only: probability a copy is converted to grayscale")
+    parser.add_argument("--gray-prob", type=float, default=0.0,
+                        help="--strong only: probability a copy is converted to grayscale. Default 0 since "
+                             "2026-10-06 (labels separate same-texture families by colour; grayscale copies made "
+                             "them identical). 0.15 = every earlier pool; the draw is always consumed, so only "
+                             "the grayscale copies differ")
     parser.add_argument("--strong", action="store_true",
                         help="use geometric and richer photometric augmentation")
     parser.add_argument("--omit-originals", action="store_true",

@@ -451,7 +451,7 @@ def compose_revit(image_id, seed, mode_weights):
             mk = markup_plan(styles, mr)
 
     # ---- views
-    nviews = r.choices([1, 2, 4], weights=[30, 40, 30])[0]
+    nviews = r.choices([1, 2, 4], weights=getattr(G, "REVIT_VIEWS", None) or [30, 40, 30])[0]
     allv = ["front", "rear", "left", "right"]
     views = (["front"] if r.random() < 0.6 else [r.choice(allv)]) if nviews == 1 else \
         r.choice([["front", "rear"], ["left", "right"], ["front", "right"]]) if nviews == 2 else allv

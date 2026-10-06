@@ -10,14 +10,19 @@
 # miner and paired control revitfailroi, 4,000 fresh sheets on 8 shards -> revithardfailroi.
 #   EXTRA="--roi-ref --roi-ref-mode add" ./run_hard_mine.sh [seed]          (SRC=cur, as run)
 #   EXTRA="--roi-ref --roi-ref-mode add" SRC=fail NFRESH=4000 SHARDS=8 ./run_hard_mine.sh 7
+# SRC=failswiss (2026-10-06): the fail settings + Swiss Dwellings floor plans (--plan-source); miner
+# revitfailswissroi (run_revit_2k.sh), mined pool revitfailswiss_hard2000.
+# NOTRAIN=1 (2026-10-06): stop after building the mined pool (no 2k arm on it), e.g. when the next
+# step restarts an existing long-schedule model on the mined pool instead.
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 SEED=${1:-7}
 SRC=${SRC:-cur}
 NFRESH=${NFRESH:-6000}
 SHARDS=${SHARDS:-4}
-declare -A GENFLAGS=([cur]="" [fail]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2")
-declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi)
+declare -A GENFLAGS=([cur]="" [fail]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
+  [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
+declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi)
 MINER=data/runs/ck_2k_revit${SRC}roi_r2048_s$SEED/epoch_8.pth
 BASE=data/synthetic/revit${SRC}_train2000
 FRESH=data/synthetic/revit${SRC}_fresh$NFRESH
@@ -45,6 +50,7 @@ need_pool $HARD && PYTHONPATH=. python3 scripts/build_hard_pool.py \
   --fresh-pool $FRESH --scored $M/fresh_shard*.json --base-pool $BASE \
   --base-n 1000 --hard-n 1000 --out $HARD | tee logs/hardmine_${SRC}_build.log
 
+[ "${NOTRAIN:-0}" = 1 ] && { echo "NOTRAIN=1: mined pool $HARD built, no 2k arm"; exit 0; }
 ./run_revit_2k.sh $SEED ${ARM[$SRC]}
 
 E=data/evaluations/revit2k

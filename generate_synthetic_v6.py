@@ -255,6 +255,13 @@ VAL_DETAILS = False
 # inference size). With this probability (own RNG) a sheet is downsampled to
 # 0.25-0.6x and back, so its lines are soft; size and labels are unchanged.
 RES_DEGRADE = 0.0
+# Gemini-like sheets (2026-10-06, all opt-in, own RNG each, 0 = byte-identical):
+# PAPER: P of sheets look photographed / scanned (paper tone, uneven light, blur, noise, JPEG);
+# PALE_INK: P of line-only sheets drawn in pale grey ink (Gemini: ~1 in 4 elevations is faint all over);
+# REVIT_VIEWS: Revit elevation view-count weights for 1 / 2 / 4 views (default 30, 40, 30).
+PAPER = 0.0
+PALE_INK = 0.0
+REVIT_VIEWS = None
 # Material mix typical of US residential elevations (siding and stucco walls,
 # asphalt roofs), in place of v6's near-uniform draw where brick, stone, block
 # and shingle take ~half the walls. Weights are a prior, not fitted to val.
@@ -2851,7 +2858,9 @@ _CFG = {}
 
 
 def _init(out, seed, mode_weights, view_counts=None, max_label_fams=0, same_fill=0.0,
-          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, faint_lines=0.0, soft_shadows=0.0, roof_lines=0.0, railings=0.0, plan_v2=0, plan_source=None, plan_source_p=1.0):
+          same_fill_subtle=0.0, hardscape_plan=0.0, mottle=0.0, vocab2=0.0, gemini_colour=False, val_fills=False, fill_scale=False, tight_crop_=False, val_details=False, res_degrade=0.0, material_mix=False, muted_palette=False, neutral_palette=False, real_labelling=False, window_hole_prob=1.0, casing_holes=True, trim_cut=True, distinct_looks=True, colour_pairs=0.0, trim_label_prob=1.0, markup=0.0, cedar_shingle=0.0, masonry_base=0.0, faint_lines=0.0, soft_shadows=0.0, roof_lines=0.0, railings=0.0, plan_v2=0, plan_source=None, plan_source_p=1.0, paper=0.0, pale_ink=0.0, revit_views=None):
+    global PAPER, PALE_INK, REVIT_VIEWS
+    PAPER, PALE_INK, REVIT_VIEWS = paper, pale_ink, revit_views
     global VIEW_COUNT_WEIGHTS, MAX_LABEL_FAMS, SAME_FILL_NEW_COLOUR, SAME_FILL_SUBTLE, HARDSCAPE_PLAN, MOTTLE, VOCAB2
     global GEMINI_COLOUR, VAL_FILLS, FILL_SCALE, TIGHT_CROP, VAL_DETAILS, RES_DEGRADE, MATERIAL_MIX
     global WALL_KINDS, ROOF_KINDS, MUTED_PALETTE, NEUTRAL_PALETTE, REAL_LABELLING, WINDOW_HOLE_PROB, CASING_HOLES, TRIM_CUT, DISTINCT_LOOKS, COLOUR_PAIRS
@@ -2934,6 +2943,38 @@ def tight_crop(canvas, ann, rng):
     return canvas, ann
 
 
+def pale_ink(canvas, r):
+    """--pale-ink: a line-only sheet (< 2% coloured pixels) redrawn in pale grey: every pixel moves
+    toward white by the same factor, so line weights and textures keep their relative contrast."""
+    c = canvas.astype(np.int16)
+    if (c.max(axis=2) - c.min(axis=2) > 30).mean() >= 0.02:
+        return canvas
+    k = r.uniform(0.28, 0.6)                   # remaining ink strength (black -> 255 * (1 - k))
+    return (255 - (255 - canvas.astype(np.float32)) * k).round().astype(np.uint8)
+
+
+def paper_look(canvas, r):
+    """--paper: a photographed / scanned print. Paper tone (off-white to grey-beige) multiplies the
+    sheet, light falls off across it (linear gradient + vignette), the camera softens it, sensor noise,
+    then a JPEG round trip. Geometry unchanged, so labels stay exact."""
+    H, W = canvas.shape[:2]
+    base = r.uniform(200, 245)
+    tint = np.float32([r.uniform(-7, 0), r.uniform(-2, 2), r.uniform(0, 4)])       # BGR: neutral to warm
+    paper = np.clip(base + tint, 0, 255) / 255.0
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    ang = r.uniform(0, 2 * np.pi)
+    lin = (np.cos(ang) * (xx / W - 0.5) + np.sin(ang) * (yy / H - 0.5))
+    rad = ((xx / W - 0.5) ** 2 + (yy / H - 0.5) ** 2)
+    light = 1 + r.uniform(0.04, 0.16) * lin - r.uniform(0.0, 0.25) * rad
+    out = canvas.astype(np.float32) * paper[None, None, :] * light[..., None]
+    sig = r.uniform(0.4, 1.3) * max(H, W) / 3000
+    out = cv2.GaussianBlur(out, (0, 0), sig)
+    out += np.random.default_rng(r.randrange(1 << 30)).normal(0, r.uniform(1.5, 5), out.shape).astype(np.float32)
+    out = np.clip(out, 0, 255).astype(np.uint8)
+    ok, buf = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, r.randint(55, 88)])
+    return cv2.imdecode(buf, cv2.IMREAD_COLOR) if ok else out
+
+
 def _job(image_id):
     try:
         canvas, ann = compose(image_id, _CFG["seed"], _CFG["mw"])
@@ -2960,6 +3001,14 @@ def _job(image_id):
                 h, w = canvas.shape[:2]
                 small = cv2.resize(canvas, (max(8, int(w * f)), max(8, int(h * f))), interpolation=cv2.INTER_AREA)
                 canvas = cv2.resize(small, (w, h), interpolation=rr.choice([cv2.INTER_LINEAR, cv2.INTER_CUBIC]))
+        if PALE_INK:
+            pr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 101 + 41)
+            if pr.random() < PALE_INK:
+                canvas = pale_ink(canvas, pr)
+        if PAPER:
+            qr = random.Random(_CFG["seed"] * 1_000_003 + image_id * 103 + 43)
+            if qr.random() < PAPER:
+                canvas = paper_look(canvas, qr)
     except Exception as exc:          # a bad draw must not kill the batch
         import traceback
         traceback.print_exc()

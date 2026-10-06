@@ -2,10 +2,15 @@
 # Real + Gemini mix for fine-tuning a synthetic-pretrained model (2026-10-03):
 # real 86 x18 + generated 28 x18 + Gemini r2-r4 168 x18 (as v6dmix_plus_r4) + a synthetic
 # pool given as $1 (default the mined Revit pool the long synthetic model trained on).
+# TX=1 (2026-10-06): real / generated / Gemini sources get text regions as ref_exclude
+# (scripts/add_ref_exclude.py on copies of the clean dirs, *-cleantx), so training's reference boxes stay
+# off room tags / callouts / dimension text; the augmentation carries the rings. Augmented pools and the
+# default OUT get a "tx" suffix; images and labels are identical to TX=0.
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
 SYN=${1:-data/synthetic/revitfail_hard2000}
-OUT=${2:-data/mixed/realmix_revithard}
+TX=${TX:-0}; S=""; [ "$TX" = 1 ] && S=tx
+OUT=${2:-data/mixed/realmix_revithard$S}
 RF=data/roboflow; mkdir -p $RF logs
 augment18() {
   local src=$1 out=$2 tmp=$2.chunks
@@ -49,11 +54,18 @@ done
 [ -d $RF/floz-gen-gemini-r234-clean ] || python3 scripts/merge_local_datasets.py \
   --out $RF/floz-gen-gemini-r234-clean --sources $RF/floz-gen-gemini-r2-clean \
   $RF/floz-gen-gemini-r3-clean $RF/floz-gen-gemini-r4-clean > /dev/null
-augment18 $RF/floz-real-pool-v2-clean $RF/floz-real-pool-v2-strong18 &
-augment18 $RF/floz-genreal-v1-clean $RF/floz-genreal-v1-strong18 &
-augment18 $RF/floz-gen-gemini-r234-clean $RF/floz-gen-gemini-r234-strong18 &
+if [ "$TX" = 1 ]; then
+  for p in floz-real-pool-v2 floz-genreal-v1 floz-gen-gemini-r234; do
+    [ -d $RF/$p-cleantx ] && continue
+    cp -r $RF/$p-clean $RF/$p-cleantx.tmp
+    PYTHONPATH=. python3 scripts/add_ref_exclude.py --pool $RF/$p-cleantx.tmp && mv $RF/$p-cleantx.tmp $RF/$p-cleantx
+  done
+fi
+augment18 $RF/floz-real-pool-v2-clean$S $RF/floz-real-pool-v2-strong18$S &
+augment18 $RF/floz-genreal-v1-clean$S $RF/floz-genreal-v1-strong18$S &
+augment18 $RF/floz-gen-gemini-r234-clean$S $RF/floz-gen-gemini-r234-strong18$S &
 wait
 need_pool $SYN && { echo "STOP: synthetic pool $SYN missing" >&2; exit 3; }
 need_pool $OUT && python3 scripts/merge_local_datasets.py --out $OUT --sources $SYN \
-  $RF/floz-real-pool-v2-strong18 $RF/floz-genreal-v1-strong18 $RF/floz-gen-gemini-r234-strong18 > /dev/null
+  $RF/floz-real-pool-v2-strong18$S $RF/floz-genreal-v1-strong18$S $RF/floz-gen-gemini-r234-strong18$S > /dev/null
 echo "$OUT: $(ls $OUT/images | wc -l) images, $(ls $OUT/annotations | wc -l) annotations"

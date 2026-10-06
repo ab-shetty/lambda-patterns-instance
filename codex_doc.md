@@ -7,6 +7,41 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Pick up here (2026-10-06, GH200 session -- read this first)
+
+One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Detail: `synth_progress.md`
+"2026-10-06 (GH200)". All checkpoints below are on the Hub (private, round-trip verified).
+
+- **Best synthetic-only: HF14 0.8779** (`abshetty/floz-refunet-swint-longswiss-swa37-41`): 20-epoch restart
+  of `...-longv1004-swa27-31` (HF14 0.8564) on `revitfailswiss_hard2000` (new defaults + Swiss floor plans,
+  mined by `...-revitfailswiss2k-e8`), SWA 37-41 picked on val (0.8766). +0.0215 paired vs its start (p=0.21).
+  It matches or beats every fine-tuned model on HF14 -- best fine-tuned is still 0.8734.
+- **Real-mix fine-tune of it loses on HF14:** `...-longswiss-ft-realmixtx-e54` val 0.9004, HF14 0.8578 (-0.020 vs
+  its start); it drops 23 / 25 / 27 (0.91/0.92/0.83 -> 0.73/0.82/0.72). Weight interpolation 30-50% toward
+  the fine-tune gives HF14 0.883-0.884 = noise over 0.8779, and val rises monotonically toward the fine-tune,
+  so val cannot pick the mix. **Conclusion: stop spending GPU on fine-tune variants; HF14 moves with synthetic.**
+- **Gemini eval set (new):** 30 random Gemini sheets (`pool_manifests/gemini30_s20261006.json`), boxes hand-
+  reviewed by the user (`eval_boxes/gemini30_v1.json`: 35 moved, 7 dropped, 194 questions);
+  `evaluate_refunet_selection.py --local-pool data/eval_pools/gemini30_s20261006 --boxes eval_boxes/gemini30_v1.json`.
+  Best synthetic 0.8152 @4096 (previous long 0.7972, 2k screens ~0.72). These sheets are IN the real mix: valid
+  for synthetic-only models only. Review artifacts: Gemini Box Review (claude.ai/artifact/KugeRR3u46HnwocmYgmWfv),
+  Gemini Failure Review with per-question notes (claude.ai/artifact/W5FqgEoTubFgJZwwiGDHPb) -- read the notes.
+- **Where synthetic fails on Gemini:** lines over tone. r4 #078 (tan vs olive lap = 2 families) and r4 #041
+  (grey-washed seam fill vs bare joist lines) both select by line texture and ignore fill tone / colour. Label
+  issue: r4 #091 lumped roof + walls; the user fixed it in Roboflow but it needs a new r4 version (v2) to arrive.
+- **Defaults changed:** `augment_local_dataset.py --gray-prob 0` (was 0.15; the user ruled grayscale copies out:
+  they make colour-only families identical). Synthetic training never had grayscale.
+- **New, opt-in:** `TX=1 ./run_build_realmix.sh` (Tesseract text regions -> `ref_exclude` for real / Gemini; the
+  augmenter carries the rings; catches room tags / callouts, NOT fixtures / windows / door swings / railings --
+  no automatic method found, AUC 0.58 for backbone features); generator `--paper` (keep 0: the user says the
+  photographed look is unintended), `--pale-ink`, `--revit-view-weights`; `--tight-crop` now screened:
+  tight-crop + pale-ink 0.25 + views 50,45,5 = Gemini -0.013 (auto boxes), HF14 +0.010, val +0.014 (noise) --
+  framing is not the lever. `run_hard_mine.sh SRC=failswiss NOTRAIN=1`; `publish_refunet.py` parallel-safe.
+- **Next, in order:** (1) generator: same line pattern, different fill tone / colour as separate labelled
+  families on one sheet (measure how often pools have them; `--colour-pairs`, `distinct_looks`); grey-wash vs
+  bare-line framing plans; (2) another long restart of longswiss-swa37-41 on a freshly mined pool (steps have
+  paid every time); (3) Roboflow r4 v2 after the user's label fixes, then rebuild r4 / gemini30.
+
 ## Pick up here (2026-10-03 to 10-06, CPU session -- read this first; supersedes the GH200 "Next" list below)
 
 Nothing trained. Evaluation and generator defaults changed; every trained pool predates them.

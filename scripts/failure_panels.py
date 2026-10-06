@@ -29,16 +29,33 @@ def main():
     ap.add_argument("--other", default="")
     ap.add_argument("--width", type=int, default=900)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--local-pool", default="", help="score a local pool (as evaluate_refunet_selection.py "
+                    "--local-pool); --indices all = every sheet")
+    ap.add_argument("--drop", default="", help="JSON with 'dropped': [[image_index, reference_instance], ...] "
+                    "(e.g. unrealistic boxes) to leave out")
     a = ap.parse_args()
-    idx = {int(v) for v in a.indices.split(",")}
-    rows = [r for r in json.load(open(a.metrics))["selections"] if r["image_index"] in idx]
+    rows = json.load(open(a.metrics))["selections"]
+    if a.indices != "all":
+        idx = {int(v) for v in a.indices.split(",")}
+        rows = [r for r in rows if r["image_index"] in idx]
+    if a.drop:
+        dropped = {tuple(k) for k in json.load(open(a.drop))["dropped"]}
+        rows = [r for r in rows if (r["image_index"], r["reference_instance"]) not in dropped]
     other = {}
     if a.other:
         other = {(r["image_index"], r["reference_instance"]): r["iou"]
                  for r in json.load(open(a.other))["selections"]}
     rows.sort(key=lambda r: r["iou"])
-    records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
-                                   config="real-world-test", split="test")
+    if a.local_pool:
+        pool = Path(a.local_pool)
+        records = []
+        for f in sorted((pool / "annotations").glob("*.json")):
+            ann = json.loads(f.read_text())
+            records.append({"image": (pool / "images" / ann["image"]["file_name"]).read_bytes(),
+                            "annotations": ann["annotations"]})
+    else:
+        records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
+                                       config="real-world-test", split="test")
     panels = []
     for r in rows[:a.worst]:
         i, q = r["image_index"], r["reference_instance"]

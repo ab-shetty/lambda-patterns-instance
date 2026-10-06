@@ -94,16 +94,20 @@ def extra_scenes(extra_dir, target_long):
         img = Image.open(f"{extra_dir}/images/{fn}").convert("RGB")
         W, H = img.size
         anns = _norm_anns(ann["annotations"])
+        # ref_exclude (flat pixel rings: text etc. a user never selects; scripts/add_ref_exclude.py)
+        # rides along with every geometric transform below; absent = unchanged output
+        rx = [list(map(float, r)) for r in (ann.get("ref_exclude") or [])]
         if target_long and max(W, H) != target_long:
             s = target_long / max(W, H)
             img = img.resize((max(1, round(W * s)), max(1, round(H * s))), Image.LANCZOS)
             anns = _scale_anns(anns, s)
-        scenes.append({"image": img, "anns": anns,
+            rx = [[c * s for c in r] for r in rx]
+        scenes.append({"image": img, "anns": anns, "ref_exclude": rx,
                        "name": os.path.splitext(os.path.basename(jf))[0]})
     return scenes
 
 
-def _rotate_img_and_polys(img, anns, deg):
+def _rotate_img_and_polys(img, anns, deg, rings=None):
     """Rotate image about its center by `deg` (CCW, white fill, no expand) and
     apply the MATCHING transform to every polygon coordinate so masks stay
     aligned. Verified by scripts overlay (see build_mix --real-aug-strong)."""
@@ -122,11 +126,13 @@ def _rotate_img_and_polys(img, anns, deg):
             out.append(cy - x * sin + y * cos)
         return out
     rot = [{**a, "segmentation": [_tx(p) for p in a["segmentation"]]} for a in anns]
+    if rings is not None:
+        return rimg, rot, [_tx(r) for r in rings]
     return rimg, rot
 
 
 def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False,
-                   gray_prob=0.15):
+                   gray_prob=0.0):
     """Write k_per_scene augmentations of each scene; returns count.
     start_n continues the aug_NNNNNN filename numbering across multiple calls.
     strong=False: the established mild photometric+flip recipe (byte-identical to
@@ -142,14 +148,18 @@ def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False,
         base = sc["image"]
         W, H = base.size
         anns = sc["anns"]
+        rx0 = sc.get("ref_exclude") or []
+        flip_rings = lambda rings: [[(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(r)]
+                                    for r in rings]
         for _ in range(k_per_scene):
             img = base
             cur = anns
+            rx = rx0
             if strong:
                 # small rotation first (transforms polygons too)
                 if rng.rand() < 0.7:
-                    img, cur = _rotate_img_and_polys(img, cur,
-                                                     float(rng.uniform(-8, 8)))
+                    img, cur, rx = _rotate_img_and_polys(img, cur,
+                                                         float(rng.uniform(-8, 8)), rings=rx)
                 img = ImageEnhance.Brightness(img).enhance(0.75 + 0.50 * rng.rand())
                 img = ImageEnhance.Contrast(img).enhance(0.75 + 0.50 * rng.rand())
                 img = ImageEnhance.Color(img).enhance(0.6 + 0.8 * rng.rand())
@@ -168,6 +178,7 @@ def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False,
                     cur = [{**a, "segmentation": [
                         [(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(p)]
                         for p in a["segmentation"]]} for a in cur]
+                    rx = flip_rings(rx)
                 noise = rng.normal(0, 3 + 9 * rng.rand(), (H, W, 3))
             else:
                 img = ImageEnhance.Brightness(img).enhance(0.90 + 0.20 * rng.rand())
@@ -179,14 +190,17 @@ def augment_scenes(scenes, out_root, k_per_scene, seed, start_n=0, strong=False,
                     cur = [{**a, "segmentation": [
                         [(W - 1 - c) if (j % 2 == 0) else c for j, c in enumerate(p)]
                         for p in a["segmentation"]]} for a in anns]
+                    rx = flip_rings(rx0)
                 noise = rng.normal(0, 2 + 5 * rng.rand(), (H, W, 3))
             arr = np.asarray(img).astype(np.float32) + noise
             img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
             fn = f"aug_{n:06d}.png"
             img.save(f"{out_root}/images/{fn}")
-            json.dump({"image": {"file_name": fn, "width": W, "height": H},
-                       "mode": "freeform", "annotations": cur},
-                      open(f"{out_root}/annotations/aug_{n:06d}.json", "w"))
+            rec = {"image": {"file_name": fn, "width": W, "height": H},
+                   "mode": "freeform", "annotations": cur}
+            if rx:
+                rec["ref_exclude"] = [[round(c, 2) for c in r] for r in rx]
+            json.dump(rec, open(f"{out_root}/annotations/aug_{n:06d}.json", "w"))
             n += 1
     return n - start_n
 

@@ -910,3 +910,36 @@ neutral grey), which training shows on about half of the shaded sheets. The 2026
 probe already showed the model uses colour. Untested cleanly: the offline `--strong`
 augmentation still grayscales 15% of every real / generated / Gemini copy (the one no-gray run
 also changed the synthetic data). Next: `--gray-prob 0` mix + the 5e-5 fine-tune, paired vs 0.8816.
+
+### 2026-10-06 (GH200) -- new-default pools, Swiss mining, best synthetic 0.8779, Gemini eval set
+
+One seed (7), swin_t, 2048, ROI add; hand boxes @4096 unless noted. Pools `generate_synthetic_fc.py --revit
+--revit-plans --shaped --mode-weights 66,16,18 --seed 6 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5
+--faint-lines 0.2` at the 2026-10-04 defaults (`pool_manifests/*_v1004.json` pin the mined sheets).
+
+| model | val | HF14 | Gemini30 hand |
+|---|---:|---:|---:|
+| 2k `revitfailroi` (new defaults), e8 | 0.8177 | 0.8060 | 0.7309 @2048 |
+| 2k + Swiss floor plans (`--plan-source`, p 1) | 0.7611 | 0.8251 | 0.7162 @2048 |
+| `longhardfail-swa16-20` (start, old pool) | 0.8787 | 0.8612 | -- |
+| + 20 ep on new-default mined pool, SWA 27-31 | 0.8800 | 0.8564 | 0.7972 |
+| + 20 ep on Swiss mined pool, SWA 37-41 | 0.8766 | **0.8779** | **0.8152** |
+| its 5e-5 real-mix fine-tune (text-excluded, no gray), e54 | 0.9004 | 0.8578 | 0.8592* |
+
+*Gemini sheets are in the fine-tune's training mix.
+- Swiss vs no-Swiss 2k (pools differ only in floor plans): HF14 floor-plan questions 0.764 vs 0.697 @2048, the
+  rest is run noise (val 17, unchanged elevations). Gemini30 (auto boxes) -0.012 to -0.018 on unchanged sheets:
+  noise. Swiss layouts are not shown to hurt; adopted in the long pool.
+- Gemini-like flags (`--tight-crop --pale-ink 0.25 --revit-view-weights 50,45,5`, measured: piece side @2048
+  190 -> 245 px, Gemini 259; labelled share 0.22 -> 0.27, Gemini 0.28) on the Swiss 2k pool, SWA 5-8 both arms:
+  Gemini -0.013 (p~0.08), HF14 +0.010, val +0.014 -- framing does not move Gemini.
+- Fine-tune drift reproduced: loses 23/25/27; WiSE 30/50/70% toward the fine-tune: HF14 0.8843 / 0.8827 / 0.8715,
+  val 0.8906 / 0.8943 / 0.8979 (val monotonic toward the fine-tune, can't select).
+- Unrealistic reference boxes on Gemini (automatic sampler): 33 / 201 by Claude, user changed 42 (35 moved, 7
+  dropped; 29 of Claude's 33). Text detection (`scripts/text_mask.py`, conf >= 60, >= 3 chars) catches 17 / 33
+  with 1% of labelled area excluded; fixtures / windows / door swings / railings / ridges have no automatic fix
+  (backbone-feature consistency AUC 0.58, model-failure AUC 0.68).
+- Gemini failure modes of the best synthetic model (Gemini Failure Review artifact): r4 #078 tan vs olive lap
+  (14% of loss), r3 #048 (11%), r4 #016 (10%), r4 #041 + #091 single-family sheets (12%; #091 was a label error,
+  fixed upstream). The model matches line texture and under-uses fill tone / colour.
+

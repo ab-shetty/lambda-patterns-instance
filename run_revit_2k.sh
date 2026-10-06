@@ -41,6 +41,13 @@
 #   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 "revitcurroi revitfailroi"
 # revithardroi (2026-10-02): 1,000 revitcurroi sheets + 1,000 mined semi-hard fresh sheets
 # (built by run_hard_mine.sh / build_hard_pool.py, not here); paired control revitcurroi.
+# revitfailswissroi (2026-10-06): revitfailroi's pool (same seed / ids / flags) with floor plans from
+# real Swiss Dwellings layouts (--plan-source, p 1.0; build the file with scripts/swiss_plans.py).
+# Only floor-plan sheets differ, so it pairs with revitfailroi.
+#   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitfailswissroi
+# revitgemroi (2026-10-06): revitfailswissroi's pool + Gemini-like sheets (--tight-crop --pale-ink 0.25
+# --revit-view-weights 50,45,5: framing, piece size, pale line work; --paper left out on purpose).
+# Pairs with revitfailswissroi.
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
@@ -65,13 +72,17 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revit10kfailroi]=data/synthetic/revitfail_train10000
                  [revitcurroi]=data/synthetic/revitcur_train2000
                  [revitfailroi]=data/synthetic/revitfail_train2000
+                 [revitfailswissroi]=data/synthetic/revitfailswiss_train2000
+                 [revitgemroi]=data/synthetic/revitgem_train2000
                  [revithardroi]=data/synthetic/revitcur_hard2000
                  [revithardfailroi]=data/synthetic/revitfail_hard2000)
 declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5"
                   [revit10kcurroi]="10000"
                   [revit10kfailroi]="10000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
                   [revitcurroi]="2000"
-                  [revitfailroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2")
+                  [revitfailroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
+                  [revitfailswissroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+                  [revitgemroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --tight-crop --pale-ink 0.25 --revit-view-weights 50,45,5")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 E=data/evaluations/revit2k; mkdir -p logs $E

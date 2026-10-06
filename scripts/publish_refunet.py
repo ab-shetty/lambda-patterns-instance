@@ -95,8 +95,10 @@ def main():
         pass
     meta["n_params"] = sum(v.numel() for v in sd.values())
 
-    out = "/tmp/refunet_publish"
-    os.makedirs(out, exist_ok=True)
+    # own staging dir per call: a shared /tmp/refunet_publish let parallel publishes upload each
+    # other's weights (2026-10-06: five repos all got the same checkpoint)
+    import tempfile
+    out = tempfile.mkdtemp(prefix="refunet_publish_")
     save_file(sd, f"{out}/model.safetensors", metadata={"format": "pt"})
     json.dump(meta, open(f"{out}/config.json", "w"), indent=2, default=str)
 

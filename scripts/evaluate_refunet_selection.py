@@ -241,7 +241,7 @@ def main():
                              "automatic boxes only (the protocol before 2026-10-03); or a JSON "
                              "{image_index: {question_index: [x, y, w, h] | null}} in native pixels "
                              "replacing those questions' automatic boxes, or dropping them (null). "
-                             "--local-pool always uses automatic boxes.")
+                             "--local-pool uses automatic boxes unless --boxes names a file for that pool.")
     parser.add_argument("--q-batch", type=int, default=8,
                         help="questions per batch on one cached image backbone (swin models); 0 = the "
                              "old one-forward-per-question path. Lower it if 4096 runs out of GPU memory")
@@ -274,10 +274,19 @@ def main():
     ckpt_args = checkpoint.get("args", {}) or {}
     if args.save_probs:
         Path(args.save_probs).mkdir(parents=True, exist_ok=True)
-    boxes_path = ("" if args.local_pool or args.boxes == "auto" else
-                  "eval_boxes/hand_v1.json" if args.boxes == "hand" else args.boxes)
-    box_overrides = (json.loads((HAND_BOXES if args.boxes == "hand" else Path(boxes_path)).read_text())
-                     if boxes_path else None)
+    # --local-pool: automatic boxes unless --boxes names a file made for that pool (its _meta.pool must
+    # match, e.g. eval_boxes/gemini30_v1.json for data/eval_pools/gemini30_s20261006)
+    if args.local_pool:
+        boxes_path = "" if args.boxes in ("hand", "auto") else args.boxes
+    else:
+        boxes_path = ("" if args.boxes == "auto" else
+                      "eval_boxes/hand_v1.json" if args.boxes == "hand" else args.boxes)
+    box_overrides = (json.loads((HAND_BOXES if boxes_path == "eval_boxes/hand_v1.json" and args.boxes == "hand"
+                                 else Path(boxes_path)).read_text()) if boxes_path else None)
+    if args.local_pool and box_overrides is not None:
+        want = box_overrides.get("_meta", {}).get("pool")
+        if want and Path(want).resolve() != Path(args.local_pool).resolve():
+            raise SystemExit(f"--boxes {boxes_path} is for pool {want}, not {args.local_pool}")
     rows = evaluate_model(model, records, indices, args.image_max_size,
                           args.ref_size, args.mask_thresh, device,
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),

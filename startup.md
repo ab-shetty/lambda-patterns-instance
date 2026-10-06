@@ -36,6 +36,7 @@ older automatic-only protocol (every number below this section that does not say
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
 | `synpre-realmix-lr5e5-e22` (best) | **0.8738** | 0.9087* | 0.8816 |
+| `longswiss-swa37-41` (synthetic only, 2026-10-06) | **0.8779** | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
 

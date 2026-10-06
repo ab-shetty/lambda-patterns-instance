@@ -715,6 +715,14 @@ def main():
     ap.add_argument("--mode-weights", default="86,7,7")
     ap.add_argument("--r8", action="store_true", help="the r8 flag set (best probe pool so far)")
     ap.add_argument("--tight-crop", action="store_true")
+    ap.add_argument("--paper", type=float, default=0.0,
+                    help="2026-10-06, Gemini-like: P of sheets photographed / scanned (paper tone, uneven light, "
+                         "blur, noise, JPEG); labels unchanged. 0 = byte-identical")
+    ap.add_argument("--pale-ink", type=float, default=0.0,
+                    help="2026-10-06, Gemini-like: P of line-only sheets drawn in pale grey ink. 0 = byte-identical")
+    ap.add_argument("--revit-view-weights", default=None,
+                    help="2026-10-06: Revit elevation 1 / 2 / 4 view weights, e.g. 50,45,5 (Gemini: almost all "
+                         "1-2 large views). Default 30,40,30")
     ap.add_argument("--real-labelling", action="store_true",
                     help="v6's --real-labelling alone (walls labelled, mostly not trim/chimney/foundation)")
     ap.add_argument("--revit", action="store_true",
@@ -800,6 +808,12 @@ def main():
     flags = dict(R8) if args.r8 else {}
     if args.tight_crop:
         flags["tight_crop_"] = True
+    if args.paper:
+        flags["paper"] = args.paper
+    if args.pale_ink:
+        flags["pale_ink"] = args.pale_ink
+    if args.revit_view_weights:
+        flags["revit_views"] = [float(v) for v in args.revit_view_weights.split(",")]
     if args.real_labelling:
         flags["real_labelling"] = True
     flags["window_hole_prob"] = args.window_hole_prob
