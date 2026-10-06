@@ -334,6 +334,26 @@ in front of it (posts, railings, downspouts, freestanding furniture, rugs).
   7 the under-floor area with its text. Synthetic: wall-fixed pieces cut, freestanding inside (as
   Gemini). Furniture boxes: see defaults above (`ref_exclude`).
 
+## Do the real-mix labels teach the 25 / 27 loss? (2026-10-06, CPU)
+
+Checked every label overlay of the fine-tune's real 86 and Gemini r2-r4 168 (generated 28 not
+checked: Roboflow key missing in that session -- add them next session).
+- No label teaches it: different materials are separate families wherever shingle siding and
+  vertical boards share a sheet (Gemini #151, #161, #165, #97, #129); same-looking shingles (roof +
+  siding) share one (#151), consistent with the rest.
+- No 25 / 27-type sheet exists in either set (colour markup with unpainted line textures). The
+  fine-tune never shows the case, so the loss is most likely drift away from the synthetic start,
+  not a taught error. Levers: probability-average the synthetic start with the fine-tune, or a
+  gentler fine-tune (larger synthetic share, fewer epochs).
+- Partial labelling is common: ~half of real 86 label only the roof and leave patterned walls
+  unlabelled (#33, #35, #39, #49, #57-66, #73-79); Gemini does it too. Those walls become negatives.
+- **Reference boxes in the real / Gemini training data are often unrealistic** (user's call): the
+  sampler takes any box inside a labelled piece, and these hand labels include slivers, coarse
+  polygons over doors / posts / railings (Gemini 8 q2, 15 q1) and partial labels. Unlike synthetic
+  pools, they have no `ref_exclude`, so none of the synthetic fixes reach them. Not yet measured
+  or fixed; candidates: `--ref-min-side` for real / Gemini records, or hand-reviewed reference
+  regions for the 254 training sheets.
+
 ## Generator flags (`generate_synthetic_v6.py`, all default-off, v6d byte-identical when off)
 
 | flag | status |

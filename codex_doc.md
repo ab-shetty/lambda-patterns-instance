@@ -44,6 +44,9 @@ Nothing trained. Evaluation and generator defaults changed; every trained pool p
    synthetic start had (swa16-20, hand boxes: 27 q3 0.906 -> 0.479, 25 q3 0.949 -> 0.725, 25 q1
    0.899 -> 0.538). Worth trying in the step-2 fine-tune: a larger synthetic share in the mix, or
    fewer fine-tune epochs; a targeted generator option is secondary.
+   Labels checked (real 86 + Gemini 168): they don't teach it, and no 25 / 27-type sheet is in the
+   mix (drift). Check the generated 28 too (needs `ROBOFLOW_API_KEY`). Real / Gemini training
+   reference boxes are often unrealistic (slivers, labels over doors / posts) -- unaddressed.
 
 The GH200 list's item (1) is superseded: `--masonry-base` is a default since 10-01, and
 `--roof-lines` / `--railings` were already in the best model's pool.
