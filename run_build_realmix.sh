@@ -42,20 +42,22 @@ from roboflow import Roboflow
 ws = Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"]).workspace("perceive-ai")
 for proj, ver, name in [("floz-real-pool", 2, "floz-real-pool-v2"), ("floz-generated-realistic-label-pool", 1, "floz-genreal-v1"),
                         ("floz-gen-gemini-r2", 1, "floz-gen-gemini-r2"), ("floz-gen-gemini-r3", 1, "floz-gen-gemini-r3"),
-                        ("floz-gen-gemini-r4", 1, "floz-gen-gemini-r4")]:
+                        ("floz-gen-gemini-r4", 2, "floz-gen-gemini-r4v2")]:
     loc = f"data/roboflow/{name}-raw"
     if not os.path.exists(f"{loc}/train/_annotations.coco.json"):
         ws.project(proj).version(ver).download("coco-segmentation", location=loc, overwrite=True)
 PY
-for p in floz-real-pool-v2 floz-genreal-v1 floz-gen-gemini-r2 floz-gen-gemini-r3 floz-gen-gemini-r4; do
+for p in floz-real-pool-v2 floz-genreal-v1 floz-gen-gemini-r2 floz-gen-gemini-r3 floz-gen-gemini-r4v2; do
   [ -d $RF/$p-clean ] || python3 scripts/roboflow_to_local.py --coco $RF/$p-raw/train/_annotations.coco.json \
     --img-dir $RF/$p-raw/train --out $RF/$p-clean | tail -1 | sed "s/^/$p: /"
 done
-[ -d $RF/floz-gen-gemini-r234-clean ] || python3 scripts/merge_local_datasets.py \
-  --out $RF/floz-gen-gemini-r234-clean --sources $RF/floz-gen-gemini-r2-clean \
-  $RF/floz-gen-gemini-r3-clean $RF/floz-gen-gemini-r4-clean > /dev/null
+# r4 version 2 (2026-10-06): the user's label fix on r4 #091 (roof and walls were one family). New names
+# (r4v2, r234v2) so a v1 build on disk is never reused.
+[ -d $RF/floz-gen-gemini-r234v2-clean ] || python3 scripts/merge_local_datasets.py \
+  --out $RF/floz-gen-gemini-r234v2-clean --sources $RF/floz-gen-gemini-r2-clean \
+  $RF/floz-gen-gemini-r3-clean $RF/floz-gen-gemini-r4v2-clean > /dev/null
 if [ "$TX" = 1 ]; then
-  for p in floz-real-pool-v2 floz-genreal-v1 floz-gen-gemini-r234; do
+  for p in floz-real-pool-v2 floz-genreal-v1 floz-gen-gemini-r234v2; do
     [ -d $RF/$p-cleantx ] && continue
     cp -r $RF/$p-clean $RF/$p-cleantx.tmp
     PYTHONPATH=. python3 scripts/add_ref_exclude.py --pool $RF/$p-cleantx.tmp && mv $RF/$p-cleantx.tmp $RF/$p-cleantx
@@ -63,9 +65,9 @@ if [ "$TX" = 1 ]; then
 fi
 augment18 $RF/floz-real-pool-v2-clean$S $RF/floz-real-pool-v2-strong18$S &
 augment18 $RF/floz-genreal-v1-clean$S $RF/floz-genreal-v1-strong18$S &
-augment18 $RF/floz-gen-gemini-r234-clean$S $RF/floz-gen-gemini-r234-strong18$S &
+augment18 $RF/floz-gen-gemini-r234v2-clean$S $RF/floz-gen-gemini-r234v2-strong18$S &
 wait
 need_pool $SYN && { echo "STOP: synthetic pool $SYN missing" >&2; exit 3; }
 need_pool $OUT && python3 scripts/merge_local_datasets.py --out $OUT --sources $SYN \
-  $RF/floz-real-pool-v2-strong18$S $RF/floz-genreal-v1-strong18$S $RF/floz-gen-gemini-r234-strong18$S > /dev/null
+  $RF/floz-real-pool-v2-strong18$S $RF/floz-genreal-v1-strong18$S $RF/floz-gen-gemini-r234v2-strong18$S > /dev/null
 echo "$OUT: $(ls $OUT/images | wc -l) images, $(ls $OUT/annotations | wc -l) annotations"

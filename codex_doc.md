@@ -40,7 +40,7 @@ One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Det
 - **Next, in order:** (1) generator: same line pattern, different fill tone / colour as separate labelled
   families on one sheet (measure how often pools have them; `--colour-pairs`, `distinct_looks`); grey-wash vs
   bare-line framing plans; (2) another long restart of longswiss-swa37-41 on a freshly mined pool (steps have
-  paid every time); (3) Roboflow r4 v2 after the user's label fixes, then rebuild r4 / gemini30.
+  paid every time); (3) done: r4 v2 generated (only #091 changed), wired into run_build_realmix.sh and the gemini30 pool; best synthetic on Gemini30 now 0.8255.
 
 ## Pick up here (2026-10-03 to 10-06, CPU session -- read this first; supersedes the GH200 "Next" list below)
 

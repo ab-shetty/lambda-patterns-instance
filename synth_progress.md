@@ -949,4 +949,10 @@ One seed (7), swin_t, 2048, ROI add; hand boxes @4096 unless noted. Pools `gener
   pairs on line-only sheets (grey-washed fill vs bare lines, r4 #041) were not measured. Next generator change:
   plant same-kind pairs at dE ~12-35 on colour sheets and wash-vs-bare tone pairs on line-only plans and
   elevations, both labelled as separate families; screen with Gemini30 hand boxes + HF14 + val.
+- **Roboflow `floz-gen-gemini-r4` version 2** (generated 2026-10-06, no preprocessing / augmentation): only r4
+  #091 changed (the user's fix: roof pieces `pattern2`, wall `pattern1`; was one family). Image byte-identical.
+  `run_build_realmix.sh` now downloads v2 (`floz-gen-gemini-r4v2`, merged as `r234v2`, so v1 builds are never
+  reused). The Gemini30 eval pool's #091 annotation was replaced by v2 (no hand boxes on it): best synthetic
+  model 0.8152 -> **0.8255** on Gemini30 (#091's three questions 0.09-0.50 -> 0.94-0.95). Every Gemini30 number
+  above is on v1 labels.
 
