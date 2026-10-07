@@ -46,6 +46,9 @@ One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Det
   when the family has one; slivers stay in the targets); (b) generator writes its own text (room tags, callouts)
   into `ref_exclude`, as Tesseract does for real data; (c) optional: a box-size filter in `build_hard_pool.py`
   so slivers don't count as "hard" (not implemented).
+- **Read the user's Gemini30 notes first (2026-10-07):** `eval_boxes/gemini30_notes_v1.json`, grouped in
+  `synth_progress.md` "2026-10-07 (CPU)". Main point: over-selection of plainly different patterns (colour, spacing,
+  texture, direction); roof plans teach direction invariance by design (`revit_plans.py`), a suspect for #029.
 - **Baselines need prediction maps too (2026-10-07, CPU):** review pages (Gemini Failure Review, Model Results) draw
   overlays from `--save-probs`, which the baseline runs did not keep, so each page costs a CPU rescore (~20 min per model
   per 15 sheets at 4096 on the 4-core box; `--q-batch 2` there, 8 runs out of 16 GB). For every new baseline run with

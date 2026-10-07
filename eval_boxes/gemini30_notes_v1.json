@@ -1,0 +1,195 @@
+{
+ "_meta": {
+  "what": "user's per-question notes from the Gemini Failure Review artifact (claude.ai/artifact/W5FqgEoTubFgJZwwiGDHPb), 2026-10-07; model longswiss-swa37-41 @4096, boxes eval_boxes/gemini30_v1.json",
+  "key": "<image_index>_<question>"
+ },
+ "00_01": {
+  "sheet": "r2 #002",
+  "file": "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa.json",
+  "family": "pattern2",
+  "iou": 0.6849,
+  "pred_over_target": 0.76,
+  "box": "user",
+  "note": "so because text was selected, it selects text? Interesting. raises the question if we should prevent end users from selecting a box over text"
+ },
+ "00_03": {
+  "sheet": "r2 #002",
+  "file": "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa.json",
+  "family": "pattern2",
+  "iou": 0.6396,
+  "pred_over_target": 1.08,
+  "box": "user",
+  "note": "does the door symbol affect the model here? I don't know..."
+ },
+ "01_00": {
+  "sheet": "r2 #004",
+  "file": "r2_floz_gen_004_png.rf.b95e99dfc5b01aed19fef4ef0fc6fa42.json",
+  "family": "pattern1",
+  "iou": 0.8486,
+  "pred_over_target": 0.91,
+  "box": "user",
+  "note": "I don't know how..."
+ },
+ "03_04": {
+  "sheet": "r2 #028",
+  "file": "r2_floz_gen_028_png.rf.067e58ce013079340017c60f3659a3c7.json",
+  "family": "pattern1",
+  "iou": 0.849,
+  "pred_over_target": 1.15,
+  "box": "automatic",
+  "note": "tiny box so I'm willing to forgive"
+ },
+ "04_02": {
+  "sheet": "r2 #029",
+  "file": "r2_floz_gen_029_png.rf.4ff651527e851461775128a1b3e97f49.json",
+  "family": "pattern2",
+  "iou": 0.34,
+  "pred_over_target": 2.86,
+  "box": "automatic",
+  "note": "this is the one that concerns me about roof plans affecting other plans. the model treats the diagonal pattern and horizontal pattern the same like it's a roof plan... (though they're also at different spacings)"
+ },
+ "06_03": {
+  "sheet": "r2 #046",
+  "file": "r2_floz_gen_046_png.rf.4dab24552f8e4c840264826547bd047a.json",
+  "family": "pattern1",
+  "iou": 0.81,
+  "pred_over_target": 0.85,
+  "box": "automatic",
+  "note": "Another bad roof plan..."
+ },
+ "07_10": {
+  "sheet": "r2 #053",
+  "file": "r2_floz_gen_053_png.rf.74315aef67cce6cde356dbb518d430ae.json",
+  "family": "pattern3",
+  "iou": 0.4966,
+  "pred_over_target": 1.93,
+  "box": "automatic",
+  "note": "tbh, low quality box"
+ },
+ "08_02": {
+  "sheet": "r2 #060",
+  "file": "r2_floz_gen_060_png.rf.3a2f2571d4ac7d749b229200267474ab.json",
+  "family": "pattern2",
+  "iou": 0.7552,
+  "pred_over_target": 1.19,
+  "box": "automatic",
+  "note": "while the random splotches on the darker brick are bad enough, I just cannot fathom how that splotch appears on that door."
+ },
+ "08_04": {
+  "sheet": "r2 #060",
+  "file": "r2_floz_gen_060_png.rf.3a2f2571d4ac7d749b229200267474ab.json",
+  "family": "pattern3",
+  "iou": 0.5809,
+  "pred_over_target": 1.1,
+  "box": "automatic",
+  "note": "I got nothing for this. I have no idea how the model could take this large, clear box and provide such a bad result."
+ },
+ "10_05": {
+  "sheet": "r3 #019",
+  "file": "r3_floz_gen_019_png.rf.b2e59486373ed8a810dd48959886e251.json",
+  "family": "pattern2",
+  "iou": 0.2663,
+  "pred_over_target": 3.51,
+  "box": "automatic",
+  "note": "egregious, and I wonder if it's because the box is so small. the shingles type pattern is totally different from the vertical lines"
+ },
+ "11_00": {
+  "sheet": "r3 #023",
+  "file": "r3_floz_gen_023_png.rf.65a229ac3e962568a96193f768493d9f.json",
+  "family": "pattern1",
+  "iou": 0.7293,
+  "pred_over_target": 1.19,
+  "box": "user",
+  "note": "inexplicable where the random splotches end up. the pattern is pretty clear and well selected"
+ },
+ "16_05": {
+  "sheet": "r3 #048",
+  "file": "r3_floz_gen_048_png.rf.c2b8d4d44b146f18b8c99587e56ead5c.json",
+  "family": "pattern1",
+  "iou": 0.6947,
+  "pred_over_target": 1.42,
+  "box": "automatic",
+  "note": "there's no way it should be getting the different colored and spaced roof"
+ },
+ "16_10": {
+  "sheet": "r3 #048",
+  "file": "r3_floz_gen_048_png.rf.c2b8d4d44b146f18b8c99587e56ead5c.json",
+  "family": "pattern3",
+  "iou": 0.7692,
+  "pred_over_target": 1.25,
+  "box": "automatic",
+  "note": "ooh, this one's a bit of a labelling error from me on the bottom right. though still some other errors"
+ },
+ "17_00": {
+  "sheet": "r4 #016",
+  "file": "r4_floz_gen_016_png.rf.c4425d65ee83b83dac8c2a519993e0cf.json",
+  "family": "pattern1",
+  "iou": 0.5014,
+  "pred_over_target": 0.51,
+  "box": "automatic",
+  "note": "another roof problem... though I wonder how much of that is an issue with gemini, being a genAI model, not keeping things consistent"
+ },
+ "17_11": {
+  "sheet": "r4 #016",
+  "file": "r4_floz_gen_016_png.rf.c4425d65ee83b83dac8c2a519993e0cf.json",
+  "family": "pattern2",
+  "iou": 0.6159,
+  "pred_over_target": 1.53,
+  "box": "automatic",
+  "note": "particularly egregious - that's a totally different pattern"
+ },
+ "18_05": {
+  "sheet": "r4 #031",
+  "file": "r4_floz_gen_031_png.rf.fa85187bc39626f8f2c3113f023ddd92.json",
+  "family": "pattern2",
+  "iou": 0.704,
+  "pred_over_target": 1.4,
+  "box": "user",
+  "note": "you can see the model doesn't fully select the bathroom... almost like in the back of its mind it knows the pattern is different"
+ },
+ "19_00": {
+  "sheet": "r4 #041",
+  "file": "r4_floz_gen_041_png.rf.22b99d70d7fff3839ab2ccc7848efd8d.json",
+  "family": "pattern1",
+  "iou": 0.2678,
+  "pred_over_target": 0.65,
+  "box": "automatic",
+  "note": "on the misses, I can't really tell if that was gemini messing up spacing/style consistency or not.\non the over selects, that's pretty bad because that under pattern is clearly different."
+ },
+ "20_06": {
+  "sheet": "r4 #050",
+  "file": "r4_floz_gen_050_png.rf.a238a4cdc3f1d20ef326de527d9d8c1b.json",
+  "family": "pattern3",
+  "iou": 0.7696,
+  "pred_over_target": 1.1,
+  "box": "user",
+  "note": "I might be willing to forgive this one, since I drew it over an edge, so it select similar looking windows"
+ },
+ "23_00": {
+  "sheet": "r4 #060",
+  "file": "r4_floz_gen_060_png.rf.236f39e443a061190d0e85df4b11b675.json",
+  "family": "pattern1",
+  "iou": 0.8049,
+  "pred_over_target": 0.84,
+  "box": "user",
+  "note": "the model has a bit of ways to go to learn furniture..."
+ },
+ "26_04": {
+  "sheet": "r4 #078",
+  "file": "r4_floz_gen_078_png.rf.0e85ee027128006522c34b9f71f8b8e1.json",
+  "family": "pattern2",
+  "iou": 0.2065,
+  "pred_over_target": 4.8,
+  "box": "automatic",
+  "note": "the lines are obviously completely different colors - not even remotely similar. the model should've learned this. moreover, the pattern1 lines are clearly more spaced apart than the other two..."
+ },
+ "28_03": {
+  "sheet": "r4 #098",
+  "file": "r4_floz_gen_098_png.rf.40841ba840028a86f397d470e8768634.json",
+  "family": "pattern2",
+  "iou": 0.707,
+  "pred_over_target": 1.33,
+  "box": "automatic",
+  "note": "kinda similar to 041 - the piping is clearly different from the stripes!\nalso, look at the balcony door on the left - are we failing in our synth to tell that a balcony door continues behind the railing?\nthere's also the issue of all the narrow regions surrounding the pattern regions/walls getting selected - as if they're posts. does our synth not have that?"
+ }
+}

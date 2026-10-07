@@ -956,3 +956,26 @@ One seed (7), swin_t, 2048, ROI add; hand boxes @4096 unless noted. Pools `gener
   model 0.8152 -> **0.8255** on Gemini30 (#091's three questions 0.09-0.50 -> 0.94-0.95). Every Gemini30 number
   above is on v1 labels.
 
+
+### 2026-10-07 (CPU) -- the user's notes on the Gemini30 failures
+
+21 notes on the best synthetic model's Gemini30 questions (`eval_boxes/gemini30_notes_v1.json`; the review page is
+claude.ai/artifact/W5FqgEoTubFgJZwwiGDHPb). What they say, grouped:
+- **Over-selects patterns that are plainly different** (most of the loss): different colour (r4 #078 q4/q7, 0.21/0.26),
+  different spacing (#078 pattern1; r3 #048 q5 roof in another colour and spacing), different texture (r3 #019 q5 shingles
+  vs vertical lines, 0.27; r4 #016 q11; r4 #041 q0; r4 #098 q3 piping vs stripes), different direction at different
+  spacing (r2 #029 q2 diagonal vs horizontal, 0.34).
+- **Roof-plan habits leaking onto other sheets** (user's hypothesis, #029 / #046 / #016). Supported by the generator:
+  `revit_plans.py` makes one roof family's lines turn with each facet's eave and treats eave lines vs seams
+  (90 deg apart) as the same look; same-look roof families must differ in spacing or tone. Roof plans therefore teach
+  that line direction is not a cue. Unchecked: whether any elevation / floor-plan pool has two families that differ
+  only in direction (which would teach the opposite).
+- **Isolated splotches** in unrelated places (r2 #060 door, r3 #023, dark brick). Dropping prediction blobs below 1%
+  of the prediction's area: Gemini30 0.8244 -> 0.8298 (+0.005, 138 better / 45 worse; CPU probs, threshold picked on
+  the same set). Visible but cheap in IoU: not where the gap is.
+- **Narrow strips between regions selected, as if posts** (#098). **Door behind a balcony railing** (#098): check the
+  railing exclusion rule against doors.
+- **Box quality:** a box over text selects text (r2 #002 q1, product question: stop users boxing over text?); tiny
+  or poor automatic boxes (r2 #028 q4, r2 #053 q10, r3 #019 q5); a box over an edge (r4 #050 q6).
+- **Labels / Gemini:** r3 #048 q10 bottom right is a labelling error; r4 #016 / #041 Gemini may be inconsistent in
+  spacing. Floor-plan furniture still confuses the model (r4 #060), and r4 #031 q5 half-selects a bathroom.
