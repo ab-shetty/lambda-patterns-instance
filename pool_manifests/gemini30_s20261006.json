@@ -1,6 +1,6 @@
 {
  "what": "Gemini eval set: 30 sheets drawn at random (random.Random(20261006).sample over r2+r3+r4 clean annotation files sorted by round then name); file names are <round>_<original name>",
- "source_round_version": "Roboflow floz-gen-gemini-r2 v1, r3 v1, r4 v2 (r4 v2 differs from v1 only on #091, the user's label fix; build the pool from r4 v2 so #091 has roof = pattern2, wall = pattern1)",
+ "source_round_version": "Roboflow floz-gen-gemini-r2 v1, r3 v1 + r3 v3's #048 fix, r4 v2. r4 v2 differs from v1 only on #091 (roof = pattern2, wall = pattern1). r3 v3 (generated 2026-10-07, no preprocessing / augmentation) differs from v1 on #048 only by one added pattern3 piece (bottom right, the user's label fix); it is APPENDED as the sheet's last instance (q23) so every other question keeps its automatic box",
  "boxes": "eval_boxes/gemini30_v1.json",
  "sheets": [
   "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa.json",
