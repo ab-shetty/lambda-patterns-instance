@@ -14,6 +14,7 @@ Roof and floor plan sheets fall through to v6 unless --revit-plans (revit_plans.
 annotation JSON is v6's format, so tight-crop / real-labelling / res-degrade in
 v6's _job apply unchanged.
 """
+import copy
 import math
 import random
 
@@ -130,6 +131,92 @@ def plant_colour_pair(styles, shaded, app, fam_seed, S_guess, has_chimney):
     _finish_style(st, shaded, app)
     styles[fam] = st
     return fam
+
+
+# ---- near-miss pairs (FC.NEAR_PAIRS, --near-pairs P, default 0.35 since 2026-10-07): two labelled
+# families on one elevation that differ in ONE attribute. The invariance probe (scripts/probes/
+# make_invariance_probe.py) showed the best synthetic model merges walls that differ only in line
+# direction (100% leak: H vs V vs 45), spacing up to 2x, fill dE ~20, or grey wash vs bare lines, and the
+# pools never ask it to separate them: no family pair differed only in direction, same-texture pairs
+# were 10% of synthetic vs 19% of Gemini pairs, and distinct_looks re-draws look-alikes into another
+# kind. Gemini r4 #098 (vertical boards vs a horizontal-line roof), #078 (tan vs olive lap at 1.8x
+# spacing) and #041 (grey-washed vs bare lines) are these pairs. With probability P one pair, A and B:
+#   direction  lap (horizontal) vs vertical boards at the SAME spacing, colour and pen;
+#   spacing    the same kind, colour and pen, spacing 1.4-2x apart (distinct_looks' own 1.4x line);
+#   tone       the same pattern, fill dE 10-30 (colour sheets) or a grey wash vs bare paper (line-only).
+# A = the main wall (a plain one gets lines); B = an upper-storey / wing accent if the house has one, else the
+# roof (drawn as plain lines, as on HF14 25 / 27). Own RNG: P = 0 is byte-identical.
+LINE_KINDS = ("lap", "vertical", "bb")
+
+
+def _copy_style(st, fam):
+    out = copy.copy(st)          # every attribute (callout, ...), params copied so the two stay apart
+    out.params, out.label_name = dict(st.params), fam
+    return out
+
+
+def _callout(st, rr):
+    st.callout = rr.choice(G.CALLOUT.get(st.kind, ["FINISH"]))
+
+
+def _shift_colour(rgb, rr, lo, hi):
+    """A colour dE lo..hi away in CIELAB, lightness within +-8."""
+    L0, a0, b0 = _lab(rgb)
+    for _ in range(40):
+        d = rr.uniform(lo, hi)
+        dl = rr.uniform(-min(8, d * 0.6), min(8, d * 0.6))
+        r_ab = math.sqrt(max(0.0, d * d - dl * dl))
+        h = rr.uniform(0, 2 * math.pi)
+        c = _rgb_from_lab(min(92, max(25, L0 + dl)), a0 + r_ab * math.cos(h), b0 + r_ab * math.sin(h))
+        if lo <= math.dist(_lab(c), (L0, a0, b0)) <= hi + 4:
+            return c
+    return None
+
+
+def plant_near_pair(styles, shaded, fam_seed, accent_zone):
+    rr = random.Random(fam_seed * 173 + 61)      # own stream: the sheet's RNG is untouched
+    if rr.random() >= FC.NEAR_PAIRS[0]:
+        return None
+    fa = "main"          # a plain main wall is given a line pattern below: the accent may be a thin band
+    # B must be a big region to teach anything (and to give references): an upper storey or a wing
+    # accent, else the roof; a gable triangle or a wainscot band is too small (measured: B unmeasurable
+    # on most such sheets)
+    fb = "accent" if "accent" in styles and accent_zone in ("upper", "block") else "roof"
+    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30])[0]
+    A = styles[fa]
+    if A.kind not in LINE_KINDS or (what == "direction" and A.kind == "bb"):
+        A.kind = rr.choice(["lap", "vertical"])
+        A.params = {"sp": rr.choice([0.33, 0.42, 0.5, 0.58, 0.67])}
+        _callout(A, rr)
+    A.params["sp"] = A.params.get("sp", 0.5)
+    if A.kind == "lap":
+        A.params["shadow"] = False          # plain lines: the pair differs in the one attribute only
+    B = _copy_style(A, fb)
+    if what == "direction":
+        B.kind = "vertical" if A.kind == "lap" else "lap"
+        B.params = {"sp": A.params["sp"]}
+        _callout(B, rr)
+        if B.kind == "lap":
+            B.params["shadow"] = False
+    elif what == "spacing":
+        f = rr.uniform(1.4, 2.0)
+        sp = A.params["sp"]
+        B.params["sp"] = sp * f if (sp * f <= 1.4 and rr.random() < 0.5) or sp / f < 0.22 else sp / f
+    else:
+        if shaded:
+            c = _shift_colour(A.base, rr, 10, 30)
+            if c is None:
+                return None
+            B.base = c
+            lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+            B.line = G.mix(c, (0, 0, 0), 0.35) if lum > 90 else G.mix(c, (255, 255, 255), 0.3)
+        else:               # line-only sheet: one family on a grey wash, the other on bare paper
+            g = rr.randint(190, 222)
+            (A if rr.random() < 0.5 else B).base = (g, g, g)
+    if fb == "roof":
+        B.callout = styles["roof"].callout      # the roof keeps its roof note
+    styles[fa], styles[fb] = A, B
+    return fa, fb, what
 
 
 # ---- colour markup (G.MARKUP, --markup P): 5 of HF14's 14 sheets are line drawings with
@@ -420,6 +507,7 @@ def compose_revit(image_id, seed, mode_weights):
                 if st.kind in ("stipple", "stucco", "concrete", "dots"):
                     continue        # sparse pale dots vanish at 2048: a labelled wall that reads blank
                 st.line, st.lw = (v,) * 3, max(1.0, st.lw * k_lw)
+    near = plant_near_pair(styles, shaded, fam_seed, house["accent"]) if FC.NEAR_PAIRS[0] > 0 else None
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):
@@ -443,6 +531,8 @@ def compose_revit(image_id, seed, mode_weights):
         label_fams = {f for f in label_fams if styles.get(f) is None or styles[f].kind != "flat"}
     if pair_fam:                # the planted pair is always a question
         label_fams |= {pair_fam, "roof"}
+    if near:                    # so is a near-miss pair: both families labelled, as two
+        label_fams |= set(near[:2])
     hole_mode = r.random() < G.WINDOW_HOLE_PROB
     mk = None
     if getattr(G, "MARKUP", 0) > 0 and not shaded:
@@ -708,6 +798,8 @@ def compose_revit(image_id, seed, mode_weights):
     out = {"image": {"file_name": f"synth6_{image_id:06d}.png", "width": W, "height": H},
            "mode": "elevation", "appearance": "colour" if shaded else "markup" if mk is not None else "mono_normal",
            "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
+    if near:
+        out["near_pair"] = {"families": list(near[:2]), "differs": near[2]}
     rx = FC.ref_exclude_rings(excl_px, W, H)
     if rx:
         out["ref_exclude"] = rx

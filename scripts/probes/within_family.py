@@ -7,6 +7,9 @@ sys.path.insert(0, '.')
 from family_pairs import fam_desc, lab_of, LONG, DIR_TOL, SP_TOL
 from refmask2former.dataset import render_instance_mask
 
+ONE_DIR = '--one-dir' in sys.argv
+
+
 def run(pool):
     res = collections.defaultdict(lambda: collections.Counter())
     for f in sorted(glob.glob(f'{pool}/annotations/*.json')):
@@ -18,7 +21,11 @@ def run(pool):
         for x in a['annotations']:
             m = cv2.resize(render_instance_mask(x['segmentation'], h0, w0).astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
             d = fam_desc(img, lab, m, rng)
-            if d and d['line'] > 8: per[x['category_name']].append(d)     # measurable, clearly periodic pieces
+            if d and d['line'] > 8:     # measurable, clearly periodic pieces
+                hg = np.array(d['hist'])     # bin 0 = main line direction; a grid has a second peak at 90 deg (bin 9)
+                if ONE_DIR and max(hg[8:11]) > 0.5 * max(hg[[17, 0, 1]]):
+                    continue                # two-way pattern (grid, brick, tile): direction is ambiguous
+                per[x['category_name']].append(d)
         mode = a.get('mode', '?')
         for c, ds in per.items():
             if len(ds) < 2: continue
@@ -28,7 +35,7 @@ def run(pool):
             res[mode]['families'] += 1; res[mode]['pieces turn'] += turn; res[mode]['spacing jumps'] += jump
     return res
 
-for pool in sys.argv[1:]:
+for pool in [a for a in sys.argv[1:] if not a.startswith('--')]:
     for mode, c in sorted(run(pool).items()):
         n = c['families']
         if n: print(f'{pool.split("/")[-1][:34]:34s} {mode:10s} families with 2+ measurable pieces: {n:4d}; pieces turn: {100 * c["pieces turn"] / n:3.0f}%; spacing jumps > {SP_TOL}x: {100 * c["spacing jumps"] / n:3.0f}%')

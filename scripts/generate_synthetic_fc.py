@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-04"
+GEN_VERSION = "2026-10-07"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -73,6 +73,17 @@ DOWNSPOUTS = [0.05]
 # the labels (the material continues behind them); training and mining draw REFERENCE boxes
 # from the label minus these, so a reference is never a crop of a post or a bed. 0 = omit.
 REF_EXCLUDE = [True]
+# --near-pairs P / --near-pairs-plan P (defaults 0.35 / 0.6 since 2026-10-07; finish sheets are ~40% of
+# floor plans, so 0.6 plants a pair on ~15% of them): an elevation / a finish floor plan gets two labelled families that differ in ONE attribute (direction, spacing 1.4-2x, or
+# tone / colour dE 10-30); see revit_render.plant_near_pair and revit_plans.plant_near_pair_plan.
+# 0 = earlier pools.
+NEAR_PAIRS = [0.35]
+NEAR_PAIRS_PLAN = [0.6]
+# --balcony-doors P (default 0.7 since 2026-10-07): an upper-floor balcony railing gets a door in the
+# wall behind it (cut out of the wall label like every door; the railing still draws over it), as on
+# Gemini r4 #098. Before, doors existed only at grade, so every synthetic railing stood in front of
+# siding. Needs --railings > 0. 0 = earlier pools.
+BALCONY_DOORS = [0.7]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -434,6 +445,32 @@ def _railing(house, view, walls_by_block, fh, rr):
             "stair": stair, "bi": bi, "standing": standing, "ref_excl": standing + excl}
 
 
+def _balcony_door(railing, walls_by_block, openings, fh, view):
+    """--balcony-doors P: an upper-floor balcony gets a door (or a slider) in the wall behind its
+    railing, from the deck up 6.8 ft. It is an ordinary opening -- cut from the wall label, drawn as a
+    door -- with the railing drawn over its lower part, so the labelled siding stops at the door frame
+    behind the pickets. Windows it would overlap are removed. Own RNG per view."""
+    a, b, deck_y = railing["deck"]
+    if deck_y > -fh + 0.1:                   # ground decks: the doors there are the grade doors
+        return
+    dr = random.Random(_CUR[0] * 911 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 13 + 5)
+    if dr.random() >= BALCONY_DOORS[0]:
+        return
+    bi = railing["bi"]
+    wall = unary_union([F["vis"] for F in walls_by_block[bi]])
+    dw = 3.0 if dr.random() < 0.6 else 6.0
+    if b - a < dw + 2.0:
+        dw = 3.0
+    if b - a < dw + 2.0:
+        return
+    du = dr.uniform(a + 1.0, b - 1.0 - dw)
+    p = G.rect(du, deck_y, du + dw, deck_y - 6.8)
+    if not p.within(wall.buffer(0.01)):
+        return
+    openings[:] = [o for o in openings if not (o["block"] == bi and o["poly"].buffer(0.5).intersects(p))]
+    openings.append({"poly": p, "type": "door", "block": bi})
+
+
 def build_elevation_fc(house, view, rng):
     spec, faces = _FACES[_CUR[0]]
     blocks, chim = spec["blocks"], spec.get("chimney")
@@ -544,6 +581,8 @@ def build_elevation_fc(house, view, rng):
             if railing is not None:
                 trims += railing["cut"]
                 standing += railing["standing"]
+                if BALCONY_DOORS[0] > 0:
+                    _balcony_door(railing, walls_by_block, openings, fh, view)
     downspouts = _downspouts(house, view, walls_by_block, openings) if DOWNSPOUTS[0] > 0 else []
     ref_excl = (list(porch["posts"]) if porch else []) + (railing["ref_excl"] if railing else []) + downspouts
     # labels are cut by every trim except the standing posts (unless --cut-standing 1); the
@@ -690,6 +729,9 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
     DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.05))
     REF_EXCLUDE[0] = bool(flags.pop("ref_exclude", 1))
+    NEAR_PAIRS[0] = float(flags.pop("near_pairs", 0.35))
+    NEAR_PAIRS_PLAN[0] = float(flags.pop("near_pairs_plan", 0.6))
+    BALCONY_DOORS[0] = float(flags.pop("balcony_doors", 0.7))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -781,6 +823,16 @@ def main():
     ap.add_argument("--ref-exclude", type=int, choices=[0, 1], default=1,
                     help="1 (default) = annotation files carry ref_exclude (posts, railings, stairs, downspouts, solid "
                          "furniture, rugs) so reference boxes avoid them; 0 omits it (earlier pools' files)")
+    ap.add_argument("--near-pairs", type=float, default=0.35,
+                    help="Revit elevations: probability of two labelled families differing in ONE attribute (line "
+                         "direction, spacing 1.4-2x, or tone / colour). Default 0.35 since 2026-10-07; 0 = earlier pools")
+    ap.add_argument("--near-pairs-plan", type=float, default=0.6,
+                    help="Revit finish floor plans: probability of two labelled floor families differing in ONE "
+                         "attribute (orthogonal vs diagonal lines, spacing 1.4-2x, or tone). Default 0.6 since "
+                         "2026-10-07; 0 = earlier pools")
+    ap.add_argument("--balcony-doors", type=float, default=0.7,
+                    help="Revit elevations with --railings: probability an upper-floor balcony has a door behind its "
+                         "railing (cut from the wall label). Default 0.7 since 2026-10-07; 0 = earlier pools")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -838,6 +890,9 @@ def main():
     flags["cut_standing"] = args.cut_standing
     flags["downspouts"] = args.downspouts
     flags["ref_exclude"] = args.ref_exclude
+    flags["near_pairs"] = args.near_pairs
+    flags["near_pairs_plan"] = args.near_pairs_plan
+    flags["balcony_doors"] = args.balcony_doors
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

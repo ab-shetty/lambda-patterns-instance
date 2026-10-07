@@ -1619,6 +1619,63 @@ def _separate(kind, params, base, others):
         params[key] = (s2 * 1.6 if mine >= s2 else s2 / 1.6) / f
 
 
+# ---- near-miss floor pairs (FC.NEAR_PAIRS_PLAN, --near-pairs-plan P, default 0.6 since 2026-10-07):
+# _distinct / _separate keep every two floor families of one pattern type >= 1.4x apart in spacing or
+# clearly apart in tone, and direction never separates two families, so the model was never asked
+# to tell orthogonal from diagonal lines, a 1.5x spacing step or a grey wash from bare lines on one
+# plan (Gemini r2 #029: diagonal vs horizontal lines; the invariance probe: 100% leak across
+# direction). With probability P a finish plan gets one pair of zones whose floors differ in ONE
+# attribute:
+#   direction  orthogonal lines (plank_lines 0 / 90) vs diagonal hatch (hatch45 +-45), same spacing, pen
+#              and fill. Materials never turn inside a family on these plans (one "ang" per material),
+#              and a turn of 45 deg is never a plank re-laid along a room, so this does not contradict the
+#              roof facets that turn;
+#   spacing    the same pattern 1.4-2x apart (the _distinct line itself);
+#   tone       the same pattern and pen on a fill 25-45 grey levels apart (or bare paper vs a wash).
+# Zone A keeps its material (made a line pattern if it has no spacing); zone B gets the variant. Runs
+# after _separate_all, which would otherwise push the pair apart. Own RNG: P = 0 is byte-identical.
+def plant_near_pair_plan(zone_mat, zones_present, colour, fam_seed):
+    rr = random.Random(fam_seed * 181 + 71)
+    if rr.random() >= FC.NEAR_PAIRS_PLAN[0]:
+        return None
+    order = [z for z in ("living", "bed", "wet", "garage") if z in zones_present]
+    za = next((z for z in order if zone_mat.get(z) is not None), None)
+    zb = next((z for z in order if z != za and z != "garage"), None) or next((z for z in order if z != za), None)
+    if za is None or zb is None:
+        return None
+    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30])[0]
+    A = zone_mat[za]
+    if what == "direction" and A["kind"] not in ("plank_lines", "hatch45") or _spacing(A, A["kind"])[0] is None:
+        A = dict(A, kind="plank_lines", sp=rr.uniform(0.4, 0.75), ang=rr.choice([0, 90]))
+        for k in ("w", "unit", "density", "fill", "jit", "tri", "r_px"):
+            A.pop(k, None)
+        # every zone that shared the old material keeps sharing it (one family)
+        for z, m in list(zone_mat.items()):
+            if m is zone_mat[za] and z != za:
+                zone_mat[z] = A
+        zone_mat[za] = A
+    B = dict(A)
+    if what == "direction":
+        if A["kind"] == "plank_lines":
+            B["kind"], B["ang"] = "hatch45", rr.choice([45, -45])
+        else:
+            B["kind"], B["ang"] = "plank_lines", rr.choice([0, 90])
+    elif what == "spacing":
+        key = _spacing(A, A["kind"])[0]
+        f = rr.uniform(1.4, 2.0)
+        B[key] = A[key] * f if rr.random() < 0.5 else A[key] / f
+    else:
+        g = int(round(_lum(A["base"])))
+        if g >= 236 or (not colour and rr.random() < 0.5):
+            v = rr.randint(195, max(196, min(215, g - 25)))  # a grey wash beside bare / near-white paper
+            B["base"] = (v, v, v) if not colour else G.mix(A["base"], (90, 90, 90), (g - v) / max(1, g - 90))
+        else:
+            B["base"] = (255, 255, 255) if g <= 225 or rr.random() < 0.5 else G.mix(A["base"], (0, 0, 0), 0.15)
+    B["seed"] = A["seed"] + 7
+    zone_mat[zb] = B
+    return za, zb, what
+
+
 def _separate_all(mats):
     """Floor materials (dicts) in order; identical objects are one family and skipped."""
     done, seen = [], set()
@@ -2262,6 +2319,12 @@ def compose_floor(image_id, seed, mode_weights):
                 m["r_px"] = 2
             m["line"] = G.mix(m["line"], m["base"], k_l * (0.4 if m["kind"] == "carpet" else 1.0))
 
+    near_fl = None
+    if sheet == "finish" and FC.NEAR_PAIRS_PLAN[0] > 0:
+        near_fl = plant_near_pair_plan(zone_mat, [rm["zone"] for rm in rooms], colour, fam_seed)
+        if near_fl is not None:
+            floor_fams = floor_fams + [(zone_mat[z]["kind"], zone_mat[z], zone_mat[z]["base"]) for z in near_fl[:2]]
+
     # ---- layout
     allg = unary_union([foot] + hard_polys + ([soffit] if soffit is not None else []))
     ex0, ey0, ex1, ey1 = allg.bounds
@@ -2767,4 +2830,7 @@ def compose_floor(image_id, seed, mode_weights):
         if fc is not None:
             canvas, labelled = fc
             H, W = canvas.shape[:2]
-    return canvas, _annotations(labelled, S, W, H, image_id, "freeform", colour)
+    ann = _annotations(labelled, S, W, H, image_id, "freeform", colour)
+    if near_fl is not None:
+        ann["near_pair"] = {"zones": list(near_fl[:2]), "differs": near_fl[2]}
+    return canvas, ann

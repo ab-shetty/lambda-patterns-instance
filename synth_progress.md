@@ -1003,12 +1003,13 @@ of the other panel selected):
 | lap vs shingle courses / vs brick | 0.00-0.10 |
 | board vs board-and-batten | 0.99 / 1.00 |
 
-**2. Why direction: the synthetic plans teach it, by design.** Measured on 300 fresh sheets (long-pool flags + Swiss,
-`within_family.py`): the pieces of one labelled family turn in 74% of roof-plan families and 71% of floor-plan
-families (facets turn with the eave; `revit_plans.py` floor rule: "Direction never counts: a pattern that turns is
-still the same family"; `LOOK` puts hatch / hatch45 / plank / joists in one class), vs 17% in elevations (~noise).
-And no synthetic sheet has two families that differ ONLY in direction (0 of 147 pairs). So 34% of training sheets
-reward ignoring direction and none punish it. The training flips / rotations are shared by image and reference,
+**2. Why direction: the roof plans teach it, by design, and nothing teaches the opposite.** Measured on 300 fresh
+sheets (long-pool flags + Swiss, `within_family.py --one-dir`, one-direction patterns only): the pieces of one
+labelled family turn in 65% of roof-plan families (facets turn with the eave) vs 7% of elevation families (the
+measurement's noise floor). [Corrected 2026-10-07: an earlier count said 71% of floor-plan families turn; that was
+tile grids, whose two equal directions flip the FFT peak. Synthetic floors keep one direction per material.] The
+floor-plan rule ("Direction never counts", `LOOK` puts hatch / hatch45 / plank / joists in one class) means no two
+floor families ever differ by direction alone, and no synthetic sheet of any kind had such a pair (0 of 147). The training flips / rotations are shared by image and reference,
 so augmentation is not the cause. Gemini families turn too (26-36%; sheet types unknown), so turning roof facets
 are right -- what is missing is elevations / plans where direction is the only difference (H lap vs V board, H vs
 diagonal hatch), e.g. r4 #098 (V board-and-batten selects the H roof lines) and r2 #029 (diagonal vs horizontal).
@@ -1057,3 +1058,33 @@ texture, different spacing (1.3-2x) or colour / tone (dE 10-30) as separate fami
 pairs; (c) balcony doors behind railings, door cut from the label; (d) room tags out of references (fix (b)). Re-run
 `make_invariance_probe.py` on every candidate: the probe takes ~20 min on CPU and shows directly whether a pool fixed
 the invariance.
+
+### 2026-10-07 (CPU) -- generator: near-miss pairs and balcony doors (new defaults, GEN_VERSION 2026-10-07)
+
+From the Gemini30 investigation above. All three are DEFAULTS (own RNG streams; `--near-pairs 0 --near-pairs-plan 0
+--balcony-doors 0` reproduces the 2026-10-04 generator byte for byte, checked on 60 sheets: elevations, roof and floor
+plans, railings 0.6). Every pool built before is stale for `scripts/pool_guard.sh`.
+
+- **`--near-pairs 0.35` (elevations, `revit_render.plant_near_pair`):** two labelled families that differ in ONE
+  attribute: direction (lap vs vertical boards at the same spacing, colour, pen; 40%), spacing (same kind 1.4-2x
+  apart; 30%), tone (fill dE 10-30 on colour sheets, grey wash vs bare paper on line-only; 30%). A = the main wall
+  (a plain one gets lines), B = an upper-storey / wing accent, else the roof drawn as plain lines (a gable triangle
+  or wainscot band is too small to teach anything). Annotation files carry `near_pair`.
+- **`--near-pairs-plan 0.6` (finish floor plans, `revit_plans.plant_near_pair_plan`):** two zones whose floors differ
+  in ONE attribute: orthogonal lines vs diagonal hatch at the same spacing / pen / fill, spacing 1.4-2x, or tone (fill
+  25-45 grey levels apart, or a wash vs bare). Planted after `_separate_all`, which would push them apart. Roof facets
+  still turn inside one family.
+- **`--balcony-doors 0.7` (with `--railings`):** an upper-floor balcony gets a door (or slider) behind its railing,
+  cut from the wall label like every door, the railing drawn over it. Before, doors existed only at grade.
+
+**Measured on 300 sheets, same ids as the 2026-10-04 pool above (long-pool flags + Swiss, railings 0.15):** planted
+pairs on 58 / 201 elevations (23 direction, 14 spacing, 21 tone; both families visible and labelled on 45) and 8 / 54
+floor plans at the 0.35 setting used for the count (raised to 0.6 since: finish sheets are ~40% of plans). Same-texture
+pairs 10% -> 15% of all pairs (elevations 15% -> 24%; Gemini 19%); colour-only pairs 0.7% -> 2.5%, spacing-only
+1.4% -> 3.2%. Rendered tone gaps dE 10.6-32.2 (17 pairs). The descriptor cannot measure most direction pairs (B
+often too fragmented for 96 px patches), so the planted counts are the record there.
+
+**Next (GPU):** a 2k screen of this pool vs the `revitfailswissroi` control (same flags, ids, seed), scored on
+Gemini30 hand boxes @2048 (`eval_baselines/revitfailswiss2k-e8_gemini30_2048.json`; sheet 16 changed, compare on the
+other 29 or rescore), HF14, val -- AND `scripts/probes/make_invariance_probe.py` on both: the probe is the direct
+test (direction leak 1.00 today). Then a long restart of longswiss-swa37-41 on a mined pool from these defaults.
