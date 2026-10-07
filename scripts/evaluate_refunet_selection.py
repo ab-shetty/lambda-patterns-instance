@@ -229,7 +229,8 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--indices", default=HOLDOUT)
+    parser.add_argument("--indices", default="",
+                        help="comma list or 'all'; default HF14 for the real sheets, every sheet for --local-pool")
     parser.add_argument("--image-max-size", type=int, default=1280)
     parser.add_argument("--ref-size", type=int, default=224)
     parser.add_argument("--mask-thresh", type=float, default=0.5)
@@ -269,6 +270,8 @@ def main():
     else:
         records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
                                        config="real-world-test", split="test")
+    if not args.indices:
+        args.indices = "all" if args.local_pool else HOLDOUT
     indices = (list(range(len(records))) if args.indices == "all" else
                [int(value) for value in args.indices.split(",") if value.strip()])
     ckpt_args = checkpoint.get("args", {}) or {}
