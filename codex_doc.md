@@ -46,6 +46,13 @@ One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Det
   when the family has one; slivers stay in the targets); (b) generator writes its own text (room tags, callouts)
   into `ref_exclude`, as Tesseract does for real data; (c) optional: a box-size filter in `build_hard_pool.py`
   so slivers don't count as "hard" (not implemented).
+- **Baselines need prediction maps too (2026-10-07, CPU):** review pages (Gemini Failure Review, Model Results) draw
+  overlays from `--save-probs`, which the baseline runs did not keep, so each page costs a CPU rescore (~20 min per model
+  per 15 sheets at 4096 on the 4-core box; `--q-batch 2` there, 8 runs out of 16 GB). For every new baseline run with
+  `--save-probs` and upload the npz folder to the model's Hub repo (~150 MB, not git). CPU and GPU agree: mean
+  difference +0.00003 over 94 Gemini questions, max 0.0097 per question. `--local-pool` now scores every sheet by
+  default (it used to take the 14 HF14 numbers). Pending: Model Results with longswiss replacing Revit 10k needs the
+  28 real sheets rescored with `--save-probs` (builder in the CPU session's scratchpad was not committed; ~30 min).
 - **Next, in order:** (0) fixes (a)-(b) above for every new pool / run; (1) generator: same line pattern, different fill tone / colour as separate labelled
   families on one sheet (measure how often pools have them; `--colour-pairs`, `distinct_looks`); grey-wash vs
   bare-line framing plans; (2) another long restart of longswiss-swa37-41 on a freshly mined pool (steps have
