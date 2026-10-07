@@ -979,3 +979,81 @@ claude.ai/artifact/W5FqgEoTubFgJZwwiGDHPb). What they say, grouped:
   or poor automatic boxes (r2 #028 q4, r2 #053 q10, r3 #019 q5); a box over an edge (r4 #050 q6).
 - **Labels / Gemini:** r3 #048 q10 bottom right is a labelling error; r4 #016 / #041 Gemini may be inconsistent in
   spacing. Floor-plan furniture still confuses the model (r4 #060), and r4 #031 q5 half-selects a bathroom.
+
+### 2026-10-07 (CPU) -- investigating the user's Gemini30 notes: why, and does the synth do it?
+
+Best synthetic model `longswiss-swa37-41` @4096 throughout. Scripts: `scripts/probes/` (invariance probe sheets,
+family-pair and within-family descriptors: line direction + spacing from FFT peaks, fill / ink CIELAB, a
+direction-aligned gradient histogram for texture; validated on the probe sheets, blind to board vs board-and-batten).
+
+**1. The model ignores direction completely, and spacing / subtle colour mostly** (`make_invariance_probe.py`: an
+elevation with two wall panels labelled as two families that differ in ONE attribute; one box per panel; leak = share
+of the other panel selected):
+
+| differs only in | leak (ask A / ask B) |
+|---|---|
+| nothing (control) | 0.99 / 0.99 |
+| direction: H vs V, H vs 45, V vs 45 | 1.00 / 1.00 (all three) |
+| spacing 1.5x | 0.54 / 1.00 |
+| spacing 2x | 0.00 / 0.99 (a sparse reference takes the dense panel too) |
+| fill tan vs olive (dE 21) | 0.80 / 0.46 |
+| fill tan vs blue (dE 45) | 0.00 / 0.00 |
+| ink black vs red | 0.86 / 0.95 |
+| grey wash vs bare (dE 14) | 1.00 / 0.98 |
+| lap vs shingle courses / vs brick | 0.00-0.10 |
+| board vs board-and-batten | 0.99 / 1.00 |
+
+**2. Why direction: the synthetic plans teach it, by design.** Measured on 300 fresh sheets (long-pool flags + Swiss,
+`within_family.py`): the pieces of one labelled family turn in 74% of roof-plan families and 71% of floor-plan
+families (facets turn with the eave; `revit_plans.py` floor rule: "Direction never counts: a pattern that turns is
+still the same family"; `LOOK` puts hatch / hatch45 / plank / joists in one class), vs 17% in elevations (~noise).
+And no synthetic sheet has two families that differ ONLY in direction (0 of 147 pairs). So 34% of training sheets
+reward ignoring direction and none punish it. The training flips / rotations are shared by image and reference,
+so augmentation is not the cause. Gemini families turn too (26-36%; sheet types unknown), so turning roof facets
+are right -- what is missing is elevations / plans where direction is the only difference (H lap vs V board, H vs
+diagonal hatch), e.g. r4 #098 (V board-and-batten selects the H roof lines) and r2 #029 (diagonal vs horizontal).
+
+**3. Near-miss families are rare in the synth, rarer than in Gemini** (`family_pairs.py`, pairs of labelled families
+on one sheet): same texture class 19% of Gemini pairs (128 pairs, 78 sheets) vs 10% synthetic (147 pairs; elevations
+15%, floor plans 2%, roof plans 0%). `distinct_looks` (elevations) and `_distinct` (plans) re-draw any same-look pair
+(same class, spacing < 1.4x, dE < 8), and the GPU session found colour-only pairs are 5% of elevations at dE 32-114.
+So the model is never asked to separate tan from olive lap or grey-washed from bare lines.
+
+**4. Where the excess goes (Gemini30, 171 questions, sheet 16 left out):** half lands in other labelled families
+(5.2% of the union), half in unlabelled area (5.4%). Merges > 2% of a question by what separates the two families:
+spacing + colour (same texture, same direction) 12 -- all r4 #078 (pattern2 vs pattern1: spacing 1.8x, fill dE 17);
+direction + spacing (+texture) 11 (r2 #029, r2 #060, r2 #010); texture-only 5 (r4 #031); 4 unmeasurable (tiny).
+Excess within 16 px of the target's edge (narrow strips, trim, rakes) costs 0.024 IoU, misses within 16 px 0.015,
+far excess 0.068: the strips the user saw on #098 are real but a third of the over-selection cost.
+
+**5. Splotches are low-confidence:** 8,580 small blobs wholly outside the target, mean probability 0.41 (90% < 0.5)
+vs 0.96 on correct pixels. Threshold 0.35 -> 0.5: +0.001 (126 better / 66 worse); dropping blobs < 1% of the
+prediction: +0.005. Visible, nearly free in IoU.
+
+**6. Door behind a balcony railing (r4 #098): the synth never shows one.** `generate_synthetic_fc.py` puts doors
+only at grade (front door, garage); upper floors get windows with sills ~3 ft up, i.e. above the railing. 55% of
+two-storey railings are balconies, so every synthetic railing stands in front of siding and the label always runs on
+behind it. The model learned "railing => siding behind it" and selects the balcony door.
+
+**7. Boxes (counterfactual: same question, box on the family's best piece):** r2 #028 q4 (49 px automatic) 0.849 ->
+0.944; r4 #050 q6 (box over an edge) 0.770 -> 0.865; r4 #098 q3 0.707 -> 0.852; r4 #078 q4 / q7 0.21 / 0.26 -> 0.25
+(not the box: a real merge). r3 #019 q5 and r2 #053 q10 cannot get a better box: every piece of those families is
+<= 50 px. r2 #002 q1 (the user's box over "85 SF"): a box on the other bath, which holds "GUEST BATHROOM", scores
+0.59 vs 0.69 and selects the room-name text all over the sheet (kitchen, living room, hallway). Text in the
+reference makes the model select text. Synthetic floor plans put a bold room tag at every room's centre, inside the
+label, and the box sampler favours deep (central) points, so training references often hold a tag: fix (b) in
+codex_doc (generator text -> ref_exclude) addresses it.
+
+**8. Gemini inconsistency (r4 #016 / #041):** within-family spacing jumps > 1.3x in 32-42% of Gemini families vs
+19% of synthetic elevation families (the descriptor's noise floor); some of it is Gemini, some FFT harmonics.
+r4 #016 pattern1 pieces measure 8.7-19 px, r4 #041 pattern1 turns 0 / 90 / 45 deg at a constant 24 px.
+
+**Label:** r3 #048 fixed by the user (Roboflow r3 v3; also adds newly labelled r3 #016): sheet 0.830 -> 0.862,
+Gemini30 0.8255 -> **0.8295**.
+
+**What to change in the generator, in order:** (a) elevations and floor plans with two labelled families that differ
+ONLY in direction (H lap vs V board at the same spacing; hatch vs hatch45), keeping roof facets turning; (b) same
+texture, different spacing (1.3-2x) or colour / tone (dE 10-30) as separate families -- extends the planned colour
+pairs; (c) balcony doors behind railings, door cut from the label; (d) room tags out of references (fix (b)). Re-run
+`make_invariance_probe.py` on every candidate: the probe takes ~20 min on CPU and shows directly whether a pool fixed
+the invariance.

@@ -46,6 +46,11 @@ One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Det
   when the family has one; slivers stay in the targets); (b) generator writes its own text (room tags, callouts)
   into `ref_exclude`, as Tesseract does for real data; (c) optional: a box-size filter in `build_hard_pool.py`
   so slivers don't count as "hard" (not implemented).
+- **Why the Gemini30 failures happen (2026-10-07, CPU):** `synth_progress.md` "investigating the user's Gemini30
+  notes". The best model is fully direction-blind and merges spacing <= 2x, fill dE ~20, ink colour and grey wash
+  (invariance probe, `scripts/probes/make_invariance_probe.py`). Cause: 71-74% of synthetic plan families turn and no
+  synthetic pair differs only in direction; same-texture pairs are 10% of synthetic vs 19% of Gemini pairs; no
+  synthetic door ever stands behind a railing. Generator changes (a)-(d) listed there come before more mining.
 - **Read the user's Gemini30 notes first (2026-10-07):** `eval_boxes/gemini30_notes_v1.json`, grouped in
   `synth_progress.md` "2026-10-07 (CPU)". Main point: over-selection of plainly different patterns (colour, spacing,
   texture, direction); roof plans teach direction invariance by design (`revit_plans.py`), a suspect for #029.
