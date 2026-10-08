@@ -7,6 +7,38 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## GPU runbook (written 2026-10-08 on CPU -- do this first; supersedes the "Next" lists below)
+
+What changed since the GH200 session: generator defaults (near-miss pairs, balcony doors; GEN_VERSION 2026-10-07),
+training default `--ref-min-side 32` (px at training scale), mining default `--min-ref-side 32`, Gemini #048 relabelled
+(r3 v3), `run_build_realmix.sh` pins r3 v3 (all splits). All smoke-tested on CPU (generator 300 sheets, one CPU training
+epoch on the new pool with every default, build_hard_pool on stand-in scores). Why: `synth_progress.md` sections
+"investigating the user's Gemini30 notes", "near-miss pairs and balcony doors", "slivers".
+
+0. `git pull`; `set -a; . ~/.env; set +a`.
+1. **Rebuild the Gemini30 eval pool** (the box still has #048's old label):
+   `rm -rf data/eval_pools/gemini30_s20261006 && python3 scripts/build_gemini30_pool.py`.
+2. **2k screen, two arms** (pools build themselves; ~2 x the usual 2k time):
+   `EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 "revitnearroi revitfailswissr32roi"`
+   - `revitnearroi` = new pool + ref floor; `revitfailswissr32roi` = the control's pool (byte-identical rebuild) + ref
+     floor. Pool effect = near vs r32; ref-floor effect = r32 vs the published control `revitfailswiss2k-e8`
+     (baselines in `eval_baselines/`, @2048: HF14 0.8090, val 0.7559, Gemini30 0.7239 with #048 fixed, probe file).
+   - Outputs in `data/evaluations/revit2k/<arm>_s7_i{2048,4096}_{val,hf14}.json`, `..._i2048_gemini30.json`,
+     `..._i2048_probe_leak.txt`. Compare paired: `python3 scripts/paired_compare.py --a eval_baselines/revitfailswiss2k-e8_gemini30_2048.json --b data/evaluations/revit2k/revitnearroi_s7_i2048_gemini30.json`
+     (and hf14 / val; and near vs r32 on the same files).
+   - **Read the probe first.** Control leaks 0.81-0.96 across direction, 0.91-0.97 tan vs olive, 0.90-0.98 wash vs
+     bare (`eval_baselines/probe_revitfailswiss2k-e8_2048.json`). The new pool should cut the direction rows clearly
+     (well under 0.5) with no loss on lap vs shingle / brick. If it does not, the pairs are not teaching -- look at
+     the pool before spending more GPU.
+3. **If the probe drops and Gemini30 / HF14 do not lose:** mine on the new defaults and restart the best model.
+   `EXTRA="--roi-ref --roi-ref-mode add" SRC=near NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7`
+   then a 20-epoch restart of `abshetty/floz-refunet-swint-longswiss-swa37-41` on `data/synthetic/revitnear_hard2000`
+   with `run_hard_long.sh` (EP=20, GEN = the failswiss flags, EXTRA ROI), SWA picked on val as for longswiss
+   (`average_checkpoints.py`, `select_epoch_on_val.py`). Score @4096 with hand boxes on HF14 / val / Gemini30 and the
+   probe; compare paired against `eval_baselines/longswiss-swa37-41_*` and `probe_longswiss-swa37-41_4096.json`.
+4. **Save `--save-probs` for every new baseline** and upload the folders to the model's Hub repo, so CPU review pages
+   (Model Results, Gemini Failure Review) need no rescoring.
+
 ## Pick up here (2026-10-06, GH200 session -- read this first)
 
 One seed (7), swin_t, 2048 training, ROI add, hand boxes @4096 unless noted. Detail: `synth_progress.md`

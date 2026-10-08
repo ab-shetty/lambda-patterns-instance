@@ -12,6 +12,10 @@
 #   EXTRA="--roi-ref --roi-ref-mode add" SRC=fail NFRESH=4000 SHARDS=8 ./run_hard_mine.sh 7
 # SRC=failswiss (2026-10-06): the fail settings + Swiss Dwellings floor plans (--plan-source); miner
 # revitfailswissroi (run_revit_2k.sh), mined pool revitfailswiss_hard2000.
+# SRC=near (2026-10-08): the failswiss flags with the 2026-10-07 generator defaults (near-miss pairs,
+# balcony doors); miner revitnearroi (run_revit_2k.sh); sliver questions (< 32 px) are left out of
+# hardness (build_hard_pool.py default). Mined pool revitnear_hard2000.
+#   EXTRA="--roi-ref --roi-ref-mode add" SRC=near NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7
 # NOTRAIN=1 (2026-10-06): stop after building the mined pool (no 2k arm on it), e.g. when the next
 # step restarts an existing long-schedule model on the mined pool instead.
 set -euo pipefail
@@ -21,8 +25,9 @@ SRC=${SRC:-cur}
 NFRESH=${NFRESH:-6000}
 SHARDS=${SHARDS:-4}
 declare -A GENFLAGS=([cur]="" [fail]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
-  [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
-declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi)
+  [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+  [near]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
+declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi [near]=revithardnearroi)
 MINER=data/runs/ck_2k_revit${SRC}roi_r2048_s$SEED/epoch_8.pth
 BASE=data/synthetic/revit${SRC}_train2000
 FRESH=data/synthetic/revit${SRC}_fresh$NFRESH

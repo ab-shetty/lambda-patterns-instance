@@ -82,6 +82,7 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitfailswissroi]=data/synthetic/revitfailswiss_train2000
                  [revitgemroi]=data/synthetic/revitgem_train2000
                  [revitnearroi]=data/synthetic/revitnear_train2000
+                 [revithardnearroi]=data/synthetic/revitnear_hard2000
                  [revitfailswissr32roi]=data/synthetic/revitfailswissR_train2000
                  [revithardroi]=data/synthetic/revitcur_hard2000
                  [revithardfailroi]=data/synthetic/revitfail_hard2000)
