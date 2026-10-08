@@ -1113,3 +1113,41 @@ The GPU session's unfair mined questions (gable / porch slivers, blank band edge
   do box over text (their own r2 #002 box holds "85 SF"); a model that never sees text in a reference cannot learn to
   look past it. Open option: record the generator's text boxes and reject only references that are MOSTLY text
   (e.g. > 30% of the box), which is what the mined "BATH 2" case was.
+
+### 2026-10-08 (GH200, 80-min VM) -- the near-miss pool fails the screen; the 32 px reference floor is neutral
+
+The runbook's 2k screen, both arms, seed 7, swin_t, ROI add, 1+8 epochs, epoch 8, hand boxes @2048 (no 4096: no time).
+Pools rebuilt here (Swiss layouts: 19,046 kept, as documented): `revitnear_train2000` 1,992 sheets, control
+`revitfailswissR_train2000` 1,988. Hub (private): `abshetty/floz-refunet-swint-revitnear2k-e8`,
+`...-revitfailswissr32-2k-e8`, each with `evaluations/` (per-question JSONs, probe and Gemini30 `--save-probs`).
+Per-question files also in `eval_baselines/` (`revitnear2k-e8_*`, `revitfailswissr32-2k-e8_*`).
+
+| model | HF14 | val | Gemini30 |
+|---|---:|---:|---:|
+| `revitfailswiss2k-e8` (published control, ref floor off) | 0.8090 | 0.7559 | 0.7239 |
+| `revitfailswissr32roi` (same pool, `--ref-min-side 32`) | 0.8049 | 0.7580 | 0.7393 |
+| `revitnearroi` (2026-10-07 generator defaults + ref floor) | 0.7779 | **0.6578** | 0.7518 |
+
+- **Reference floor (r32 vs control): neutral.** HF14 -0.004 (p=0.76), val +0.002 (p=0.87), Gemini30 +0.015 (p=0.04,
+  sign test 72/59 p=0.29). Keep the default.
+- **Near-miss pool (near vs r32): val -0.100 (8 better / 50 worse, p=2e-8), HF14 -0.027 (12 / 24, p=0.12), Gemini30
+  +0.013 (p=0.24).** The val loss is broad (sheets 5, 6, 9, 13, 17, 26), not val 17 alone. HF14 25 (shingle roof vs
+  vertical boards) 0.73 -> 0.90; line-only 14 0.81 -> 0.68 and 2 0.83 -> 0.67 fall.
+- **The probe did not move: direction leak 0.91-0.98 in every arm** (control 0.81-0.96). Spacing 2x and tan vs olive
+  unchanged. So the planted pairs do not teach direction / spacing / tone at this scale, and they cost val.
+  Probe rows are themselves noisy across runs: tan vs blue reads 0.13/0.07 (control), 0.83/0.11 (r32),
+  0.35/0.81 (near) -- read only rows that move together across all probes of one attribute.
+- **Per the runbook gate: do not mine / long-restart on the near pool.** Next: look at the near pool (are the pairs
+  visible and labelled as intended at training scale? does B as "the roof drawn as plain lines" corrupt roofs?) before
+  any GPU; candidates are direction pairs alone at a lower rate, or near-pairs without the roof-as-B fallback.
+- **Where the near pairs went (pool `annotations/*.json` `near_pair`, 574 / 1,992 sheets):** elevations 488 -- of them
+  **299 (61%) are `main+roof`, i.e. the fallback that redraws the ROOF as plain lines** in the wall's look (direction
+  130, tone 88, spacing 81) -- ~23% of all elevations get a roof that looks like siding; `main+accent` 189; floor plans
+  86 (tone 35, direction 34, spacing 17). The fallback is the majority case, not an exception: the prime suspect for
+  the val loss. Ablation run the same session: `--near-pairs 0` (plan pairs + balcony doors kept), below.
+- **Ablation `revitnearnoelevroi` (`--near-pairs 0`; plan pairs + balcony doors kept; `...-revitnearnoelev2k-e8`):**
+  HF14 0.7856, val 0.6961, Gemini30 0.7248. vs near: val **+0.038** (44 / 16, p=7e-4), HF14 +0.008, Gemini30 -0.027
+  (p=0.02). vs r32 control: val **-0.062** (19 / 40, p=8e-5), HF14 -0.019, Gemini30 -0.015. Direction leak 0.91-0.97.
+  So the elevation pairs carry ~40% of the val loss AND the whole Gemini30 gain; the rest of the loss comes from the plan
+  pairs and / or balcony doors. Neither part teaches direction. Next (CPU first): drop the main+roof fallback; split
+  plan pairs from balcony doors.

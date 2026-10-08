@@ -7,6 +7,14 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Result of the 2026-10-08 GPU runbook (read first)
+
+Steps 1-2 ran (80-min VM); step 3 did NOT, because the gate failed. The near-miss pool does not cut the probe's direction
+leak (0.91-0.98) and costs val -0.100 (p=2e-8) and HF14 -0.027 against its own control; the 32 px reference floor is
+neutral (keep it). Numbers, Hub repos and next steps: `synth_progress.md` "2026-10-08 (GH200, 80-min VM)". The generator
+defaults `--near-pairs 0.35 --near-pairs-plan 0.6 --balcony-doors 0.7` are still on: decide whether to revert them
+before building the next pool.
+
 ## GPU runbook (written 2026-10-08 on CPU -- do this first; supersedes the "Next" lists below)
 
 What changed since the GH200 session: generator defaults (near-miss pairs, balcony doors; GEN_VERSION 2026-10-07),
