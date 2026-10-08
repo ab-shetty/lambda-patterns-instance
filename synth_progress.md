@@ -1170,9 +1170,15 @@ probabilities from the Hub (`evaluations/*gemini30_probs`), and val 5 / 6 / 9 / 
    blotchy swaths of the main wall it belongs with (same siding, other light / paint). It drops 27% of the target
    pixels the control kept on val 5 / 6 / 9 / 17. By piece: recall of the family's other pieces falls at every size
    (0.03-0.09); pieces measurably different from the reference piece in spacing or direction do NOT fall more.
-3. **Why: the planted differences sit inside real within-family variation.** On the 28 real sheets, 25% of
-   same-family piece pairs differ in colour by dE 10-20 (shading, chimneys, dormers, markup paint) -- the very range of
-   the tone pairs (dE 10-30); 44% of different-family pairs are also in 10-20. Gemini families jump > 1.3x in spacing
+3. **Why: the planted differences sit inside real within-family variation -- on the sheets that lost.** [Corrected
+   2026-10-08: an earlier line here said "25% of same-family piece pairs differ by dE 10-20"; all 72 such pairs are
+   val 17's, one sheet.] Measured per pixel instead (15 px local mean, interior, distance from the family's median
+   colour): family pixels > 10 dE off are 11-33% on the rendered elevations 2, 3, 5, 6 (shadow, porch recesses, eave
+   bands) and 26% on markup 17 (lavender board-and-batten L 71 on the wall, L 56 in the dormers), 8-10% on markup 18 /
+   19, 0-7% elsewhere (mean 4%). The rendered sheets and 17 are where the near model lost most (-0.13 to -0.20);
+   18 / 19 did not move, line sheets 9 / 13 and plan 12 lost without colour variation, so colour is the main but not
+   the only route. On val 5 / 6 the reference sits on the chimney (a small, lighter piece of the same siding) and the
+   near model drops blotches of the main wall, shaded and sunlit alike. Gemini families jump > 1.3x in spacing
    within the family 14-33% of the time (one-direction patterns), against spacing pairs at 1.4-2x. So the pool told the
    model "this much colour / spacing difference = another family", which real labels contradict a quarter of the time,
    and the model became cautious about every piece that is not a close match of the reference. The floor-plan pairs
