@@ -48,6 +48,13 @@
 # revitgemroi (2026-10-06): revitfailswissroi's pool + Gemini-like sheets (--tight-crop --pale-ink 0.25
 # --revit-view-weights 50,45,5: framing, piece size, pale line work; --paper left out on purpose).
 # Pairs with revitfailswissroi.
+# revitnearroi (2026-10-08): revitfailswissroi's flags, ids and seed with the 2026-10-07 generator defaults
+# (near-miss family pairs on elevations and finish floor plans, balcony doors) AND the 2026-10-08 training
+# default --ref-min-side 32. revitfailswissr32roi: the control pool rebuilt with the new defaults switched off
+# (byte-identical to revitfailswiss_train2000) and trained with --ref-min-side 32: isolates the pool change
+# from the reference floor. Published control (ref floor off): abshetty/floz-refunet-swint-revitfailswiss2k-e8.
+# Every arm also gets Gemini30 hand boxes and the invariance probe at 2048 (extra_scores below).
+#   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 "revitnearroi revitfailswissr32roi"
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
@@ -74,6 +81,8 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitfailroi]=data/synthetic/revitfail_train2000
                  [revitfailswissroi]=data/synthetic/revitfailswiss_train2000
                  [revitgemroi]=data/synthetic/revitgem_train2000
+                 [revitnearroi]=data/synthetic/revitnear_train2000
+                 [revitfailswissr32roi]=data/synthetic/revitfailswissR_train2000
                  [revithardroi]=data/synthetic/revitcur_hard2000
                  [revithardfailroi]=data/synthetic/revitfail_hard2000)
 declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --markup 0.5"
@@ -82,6 +91,8 @@ declare -A BUILD=([revitmk50roi]="2000 --markup 0.5" [revit10kmk50roi]="10000 --
                   [revitcurroi]="2000"
                   [revitfailroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
                   [revitfailswissroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+                  [revitnearroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+                  [revitfailswissr32roi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0 --near-pairs-plan 0 --balcony-doors 0"
                   [revitgemroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --tight-crop --pale-ink 0.25 --revit-view-weights 50,45,5")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
@@ -99,6 +110,20 @@ score() {   # tag checkpoint   (hf14fix = HF14 with eval_labels/hf14_fixes_v1.js
       --indices $IDX --image-max-size $I --ref-size 224 --mask-thresh 0.35 $FIX \
       --metrics-out $OUT > /dev/null 2>&1
   done; done
+}
+
+extra_scores() {   # tag checkpoint: Gemini30 (user's boxes) + invariance probe, 2048 (2026-10-08)
+  local G=data/eval_pools/gemini30_s20261006 P=data/eval_pools/probe_invariance_v1
+  [ -d $G ] || python3 scripts/build_gemini30_pool.py
+  [ -d $P ] || python3 scripts/probes/make_invariance_probe.py $P > /dev/null
+  [ -f $E/$1_i2048_gemini30.json ] || PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $2 \
+    --local-pool $G --boxes eval_boxes/gemini30_v1.json --image-max-size 2048 --mask-thresh 0.35 \
+    --metrics-out $E/$1_i2048_gemini30.json > /dev/null 2>&1
+  [ -f $E/$1_i2048_probe.json ] || { PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $2 \
+    --local-pool $P --boxes $P/boxes.json --image-max-size 2048 --mask-thresh 0.35 \
+    --metrics-out $E/$1_i2048_probe.json --save-probs $E/$1_i2048_probe_probs > /dev/null 2>&1 && \
+    python3 scripts/probes/invariance_leak.py --metrics $E/$1_i2048_probe.json --probs $E/$1_i2048_probe_probs \
+    --json $E/$1_i2048_probe_leak.json > $E/$1_i2048_probe_leak.txt; }
 }
 
 CTRL=data/runs/ck_swint_v6d2k_pub/epoch_8.pth
@@ -125,6 +150,7 @@ for A in $ARMS; do
     --checkpoint-dir $CK --epochs $P2 --schedule-epochs $((P2 + 1)) $COMMON --reset-optimizer \
     --init-from $CK/epoch_0.pth > logs/2k_${A}_s${SEED}_p2.log 2>&1
   score ${A}_s$SEED $CK/epoch_$P2.pth
+  extra_scores ${A}_s$SEED $CK/epoch_$P2.pth
   echo "== done $A"
 done
 
