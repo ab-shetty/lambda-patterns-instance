@@ -1151,3 +1151,42 @@ Per-question files also in `eval_baselines/` (`revitnear2k-e8_*`, `revitfailswis
   So the elevation pairs carry ~40% of the val loss AND the whole Gemini30 gain; the rest of the loss comes from the plan
   pairs and / or balcony doors. Neither part teaches direction. Next (CPU first): drop the main+roof fallback; split
   plan pairs from balcony doors.
+
+### 2026-10-08 (CPU) -- why the near-miss pool failed
+
+Inputs: the three 2k arms' per-question files (`eval_baselines/revit{failswissr32,nearnoelev,near}*`), their Gemini30
+probabilities from the Hub (`evaluations/*gemini30_probs`), and val 5 / 6 / 9 / 17 rescored here with `--save-probs`
+(reproduces the GPU numbers to 0.006). Scripts: `scripts/probes/piece_recall.py`, `scripts/probes/drop_tone.py`.
+
+1. **The new pools trade merging for splitting, everywhere.** Share of the loss that is under-selection (pred/target
+   < 0.77): val 0.23 (r32) -> 0.41 (noelev) -> 0.47 (near); HF14 0.25 -> 0.29 -> 0.40; Gemini30 0.17 -> 0.37 -> 0.37,
+   while over-selection falls (Gemini30 0.40 -> 0.19). Of the questions that lost > 0.1 (near vs r32), 16 / 25 on val,
+   8 / 10 on HF14, 18 / 24 on Gemini30 under-select. Gemini30 nets a gain because its losses were mostly merging; the
+   real sheets net a loss. Not calibration: the best threshold per arm gains <= 0.004.
+2. **What gets dropped: parts of the family that look a little different from the reference.** Pixels the near model
+   drops and the control kept (interior pixels, > 12 px from the target edge) sit farther from the reference box's
+   colour than pixels both keep: Gemini30 median dE 2.3 vs 1.1 (68% of questions); val 5 / 6 (rendered) +11 / +12 dE.
+   In the overlays the reference is on a chimney face, a dormer gable or a gable corner, and the near model drops
+   blotchy swaths of the main wall it belongs with (same siding, other light / paint). It drops 27% of the target
+   pixels the control kept on val 5 / 6 / 9 / 17. By piece: recall of the family's other pieces falls at every size
+   (0.03-0.09); pieces measurably different from the reference piece in spacing or direction do NOT fall more.
+3. **Why: the planted differences sit inside real within-family variation.** On the 28 real sheets, 25% of
+   same-family piece pairs differ in colour by dE 10-20 (shading, chimneys, dormers, markup paint) -- the very range of
+   the tone pairs (dE 10-30); 44% of different-family pairs are also in 10-20. Gemini families jump > 1.3x in spacing
+   within the family 14-33% of the time (one-direction patterns), against spacing pairs at 1.4-2x. So the pool told the
+   model "this much colour / spacing difference = another family", which real labels contradict a quarter of the time,
+   and the model became cautious about every piece that is not a close match of the reference. The floor-plan pairs
+   (noelev) teach the same lesson (a near-identical floor in another room is another family) and under-select too.
+4. **Why the probe did not move:** the planted pairs are separable without looking at the attribute. B is the roof
+   (61% of elevation pairs: above the eave, sloped outline) or an upper storey (above a belt trim), or another room;
+   the model can split them by region and boundaries, so it never needs line direction. The probe's two identical
+   rectangles leave direction as the only cue, and leak stays 0.91-0.98.
+5. **Caveat on size:** val 17 (23 of 72 val questions, documented to swing 0.2-0.5 between epochs) is 0.063 of the
+   0.100 val loss; one seed, epoch 8. The direction of the result is solid (under-selection on every split, val
+   w/o 17 -0.055, HF14 2 / 3 / 12 fall), the magnitude is not.
+
+**Recommendation:** revert the tone and spacing pairs (elevations and plans) -- they contradict real labels. Keep the code.
+Direction pairs only if they cannot be solved by region: two side-by-side walls of the same storey (a wing, `block`
+accent), never the roof, never another storey; test with the probe at 2k before any pool. Balcony doors are confounded
+with the plan pairs in the noelev arm (no clean read); they are a labelling correction, rare (railings 0.15 x upper
+floor), and can stay or be screened alone.
