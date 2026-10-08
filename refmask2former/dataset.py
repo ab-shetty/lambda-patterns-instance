@@ -333,14 +333,20 @@ class InstanceSegDataset(Dataset):
         # several values and averages for a robust, low-variance number.
         self.ref_seed = 0
 
-    def _ref_cands(self, cand, masks):
+    def _ref_cands(self, cand, masks, long_side):
+        """--ref-min-side N (default 32 since 2026-10-08): references come only from pieces that fit
+        an N x N square AT THE TRAINING SCALE (the sheet resized to image_max_size on its long side),
+        when the family has such a piece. Slivers stay in the target. The user's own boxes are >= 32 px
+        at 2048 on 95% of real and all Gemini questions; the boxes they dropped had a median of 34.
+        Measured on the native mask, so the threshold is N * long_side / image_max_size there."""
         if self.ref_min_side <= 0 or len(cand) < 2:
             return cand
+        thr = self.ref_min_side * long_side / self.image_max_size
         ok = []
         for j in cand:
             m = (np.asarray(masks[j]) > 0).astype(np.uint8)
             dt = cv2.distanceTransform(np.pad(m, 1), cv2.DIST_C, 3)
-            if 2 * dt.max() - 1 >= self.ref_min_side:
+            if 2 * dt.max() - 1 >= thr:
                 ok.append(j)
         return ok or cand
 
@@ -399,7 +405,7 @@ class InstanceSegDataset(Dataset):
                     if len(unique_cats) > self.refs_per_image else unique_cats)
             ref_patches, ref_matches, multi_boxes = [], [], []
             for fam in fams:
-                cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam and j in ok], masks)
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == fam and j in ok], regions, max(h0, w0))
                 bx, by, bw, bh = sample_reference_box(regions[random.choice(cand)],
                                                       self.min_patch, self.max_patch)
                 ref_patches.append(image[by:by + bh, bx:bx + bw].copy())
@@ -424,7 +430,7 @@ class InstanceSegDataset(Dataset):
                     target_cat = _rc.choice(repeated_cats)
                 else:
                     target_cat = _rc.choice(unique_cats)
-                cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat and j in ok], masks)
+                cand = self._ref_cands([j for j, c in enumerate(cats) if c == target_cat and j in ok], regions, max(h0, w0))
                 ref_idx = _rc.choice(cand)
             if self.augment and self.small_ref_prob > 0 and random.random() < self.small_ref_prob:
                 # Tiny user rectangles are where real plans fail (2026-09-24):

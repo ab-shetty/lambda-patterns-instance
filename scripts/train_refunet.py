@@ -110,9 +110,11 @@ def parse_args():
                    help="pre-2026-09-29 augmentation: --domain-random brightness/contrast on the "
                         "sheet only, and --realism-aug drawn independently per reference. Default "
                         "gives the sheet and its references the same photometric augmentation")
-    p.add_argument("--ref-min-side", type=int, default=0,
-                   help="training references come only from instances that fit a square this "
-                        "wide (px) when the family has one; slivers stay in the target. 0 = off")
+    p.add_argument("--ref-min-side", type=int, default=32,
+                   help="training references come only from pieces that fit a square this wide, in "
+                        "px at the training scale (--image-max-size), when the family has one; slivers "
+                        "stay in the target. Default 32 since 2026-10-08 (the user's boxes: >= 32 px at "
+                        "2048 on 95%% of real, all Gemini questions). 0 = every run before")
     p.add_argument("--ref-sample", choices=["family", "instance"], default="family",
                    help="training question: 'family' picks a family, then one of its instances "
                         "(historical); 'instance' picks any labelled instance uniformly and asks "

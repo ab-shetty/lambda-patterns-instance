@@ -9,6 +9,10 @@
    of a `--image-max-size` input, upsampled, thresholded, back to native -- the
    `label_ceiling.py` "naive" bound) must reach --min-ceiling. Synthetic labels are
    exact, so these are the only "noisy" questions a loss-ranked miner would chase.
+   Questions whose reference box is smaller than --min-ref-side px at the training scale
+   (default 32 since 2026-10-08) are dropped too: a sliver of a gable or a box on a blank
+   band edge is a question no user asks, and mined pools were enriched in them (pieces
+   < 32 px @2048: 27% base vs 36% mined). The family still counts through its other questions.
 3. Sheet hardness = mean over its families of (1 - mean IoU of that family's kept
    questions), matching the trainer's one-family-per-sheet question sampler.
 4. Semi-hard band: sheets ranked by hardness, skipping the hardest --exclude-top
@@ -82,6 +86,9 @@ def main():
     ap.add_argument("--exclude-top", type=float, default=0.01,
                     help="skip this hardest fraction of sheets")
     ap.add_argument("--min-ceiling", type=float, default=0.85)
+    ap.add_argument("--min-ref-side", type=int, default=32,
+                    help="drop questions whose reference box is smaller than this (px at --image-max-size) "
+                         "from the hardness score; 0 = every pool mined before 2026-10-08")
     ap.add_argument("--image-max-size", type=int, default=2048)
     ap.add_argument("--mask-thresh", type=float, default=0.35)
     ap.add_argument("--seed", type=int, default=0)
@@ -99,10 +106,18 @@ def main():
             sheet_ceilings, [(fresh_anns[i], args.image_max_size, args.mask_thresh)
                              for i in scored_sheets], chunksize=4)))
 
-    fam_ious, dropped = {}, 0
+    long_side = {}
+    for i in scored_sheets:
+        im = json.loads(fresh_anns[i].read_text())["image"]
+        long_side[i] = max(im["width"], im["height"])
+    fam_ious, dropped, dropped_small = {}, 0, 0
     for r in rows:
         if ceil[r["image_index"]][r["category"]] < args.min_ceiling:
             dropped += 1
+            continue
+        side = min(r["reference_box_native"][2:4]) * args.image_max_size / long_side[r["image_index"]]
+        if side < args.min_ref_side:
+            dropped_small += 1
             continue
         fam_ious.setdefault(r["image_index"], {}).setdefault(r["category"], []).append(r["iou"])
     hardness = {i: float(np.mean([1 - np.mean(v) for v in fams.values()]))
@@ -134,6 +149,7 @@ def main():
         "exclude_top": args.exclude_top, "min_ceiling": args.min_ceiling,
         "image_max_size": args.image_max_size, "seed": args.seed,
         "questions": len(rows), "questions_dropped_ceiling": dropped,
+        "min_ref_side": args.min_ref_side, "questions_dropped_small_ref": dropped_small,
         "sheets_scored": len(scored_sheets), "sheets_ranked": len(ranked),
         "fresh_mean_iou_kept": float(1 - h.mean()),
         "band_hardness": [hardness[band[-1]], hardness[band[0]]],

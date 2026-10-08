@@ -1088,3 +1088,28 @@ often too fragmented for 96 px patches), so the planted counts are the record th
 Gemini30 hand boxes @2048 (`eval_baselines/revitfailswiss2k-e8_gemini30_2048.json`; sheet 16 changed, compare on the
 other 29 or rescore), HF14, val -- AND `scripts/probes/make_invariance_probe.py` on both: the probe is the direct
 test (direction leak 1.00 today). Then a long restart of longswiss-swa37-41 on a mined pool from these defaults.
+
+### 2026-10-08 (CPU) -- slivers: reference floor 32 px at training scale, mining ignores sliver questions
+
+The GPU session's unfair mined questions (gable / porch slivers, blank band edges; pieces < 32 px @2048: 27% base vs
+36% mined) and the user's boxes set the number. Box sides at 2048 (eval_baselines + hand boxes):
+
+| | n | min | p5 | median | < 24 | < 32 |
+|---|---:|---:|---:|---:|---:|---:|
+| user's boxes, real | 88 | 22 | 35 | 66 | 2 | 4 |
+| user's boxes, Gemini30 | 35 | 54 | 68 | 118 | 0 | 0 |
+| automatic boxes the user dropped, real / Gemini | 6 / 7 | 17 / 16 | | 34 / 34 | 2 / 1 | 2 / 1 |
+
+- **`train_refunet.py --ref-min-side 32` is the DEFAULT** (was 0 = off): a training reference comes only from a piece
+  that fits a 32 px square at the training scale (measured on the native mask at 32 x long side / image-max-size; the
+  old flag compared native pixels, ~15 px at 2048 on a synthetic sheet) and its visible region (minus ref_exclude),
+  when the family has such a piece. Targets unchanged. On 300 new-default sheets: P(reference piece < 32 px) 0.18 ->
+  0.10; the rest are the 10% of families with no bigger piece, still asked from their best piece. `--ref-min-side 0`
+  = every run before.
+- **`build_hard_pool.py --min-ref-side 32` is the DEFAULT:** questions whose reference box is < 32 px at
+  --image-max-size are left out of sheet hardness (on a 120-sheet test: 321 of 1,155 automatic questions). The
+  manifest records `min_ref_side` and `questions_dropped_small_ref`. 0 = every pool mined before.
+- **Generator text in references: not excluded.** Proposed (text -> ref_exclude) and dropped on the user's call: users
+  do box over text (their own r2 #002 box holds "85 SF"); a model that never sees text in a reference cannot learn to
+  look past it. Open option: record the generator's text boxes and reject only references that are MOSTLY text
+  (e.g. > 30% of the box), which is what the mined "BATH 2" case was.
