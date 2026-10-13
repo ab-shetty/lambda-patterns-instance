@@ -1,13 +1,58 @@
 # Handoff
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## GPU runbook (written 2026-10-13 on CPU -- do this first; supersedes the 2026-10-08 runbook below)
+## GPU runbook (written 2026-10-14 on CPU -- do this first; supersedes the 2026-10-13 runbook below)
+
+What changed since the 2026-10-13 (hue) screen, generator GEN_VERSION 2026-10-14 (why: `synth_progress.md`
+"2026-10-13 (CPU) -- reading the hue screen" and "2026-10-14 (CPU)"):
+- **Pairs are colour pairs only, on side wings only.** A colour elevation whose house has a side wing gets, with
+  P 0.6 (`--near-pairs`), the wing as a second family in the main wall's pattern and pen weight but another hue
+  (CIEDE2000 10-25), or another hue plus spacing 1.4-2x (CIEDE2000 7-20; Gemini r4 #078 tan vs olive is 8.9 at 1.8x).
+  B is never the roof, an upper storey or another room: the hue screen showed the pairs teach "across that boundary =
+  another family" and split single real families there (Gemini30 5 / 14).
+- **Colour gap measured in CIEDE2000**, not CIELAB dE76 (which passed sage vs lime, dE76 16 = CIEDE2000 5.9).
+- **Direction / spacing-only pairs and floor-plan pairs are off** (`--near-pairs-plan` default 0). Balcony doors and
+  soft shadows unchanged.
+- CPU checks: 300-sheet pool (pair count, pictures), old flags byte-identical.
+
+0. `git pull`; `set -a; . ~/.env; set +a`. Gemini30 pool: keep it if built on/after 2026-10-08 (#048 fixed); else
+   `rm -rf data/eval_pools/gemini30_s20261006 && python3 scripts/build_gemini30_pool.py`.
+1. **2k screen, ONE arm** (pool builds itself; controls already scored):
+   `NOCTRL=1 EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitwingroi`
+   ```
+   for S in val hf14 gemini30; do for C in revitfailswissr32-2k-e8 revitnear2k-e8 revithue2k-e8; do
+     python3 scripts/paired_compare.py --a eval_baselines/${C}_${S}_2048.json \
+       --b data/evaluations/revit2k/revitwingroi_s7_i2048_$S.json --label-a $C --label-b wing | grep -m2 "paired mean\|better on"
+   done; done
+   G=data/evaluations/revit2k/revitwingroi_s7_i2048_gemini30.json
+   python3 -c "import json,numpy as np;d=json.load(open('$G'))['selections'];[print(k,round(np.mean([r['iou'] for r in d if r['image_index']==k]),3)) for k in (5,14,26,28)]"
+   ```
+   Reference @2048 (HF14 / val / val w/o 17 / Gemini30): r32 0.8049 / 0.7580 / 0.8448 / 0.7393; near 0.7779 / 0.6578 /
+   0.7895 / 0.7518; hue 0.7806 / 0.7161 / 0.7988 / 0.7068. Gemini30 per sheet (r32 / near / hue): 5 0.907 / 0.710 /
+   0.583, 14 0.873 / 0.691 / 0.689, 26 0.417 / 0.634 / 0.489, 28 0.820 / 0.723 / 0.635.
+2. **Read it:**
+   - The splitting should be gone: Gemini30 5 / 14 / 28 back near r32; under-selection share of the loss back near
+     r32's (Gemini30 0.17, val 0.23, HF14 0.25: pred/target < 0.77).
+   - Gemini30 26 (tan / olive / red) above r32's 0.417 -- the pair's purpose.
+   - **Gate:** Gemini30 >= r32 + 0.01 and HF14 / val w/o 17 within ~0.01 of r32 -> step 3. Single seed: a per-sheet
+     swing under ~0.14 is within run-to-run noise (r32 vs the control differ by 0.04 per sheet, max 0.136).
+   - Fails with sheets 5 / 14 / 28 still splitting -> the pairs teach a boundary rule even on wings: stop, pairs off
+     (`--near-pairs 0`), report. Fails only on 26 (no gain) -> pairs are harmless but useless at this rate: report.
+3. **If it passes:** `EXTRA="--roi-ref --roi-ref-mode add" SRC=wing NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7`,
+   then the 20-epoch restart of `abshetty/floz-refunet-swint-longswiss-swa37-41` on `data/synthetic/revitwing_hard2000`
+   (`run_hard_long.sh`, EP=20, GEN = `--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source
+   data/reference/swiss_dwellings/layouts.pkl.gz`, EXTRA ROI), SWA on val, score @4096 with hand boxes on HF14 / val /
+   Gemini30 + probe, paired against `eval_baselines/longswiss-swa37-41_*`.
+4. Copy the arm's per-question JSONs to `eval_baselines/revitwing2k-e8_{val,hf14,gemini30}_2048.json` and the probe
+   leak to `eval_baselines/probe_revitwing2k-e8_2048.json`; publish with `--save-probs` folders if it passes.
+
+## GPU runbook (written 2026-10-13 on CPU -- done; kept for reference)
 
 What changed since the 2026-10-08 screen: generator GEN_VERSION 2026-10-13 -- tone near-pairs are a HUE change only
 (fill and pen moved 15-30 in CIELAB a/b, lightness within +-3, colour sheets only); the grey-wash-vs-paper tone pairs

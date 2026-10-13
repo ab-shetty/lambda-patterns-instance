@@ -133,24 +133,22 @@ def plant_colour_pair(styles, shaded, app, fam_seed, S_guess, has_chimney):
     return fam
 
 
-# ---- near-miss pairs (FC.NEAR_PAIRS, --near-pairs P, default 0.35 since 2026-10-07): two labelled
-# families on one elevation that differ in ONE attribute. The invariance probe (scripts/probes/
-# make_invariance_probe.py) showed the best synthetic model merges walls that differ only in line
-# direction (100% leak: H vs V vs 45), spacing up to 2x, fill dE ~20, or grey wash vs bare lines, and the
-# pools never ask it to separate them: no family pair differed only in direction, same-texture pairs
-# were 10% of synthetic vs 19% of Gemini pairs, and distinct_looks re-draws look-alikes into another
-# kind. Gemini r4 #098 (vertical boards vs a horizontal-line roof), #078 (tan vs olive lap at 1.8x
-# spacing) and #041 (grey-washed vs bare lines) are these pairs. With probability P one pair, A and B:
-#   direction  lap (horizontal) vs vertical boards at the SAME spacing, colour and pen;
-#   spacing    the same kind, colour and pen, spacing 1.4-2x apart (distinct_looks' own 1.4x line);
-#   tone       colour sheets only: the same pattern, a HUE change -- fill and pen moved together 15-30 in
-#              CIELAB (a, b), lightness within +-3. (2026-10-13: lightness-only pairs -- a grey wash vs
-#              bare paper on line-only sheets -- measured the same as a cast shadow on one family, |dL| 15-20
-#              vs 16-29, d(a,b) 0 for both, so the pool labelled one change "same family" and "different
-#              family" at once; the screen then dropped shaded wall on rendered sheets. Shadows change
-#              lightness, these pairs change hue.)
-# A = the main wall (a plain one gets lines); B = an upper-storey / wing accent if the house has one, else the
-# roof (drawn as plain lines, as on HF14 25 / 27). Own RNG: P = 0 is byte-identical.
+# ---- near-miss pairs (FC.NEAR_PAIRS, --near-pairs P): two labelled families on one colour elevation, the
+# main wall (A) and a side wing beside it (B), drawn in the SAME line pattern and pen weight but a different
+# colour -- Gemini r4 #078 (tan vs olive lap, 2 families) is the case the synthetic model merges.
+#   hue          fill and pen moved to another hue: CIEDE2000 10-25 between the fills, lightness within +-3,
+#                hue angle >= 20 deg apart (or, from a near-grey A, chroma >= 15);
+#   hue+spacing  the same at CIEDE2000 7-20, plus spacing 1.4-2x apart (#078 is tan vs olive at 1.8x:
+#                CIEDE2000 8.9 and denser lines).
+# History. 2026-10-07: direction / spacing / tone pairs, B on the roof (61%) or an upper-storey / wing accent;
+# the screen lost val -0.100. 2026-10-13: tone made hue-only (lightness-only pairs were a cast shadow) -- the
+# screen still lost and split single real families along exactly the planted boundaries (gables, upper
+# storeys, wings, rooms: synth_progress.md "2026-10-13 (CPU) -- reading the hue screen"), and the colour gap,
+# measured as CIELAB dE76, let near-identical pairs through (sage vs lime: dE76 16, CIEDE2000 5.9).
+# Now (2026-10-14): colour pairs only, colour sheets only, B always a side wing -- the same storeys, the
+# same height, beside A -- so position does not give the answer; direction / spacing-only pairs dropped.
+# The pair is decided before the geometry (compose_revit forces the wing accent). Own RNG: P = 0 is
+# byte-identical to pools without pairs.
 LINE_KINDS = ("lap", "vertical", "bb")
 
 
@@ -164,18 +162,42 @@ def _callout(st, rr):
     st.callout = rr.choice(G.CALLOUT.get(st.kind, ["FINISH"]))
 
 
+def _de2000(l1, l2):
+    """CIEDE2000 between two CIELAB colours (perceived difference; dE76 overrates chroma steps in saturated colours)."""
+    L1, a1, b1 = l1
+    L2, a2, b2 = l2
+    Cb = (math.hypot(a1, b1) + math.hypot(a2, b2)) / 2
+    g = 0.5 * (1 - math.sqrt(Cb ** 7 / (Cb ** 7 + 25 ** 7)))
+    a1, a2 = a1 * (1 + g), a2 * (1 + g)
+    C1, C2 = math.hypot(a1, b1), math.hypot(a2, b2)
+    h1, h2 = math.degrees(math.atan2(b1, a1)) % 360, math.degrees(math.atan2(b2, a2)) % 360
+    dh = 0.0 if C1 * C2 == 0 else (h2 - h1 + 180) % 360 - 180
+    dH = 2 * math.sqrt(C1 * C2) * math.sin(math.radians(dh / 2))
+    Lb, Cp = (L1 + L2) / 2, (C1 + C2) / 2
+    hb = h1 + h2 if C1 * C2 == 0 else ((h1 + h2) / 2 if abs(h1 - h2) <= 180 else (h1 + h2 + 360 * (1 if h1 + h2 < 360 else -1)) / 2)
+    T = (1 - 0.17 * math.cos(math.radians(hb - 30)) + 0.24 * math.cos(math.radians(2 * hb))
+         + 0.32 * math.cos(math.radians(3 * hb + 6)) - 0.2 * math.cos(math.radians(4 * hb - 63)))
+    Sl = 1 + 0.015 * (Lb - 50) ** 2 / math.sqrt(20 + (Lb - 50) ** 2)
+    Sc, Sh = 1 + 0.045 * Cp, 1 + 0.015 * Cp * T
+    Rt = -math.sin(math.radians(60 * math.exp(-((hb - 275) / 25) ** 2))) * 2 * math.sqrt(Cp ** 7 / (Cp ** 7 + 25 ** 7))
+    x, y, z = (L2 - L1) / Sl, (C2 - C1) / Sc, dH / Sh
+    return math.sqrt(x * x + y * y + z * z + Rt * y * z)
+
+
 def _shift_colour(rgb, rr, lo, hi):
-    """A colour lo..hi away in CIELAB (a, b), lightness within +-3: a hue change, never a shade.
-    Returns (colour, (da, db)) or None."""
+    """Another HUE at CIEDE2000 lo..hi from rgb, lightness within +-3: hue angle >= 20 deg away, or (from a
+    near-grey colour) chroma >= 15. Returns (colour, (da, db)) or None."""
     L0, a0, b0 = _lab(rgb)
-    for _ in range(40):
-        d = rr.uniform(lo, hi)
-        h = rr.uniform(0, 2 * math.pi)
-        da, db = d * math.cos(h), d * math.sin(h)
-        c = _rgb_from_lab(min(92, max(25, L0 + rr.uniform(-3, 3))), a0 + da, b0 + db)
+    C0, h0 = math.hypot(a0, b0), math.degrees(math.atan2(b0, a0))
+    for _ in range(80):
+        C = rr.uniform(max(15.0, C0 * 0.5), max(30.0, C0 * 1.4))
+        h = math.radians(h0 + rr.choice([-1, 1]) * rr.uniform(20, 150)) if C0 >= 8 else rr.uniform(0, 2 * math.pi)
+        c = _rgb_from_lab(min(92, max(25, L0 + rr.uniform(-3, 3))), C * math.cos(h), C * math.sin(h))
         L1, a1, b1 = _lab(c)
-        if abs(L1 - L0) <= 3.5 and lo <= math.hypot(a1 - a0, b1 - b0) <= hi + 4:
-            return c, (da, db)
+        dh = abs((math.degrees(math.atan2(b1, a1)) - h0 + 180) % 360 - 180)
+        if abs(L1 - L0) <= 3.5 and lo <= _de2000((L0, a0, b0), (L1, a1, b1)) <= hi and \
+                (dh >= 20 if C0 >= 8 else math.hypot(a1, b1) >= 15):
+            return c, (a1 - a0, b1 - b0)
     return None
 
 
@@ -184,45 +206,36 @@ def _move_ab(rgb, da, db):
     return _rgb_from_lab(L, a + da, b + db)
 
 
-def plant_near_pair(styles, shaded, fam_seed, accent_zone):
+def near_pair_planned(seed, image_id, shaded, house):
+    """Decided before the geometry: a colour sheet whose house has a side wing gets the pair with probability
+    P, and the wing is then made the accent zone (compose_revit). Own RNG stream."""
+    if FC.NEAR_PAIRS[0] <= 0 or not shaded or not any(b.kind != "main" for b in house["blocks"]):
+        return False
+    return random.Random(seed * 1_000_003 + image_id * 197 + 89).random() < FC.NEAR_PAIRS[0]
+
+
+def plant_near_pair(styles, fam_seed):
     rr = random.Random(fam_seed * 173 + 61)      # own stream: the sheet's RNG is untouched
-    if rr.random() >= FC.NEAR_PAIRS[0]:
-        return None
-    fa = "main"          # a plain main wall is given a line pattern below: the accent may be a thin band
-    # B must be a big region to teach anything (and to give references): an upper storey or a wing
-    # accent, else the roof; a gable triangle or a wainscot band is too small (measured: B unmeasurable
-    # on most such sheets)
-    fb = "accent" if "accent" in styles and accent_zone in ("upper", "block") else "roof"
-    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30 if shaded else 0])[0]
-    A = styles[fa]
-    if A.kind not in LINE_KINDS or (what == "direction" and A.kind == "bb"):
+    A = styles["main"]
+    if A.kind not in LINE_KINDS:
         A.kind = rr.choice(["lap", "vertical"])
         A.params = {"sp": rr.choice([0.33, 0.42, 0.5, 0.58, 0.67])}
         _callout(A, rr)
     A.params["sp"] = A.params.get("sp", 0.5)
     if A.kind == "lap":
-        A.params["shadow"] = False          # plain lines: the pair differs in the one attribute only
-    B = _copy_style(A, fb)
-    if what == "direction":
-        B.kind = "vertical" if A.kind == "lap" else "lap"
-        B.params = {"sp": A.params["sp"]}
-        _callout(B, rr)
-        if B.kind == "lap":
-            B.params["shadow"] = False
-    elif what == "spacing":
-        f = rr.uniform(1.4, 2.0)
-        sp = A.params["sp"]
+        A.params["shadow"] = False          # plain lines: the pair differs in the planted attributes only
+    what = rr.choice(["hue", "hue+spacing"])
+    got = _shift_colour(A.base, rr, *((10, 25) if what == "hue" else (7, 20)))
+    if got is None:
+        return None
+    B = _copy_style(A, "accent")
+    B.base, (da, db) = got
+    B.line = _move_ab(A.line, da, db)          # same pen lightness
+    if what == "hue+spacing":
+        f, sp = rr.uniform(1.4, 2.0), A.params["sp"]
         B.params["sp"] = sp * f if (sp * f <= 1.4 and rr.random() < 0.5) or sp / f < 0.22 else sp / f
-    else:                   # tone: colour sheets only (weight 0 above on line-only sheets)
-        got = _shift_colour(A.base, rr, 15, 30)
-        if got is None:
-            return None
-        B.base, (da, db) = got[0], got[1]
-        B.line = _move_ab(A.line, da, db)          # same pen lightness: the pair differs in hue only
-    if fb == "roof":
-        B.callout = styles["roof"].callout      # the roof keeps its roof note
-    styles[fa], styles[fb] = A, B
-    return fa, fb, what
+    styles["accent"] = B
+    return "main", "accent", what
 
 
 # ---- colour markup (G.MARKUP, --markup P): 5 of HF14's 14 sheets are line drawings with
@@ -415,6 +428,9 @@ def compose_revit(image_id, seed, mode_weights):
 
     # ---- view style
     shaded = r.random() < 0.4                       # "consistent colours" vs hidden line
+    near_on = near_pair_planned(seed, image_id, shaded, house)
+    if near_on:                                     # the pair's B is a side wing: make the wing the accent zone
+        house["accent"] = "block"
     ink_v = r.randint(0, 30)
     ink = (ink_v,) * 3
     pat_v = r.randint(110, 175) if not shaded else r.randint(60, 120)
@@ -513,7 +529,7 @@ def compose_revit(image_id, seed, mode_weights):
                 if st.kind in ("stipple", "stucco", "concrete", "dots"):
                     continue        # sparse pale dots vanish at 2048: a labelled wall that reads blank
                 st.line, st.lw = (v,) * 3, max(1.0, st.lw * k_lw)
-    near = plant_near_pair(styles, shaded, fam_seed, house["accent"]) if FC.NEAR_PAIRS[0] > 0 else None
+    near = plant_near_pair(styles, fam_seed) if near_on else None
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):

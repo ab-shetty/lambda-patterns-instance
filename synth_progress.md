@@ -1291,3 +1291,16 @@ redraws roofs as siding), then spacing pairs (inside real within-family spacing 
   boundaries, so the pool has MORE positional pairs and fewer whose difference is visible in appearance alone; the
   only Gemini gain the pairs ever bought (sheet 26, tone) shrank with the colour-sheet-only tone pairs. Gemini30
   under-selection share 0.17 / 0.37 / 0.46 (r32 / near / hue).
+
+### 2026-10-14 (CPU) -- colour pairs only, on side wings, colour gap in CIEDE2000 (GEN_VERSION 2026-10-14)
+
+- **The colour gap was measured wrong.** CIELAB dE76 overrates chroma steps in saturated colours. Rescored with
+  CIEDE2000, the 2026-10-13 hue pairs: sage vs lime (000204, same hue, more saturated) dE76 16.0 -> 5.9; green vs green
+  (000033) 17.2 -> 8.2; teal / grey-teal 9.3; red / brown, brown / mauve 14; grey / salmon 20.8. Gemini r4 #078 tan vs
+  olive: dE76 16.5 -> 8.9 -- and it also differs in spacing (1.8x) and line density, which is why it reads as far more
+  distinct than 000204 to the eye: real "other family" pairs differ in several attributes at once.
+- **Change:** pairs are colour pairs only -- "hue" (CIEDE2000 10-25, lightness +-3, hue angle >= 20 deg or, from a
+  near-grey, chroma >= 15) or "hue+spacing" (CIEDE2000 7-20 plus spacing 1.4-2x) -- on colour elevations whose house
+  has a side wing; B is the wing (decided before the geometry, which makes the wing the accent zone), never the roof,
+  an upper storey or another room. P 0.6 (`--near-pairs`). Direction / spacing-only pairs and floor-plan pairs off
+  (`--near-pairs-plan` 0). Runbook: `codex_doc.md`, arm `revitwingroi`.
