@@ -9,6 +9,7 @@ pool_manifests/gemini30_s20261006.json). Threshold 0.35. Compare at the same inf
 |---|---|---:|
 | longswiss-swa37-41_{hf14,val,gemini30}_4096 | abshetty/floz-refunet-swint-longswiss-swa37-41 (best synthetic) | 0.8779 / 0.8766 / 0.8295 |
 | revitfailswiss2k-e8_{hf14,val,gemini30}_2048 | abshetty/floz-refunet-swint-revitfailswiss2k-e8 (2k screen control) | 0.8090 / 0.7559 / 0.7239 |
+| revithue2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-13 hue-pair screen; checkpoint `data/runs/ck_2k_revithueroi_r2048_s7/epoch_8.pth` on the GH200) | 0.7806 / 0.7161 / 0.7068 |
 
 2026-10-07: Gemini30 sheet 16 (r3 #048) was relabelled by the user (Roboflow r3 v3: one missed pattern3 piece added,
 appended as question 23 so every other automatic box is unchanged). The longswiss Gemini30 file has that sheet's rows
@@ -17,4 +18,4 @@ revitfailswiss2k-e8 Gemini30 file got the same treatment at 2048 on 2026-10-08 (
 0.7258 -> 0.7239).
 
 Invariance probe (`scripts/probes/`, leak into the other panel per attribute): `probe_longswiss-swa37-41_4096.json`,
-`probe_revitfailswiss2k-e8_2048.json`. Print a new model's table with `scripts/probes/invariance_leak.py`.
+`probe_revitfailswiss2k-e8_2048.json`, `probe_revithue2k-e8_2048.json`. Print a new model's table with `scripts/probes/invariance_leak.py`.

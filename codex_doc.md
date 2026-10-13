@@ -20,7 +20,7 @@ pairs and balcony doors unchanged. Why and the measurements: `synth_progress.md`
 1. Gemini30 pool: keep it if the box rebuilt it on 2026-10-08 (#048 relabelled); else
    `rm -rf data/eval_pools/gemini30_s20261006 && python3 scripts/build_gemini30_pool.py`.
 2. **2k screen, ONE arm** (the pool builds itself; one 2k run; the controls are already scored):
-   `EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revithueroi`
+   `NOCTRL=1 EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revithueroi` (NOCTRL: do not re-score the old v6d / revit2k controls)
    Paired comparisons @2048 (outputs `data/evaluations/revit2k/revithueroi_s7_i2048_{val,hf14,gemini30}.json`):
    ```
    for S in val hf14 gemini30; do for C in revitfailswissr32-2k-e8 revitnear2k-e8; do
@@ -48,6 +48,14 @@ pairs and balcony doors unchanged. Why and the measurements: `synth_progress.md`
    `eval_baselines/longswiss-swa37-41_*`.
 5. Publish the 2k arm (`abshetty/floz-refunet-swint-revithue2k-e8`) with `--save-probs` folders for val / HF14 /
    Gemini30 / probe, and copy its per-question JSONs to `eval_baselines/revithue2k-e8_{val,hf14,gemini30}_2048.json`.
+
+## Result of the 2026-10-13 GPU runbook (read first)
+
+Steps 1-3 ran; the gate FAILED, so no mining / restart (step 4) and nothing published (step 5's per-question files are in
+`eval_baselines/revithue2k-e8_*`). Hue arm @2048: HF14 0.7806 / val 0.7161 / Gemini30 0.7068 -- below r32 on all three
+(val -0.042 p=2e-4, Gemini30 -0.033 p=0.005) and below near on Gemini30 (-0.045): removing the lightness pairs gave back
+half of near's val loss and all of its Gemini30 gain. The main+roof fallback (61% of elevation pairs) is still in the
+pool. Numbers and next suspects: `synth_progress.md` "2026-10-13 (GH200)".
 
 ## Result of the 2026-10-08 GPU runbook (read first)
 

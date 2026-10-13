@@ -1233,3 +1233,43 @@ pairs. Measured instead of reverted.
    (8 pairs, colour sheets only; shadows on colour sheets |dL| 13-23, d(a,b) 4-16); no lightness-only pair left.
    Pair mix 43 direction / 31 spacing / 8 tone. `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0`: 24 sheets
    byte-identical to the previous commit.
+
+### 2026-10-13 (GH200) -- the hue-pair pool fails the screen: Gemini30 loses near's gain, val / HF14 still below r32
+
+The 2026-10-13 runbook's one arm, `revithueroi` (GEN_VERSION 2026-10-13, same flags / ids / seed 6 / training as
+`revitnearroi`), seed 7, swin_t, ROI add, 1+8 epochs, epoch 8, hand boxes. Fresh box: FreeCAD 26.3 (rev 20260916) into
+`/opt/fc`, Swiss layouts rebuilt (19,046), Gemini30 rebuilt (r3 v3, #048 fixed). Pool 1,992 sheets (same as near). Old
+v6d / revit2k controls not re-scored (`NOCTRL=1`). Per-question files: `eval_baselines/revithue2k-e8_*`; not on the Hub.
+
+| model @2048 | HF14 | val | val w/o 17 | Gemini30 |
+|---|---:|---:|---:|---:|
+| r32 (no pairs) | 0.8049 | 0.7580 | 0.8448 | 0.7393 |
+| near (2026-10-07 pairs) | 0.7779 | 0.6578 | 0.7895 | 0.7518 |
+| **hue (2026-10-13 pairs)** | 0.7806 | 0.7161 | 0.7988 | **0.7068** |
+
+@4096: HF14 0.7966, val 0.7815.
+
+- **vs r32: val -0.042 (12 / 40, p=2e-4), HF14 -0.024 (13 / 22, p=0.24), Gemini30 -0.033 (69 / 84, p=0.005).** Gate
+  (Gemini30 >= r32 + 0.01, HF14 / val w/o 17 within ~0.01) fails on all three.
+- **vs near: val +0.058 (40 / 11, p=1e-4), HF14 +0.003, Gemini30 -0.045 (44 / 101, p=2e-7).** Half of near's val loss came
+  back; all of near's Gemini30 gain went.
+- **Shaded rendered sheets recover only part way:** val 5 / 6 0.790 / 0.831 (near 0.714 / 0.767, r32 0.876 / 0.897);
+  HF14 2 / 3 0.712 / 0.830 (near 0.671 / 0.791, r32 0.805 / 0.928).
+- **Gemini30 26 (r4 #078, tan / olive / red lap): 0.489** (r32 0.417, near 0.634) -- most of the gain near got from
+  its tone pairs is gone with them. Gemini30 also lost broadly on sheets near did not hurt: 5 (0.907 / 0.710 / 0.583 for
+  r32 / near / hue), 9 (0.907 / 0.899 / 0.730), 28 (0.820 / 0.723 / 0.635), 14, 17, 3.
+- **Splitting is down on val / HF14, UP on Gemini30.** Share of the IoU loss that is under-selection (pred/target < 0.77):
+  val 0.23 / 0.47 / 0.33 (r32 / near / hue), HF14 0.25 / 0.40 / 0.29, Gemini30 0.17 / 0.37 / **0.46**.
+- **Line sheets (the runbook's stop condition):** val 9 0.783 (near 0.774, r32 0.877), val 13 0.539 (0.512, 0.590) did not
+  recover; HF14 12 0.748 (0.636, 0.719) did; HF14 14 +0.085 vs r32. Val 26 (one question) 0.954 -> 0.489.
+- **Probe unchanged:** direction leak 0.91-0.97; spacing x2 0.32 / 0.99; tan vs olive 0.98 / 0.86.
+- **Pair mix** (`near_pair` in annotations, 574 sheets, same sheets as near): elevations main+roof 299 (direction 153,
+  spacing 111, tone 35), main+accent 189 (103 / 62 / 24); plans 86 (40 / 33 / 13). The tone pairs removed on line-only
+  sheets became direction / spacing pairs, and **the main+roof fallback (61% of elevation pairs) is still there** --
+  the 2026-10-08 prime suspect, never removed.
+- Caveat: one seed; the controls were trained on an earlier box (FreeCAD / library versions may differ).
+
+**Reading:** with the lightness pairs gone, the remaining pairs (mostly direction / spacing, mostly roof-as-B) still
+cost val / HF14 against r32 and buy nothing on Gemini30. Per the runbook: stop, do not mine. Next suspects, in order:
+the main+roof fallback (61% of elevation pairs; separable by region, so it teaches nothing the probe measures and
+redraws roofs as siding), then spacing pairs (inside real within-family spacing variation, 2026-10-08 item 3).

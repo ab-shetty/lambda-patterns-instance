@@ -60,7 +60,7 @@
 # shadow and are gone), soft shadows 0.5 by default. Same flags / ids / seed / training as revitnearroi, so it pairs
 # with the published revitnear2k-e8 (tone fix) and revitfailswissr32-2k-e8 (whole pool change); both are in
 # eval_baselines/, no control is retrained.
-#   EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revithueroi
+#   NOCTRL=1 EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revithueroi
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
@@ -136,12 +136,16 @@ extra_scores() {   # tag checkpoint: Gemini30 (user's boxes) + invariance probe,
     --json $E/$1_i2048_probe_leak.json > $E/$1_i2048_probe_leak.txt; }
 }
 
+# NOCTRL=1 (2026-10-13): skip the old v6d / revit2k controls; screens since 2026-10-08 pair against
+# eval_baselines/ (already scored, nothing to redo).
 CTRL=data/runs/ck_swint_v6d2k_pub/epoch_8.pth
+if [ -z "${NOCTRL:-}" ]; then
 [ -f $CTRL ] || PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py \
   --repo abshetty/floz-refunet-swint-v6d-e8 --out $CTRL
 score v6d_s7 $CTRL
+fi
 RCTRL=data/runs/ck_pub/revit2k-e8.pth
-if [[ " $ARMS " != *" revit "* ]]; then
+if [ -z "${NOCTRL:-}" ] && [[ " $ARMS " != *" revit "* ]]; then
   [ -f $RCTRL ] || PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py \
     --repo abshetty/floz-refunet-swint-revit2k-e8 --out $RCTRL
   score revit_s$SEED $RCTRL
@@ -174,10 +178,11 @@ fi
 
 for I in 2048 4096; do for split in val hf14; do
   for A in v6d_s7 revit_s$SEED $(for a in $ARMS; do [ $a = revit ] || echo ${a}_s$SEED; done); do
+    [ -f $E/${A}_i${I}_$split.json ] || continue
     python3 -c "import json,numpy as np;d=json.load(open('$E/${A}_i${I}_$split.json'));print(f'infer $I $split  $A  {np.mean([r[\"iou\"] for r in d[\"selections\"]]):.4f}')"
   done
   for a in $ARMS; do A=${a}_s$SEED
-    for C in v6d_s7 revit_s$SEED; do [ $C = $A ] && continue
+    for C in v6d_s7 revit_s$SEED; do [ $C = $A ] && continue; [ -f $E/${C}_i${I}_$split.json ] || continue
       python3 scripts/paired_compare.py --a $E/${C}_i${I}_$split.json --b $E/${A}_i${I}_$split.json \
         --label-a ${C%_s*} --label-b $a | grep -m2 "paired mean\|better on" | sed "s/^/  $a vs ${C%_s*}: /"
     done
