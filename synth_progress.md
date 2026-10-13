@@ -1304,3 +1304,8 @@ redraws roofs as siding), then spacing pairs (inside real within-family spacing 
   has a side wing; B is the wing (decided before the geometry, which makes the wing the accent zone), never the roof,
   an upper storey or another room. P 0.6 (`--near-pairs`). Direction / spacing-only pairs and floor-plan pairs off
   (`--near-pairs-plan` 0). Runbook: `codex_doc.md`, arm `revitwingroi`.
+- **Verified** (300 sheets, seed 11, new defaults): 22 pairs on 182 elevations (12%; 11 hue, 11 hue+spacing; 69 colour
+  elevations), B a side wing on every one; measured fill CIEDE2000 9.4-22.4 (median 17.6). No floor-plan pairs.
+  `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0 --soft-shadows 0`: the previous commit's code and this one
+  give byte-identical 24-sheet pools on this box (one pixel of one image differs from the same pool built before the
+  container restarted: environment, not code).
