@@ -1273,3 +1273,21 @@ v6d / revit2k controls not re-scored (`NOCTRL=1`). Per-question files: `eval_bas
 cost val / HF14 against r32 and buy nothing on Gemini30. Per the runbook: stop, do not mine. Next suspects, in order:
 the main+roof fallback (61% of elevation pairs; separable by region, so it teaches nothing the probe measures and
 redraws roofs as siding), then spacing pairs (inside real within-family spacing variation, 2026-10-08 item 3).
+
+### 2026-10-13 (CPU) -- reading the hue screen: not seed noise; the pairs teach "another zone = another family"
+
+- **Not noise.** Per-sheet |difference| between two near-identical runs (r32 vs the control: same pool, ref floor
+  only) on Gemini30: mean 0.037, max 0.136, no sheet > 0.15. Hue vs r32: mean 0.068, 4 sheets > 0.15. The sheets hue
+  lost (5, 14, 17, 28) were already falling under near (5: 0.91 / 0.71 / 0.58 for r32 / near / hue; 14: 0.87 / 0.69 /
+  0.69; 28: 0.82 / 0.72 / 0.64).
+- **It splits single families along zone boundaries.** Gemini30 5 and 14 have ONE family, yet hue selects 30-70% of
+  it. Near's saved probabilities (same failure, smaller): 5 q1 (dot tile, reference in the laundry) drops the whole
+  garage; 14 q1 (board-and-batten, reference on the main wall) drops the gables; 28 q12 (reference in the upper gable)
+  drops the lower wing; 9 q5 drops shingle blotches. These are exactly the boundaries the pairs are planted across:
+  B = the roof (61% of elevation pairs) or an upper-storey / wing accent; floor pairs = another room. The pairs teach
+  "a near-identical texture across that boundary is another family", and the model applies it to real sheets where the
+  family continues across it.
+- **Why hue is worse than near on Gemini30:** the line-sheet tone pairs became direction / spacing pairs on the same
+  boundaries, so the pool has MORE positional pairs and fewer whose difference is visible in appearance alone; the
+  only Gemini gain the pairs ever bought (sheet 26, tone) shrank with the colour-sheet-only tone pairs. Gemini30
+  under-selection share 0.17 / 0.37 / 0.46 (r32 / near / hue).
