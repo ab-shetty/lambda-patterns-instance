@@ -1309,6 +1309,13 @@ redraws roofs as siding), then spacing pairs (inside real within-family spacing 
   `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0 --soft-shadows 0`: the previous commit's code and this one
   give byte-identical 24-sheet pools on this box (one pixel of one image differs from the same pool built before the
   container restarted: environment, not code).
+- **How often is one real family two colours? Almost never, piece to piece.** Per piece (>= 4000 px at 2048 after a
+  7 px erosion; fill = median CIELAB of its lighter 40%), max pairwise CIEDE2000 inside a family: real 28 (26 families
+  with 2+ measurable pieces) 85% < 3, 8% 3-6, 4% 6-10, 4% 10-15, none above; Gemini30 (45 families) 98% < 3, one at 16.1.
+  The two above 10: val 17 (lavender markup paint, 12.4) and Gemini r2 #053 (a brick piece under the rear porch roof,
+  in shadow, 16.1). Between families: real 36% < 3 (same colour, told apart by texture), 57% >= 15; Gemini 64% < 3. So the
+  within-family colour variation found on 2026-10-08 is shading INSIDE pieces, not differently coloured pieces: a
+  piece-to-piece hue gap of CIEDE2000 >= 10 at the same lightness is another family on real sheets.
 
 ### 2026-10-14 (GH200) -- the wing colour-pair pool passes the screen; mined + long restart started
 
