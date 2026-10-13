@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-07"
+GEN_VERSION = "2026-10-13"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -75,7 +75,8 @@ DOWNSPOUTS = [0.05]
 REF_EXCLUDE = [True]
 # --near-pairs P / --near-pairs-plan P (defaults 0.35 / 0.6 since 2026-10-07; finish sheets are ~40% of
 # floor plans, so 0.6 plants a pair on ~15% of them): an elevation / a finish floor plan gets two labelled families that differ in ONE attribute (direction, spacing 1.4-2x, or
-# tone / colour dE 10-30); see revit_render.plant_near_pair and revit_plans.plant_near_pair_plan.
+# a hue change of 15-30 in CIELAB (a, b), colour sheets only, since 2026-10-13); see
+# revit_render.plant_near_pair and revit_plans.plant_near_pair_plan.
 # 0 = earlier pools.
 NEAR_PAIRS = [0.35]
 NEAR_PAIRS_PLAN = [0.6]

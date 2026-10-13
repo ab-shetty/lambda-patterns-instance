@@ -1619,6 +1619,36 @@ def _separate(kind, params, base, others):
         params[key] = (s2 * 1.6 if mine >= s2 else s2 / 1.6) / f
 
 
+
+def _to_lab(c):
+    L, a, b = cv2.cvtColor(np.uint8([[list(c)[::-1]]]), cv2.COLOR_BGR2LAB)[0, 0].astype(float)
+    return L * 100 / 255, a - 128, b - 128
+
+
+def _from_lab(L, a, b):
+    px = np.uint8([[[round(L * 255 / 100), round(min(127, max(-128, a)) + 128), round(min(127, max(-128, b)) + 128)]]])
+    return tuple(int(v) for v in cv2.cvtColor(px, cv2.COLOR_LAB2BGR)[0, 0][::-1])
+
+
+def _hue_shift(rgb, rr, lo, hi):
+    """A colour lo..hi away in CIELAB (a, b), lightness within +-3 (revit_render._shift_colour).
+    Returns (colour, (da, db)) or None."""
+    L0, a0, b0 = _to_lab(rgb)
+    for _ in range(40):
+        d = rr.uniform(lo, hi)
+        h = rr.uniform(0, 2 * math.pi)
+        da, db = d * math.cos(h), d * math.sin(h)
+        c = _from_lab(min(97, max(25, L0 + rr.uniform(-3, 3))), a0 + da, b0 + db)
+        L1, a1, b1 = _to_lab(c)
+        if abs(L1 - L0) <= 3.5 and lo <= math.hypot(a1 - a0, b1 - b0) <= hi + 4:
+            return c, (da, db)
+    return None
+
+
+def _move_ab(rgb, da, db):
+    L, a, b = _to_lab(rgb)
+    return _from_lab(L, a + da, b + db)
+
 # ---- near-miss floor pairs (FC.NEAR_PAIRS_PLAN, --near-pairs-plan P, default 0.6 since 2026-10-07):
 # _distinct / _separate keep every two floor families of one pattern type >= 1.4x apart in spacing or
 # clearly apart in tone, and direction never separates two families, so the model was never asked
@@ -1631,7 +1661,9 @@ def _separate(kind, params, base, others):
 #              and a turn of 45 deg is never a plank re-laid along a room, so this does not contradict the
 #              roof facets that turn;
 #   spacing    the same pattern 1.4-2x apart (the _distinct line itself);
-#   tone       the same pattern and pen on a fill 25-45 grey levels apart (or bare paper vs a wash).
+#   tone       colour plans only: the same pattern on a fill and pen moved 15-30 in CIELAB (a, b), lightness
+#              within +-3 -- a hue change. (2026-10-13: the grey-wash-vs-paper tone pairs were a lightness
+#              step with no hue, what a shadow does to one family on rendered sheets; see revit_render.)
 # Zone A keeps its material (made a line pattern if it has no spacing); zone B gets the variant. Runs
 # after _separate_all, which would otherwise push the pair apart. Own RNG: P = 0 is byte-identical.
 def plant_near_pair_plan(zone_mat, zones_present, colour, fam_seed):
@@ -1643,7 +1675,7 @@ def plant_near_pair_plan(zone_mat, zones_present, colour, fam_seed):
     zb = next((z for z in order if z != za and z != "garage"), None) or next((z for z in order if z != za), None)
     if za is None or zb is None:
         return None
-    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30])[0]
+    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30 if colour else 0])[0]
     A = zone_mat[za]
     if what == "direction" and A["kind"] not in ("plank_lines", "hatch45") or _spacing(A, A["kind"])[0] is None:
         A = dict(A, kind="plank_lines", sp=rr.uniform(0.4, 0.75), ang=rr.choice([0, 90]))
@@ -1664,13 +1696,12 @@ def plant_near_pair_plan(zone_mat, zones_present, colour, fam_seed):
         key = _spacing(A, A["kind"])[0]
         f = rr.uniform(1.4, 2.0)
         B[key] = A[key] * f if rr.random() < 0.5 else A[key] / f
-    else:
-        g = int(round(_lum(A["base"])))
-        if g >= 236 or (not colour and rr.random() < 0.5):
-            v = rr.randint(195, max(196, min(215, g - 25)))  # a grey wash beside bare / near-white paper
-            B["base"] = (v, v, v) if not colour else G.mix(A["base"], (90, 90, 90), (g - v) / max(1, g - 90))
-        else:
-            B["base"] = (255, 255, 255) if g <= 225 or rr.random() < 0.5 else G.mix(A["base"], (0, 0, 0), 0.15)
+    else:                   # tone: colour plans only (weight 0 above otherwise)
+        got = _hue_shift(A["base"], rr, 15, 30)
+        if got is None:
+            return None
+        B["base"], (da, db) = got
+        B["line"] = _move_ab(A["line"], da, db)
     B["seed"] = A["seed"] + 7
     zone_mat[zb] = B
     return za, zb, what

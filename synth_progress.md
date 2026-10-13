@@ -1196,3 +1196,36 @@ Direction pairs only if they cannot be solved by region: two side-by-side walls 
 accent), never the roof, never another storey; test with the probe at 2k before any pool. Balcony doors are confounded
 with the plan pairs in the noelev arm (no clean read); they are a labelling correction, rare (railings 0.15 x upper
 floor), and can stay or be screened alone.
+
+### 2026-10-13 (CPU) -- the near pairs fixed Gemini's merges; the lightness-only tone pairs contradicted shadows
+
+The 2026-10-08 recommendation (revert the tone and spacing pairs) was wrong for the goal: Gemini's worst merges ARE those
+pairs. Measured instead of reverted.
+
+1. **Where the best model (longswiss @4096) merges on Gemini30** (151 question x other-family rows, leak = share of the
+   other family selected): fill dE 0-10: leak 0.06; 10-35: 0.23; spacing ratio 1.6-2x: **0.41** (2-3x: 0.01); clearly
+   different colour (fill > 35 or ink > 40): 0.02. Worst: r4 #078 (sheet 26) -- tan / olive / red lap, all horizontal,
+   tan vs olive |dL| 4, d(a,b) 16 -- leak 0.5-1.0 both ways; r2 #029 (sheet 4) 1.65x + 45 deg, leak 0.93.
+2. **The near pool fixed sheet 26:** mean IoU r32 0.47 -> near 0.63 (worst question 0.22 -> 0.57); most of near's
+   Gemini30 gain (0.7518 vs 0.7393).
+3. **What it broke is lightness.** On val 5 / 6 the pixels near drops and r32 keeps differ from the reference by
+   |dL| +12 / +13.5 but d(a,b) +1.8 / +0.0: shade, not hue.
+4. **Shadows already exist** (`wall_shadows`: cast from the massing on 85% of elevations; `--soft-shadows 0.5` in every
+   run). Same 400 sheets (seed 6, run_revit_2k near flags) rendered with and without shading, 15 px local CIELAB, 25-75th
+   percentiles:
+
+   | | \|dL\| | d(a,b) |
+   |---|---|---|
+   | shadow on one family, line-only sheets | 16-29 | 0 |
+   | tone pair, line-only sheets (grey wash vs paper; 13 of 22 pairs) | 15-20 | 0 |
+   | shadow on one family, colour sheets | 16-25 | 4-14 |
+   | tone pair, colour sheets | 2-5 | 14-26 |
+   | spacing pair | 1-2 | 0 |
+
+   On line-only sheets the tone pair IS a shadow: one change labelled "same family" (shadow) and "another family"
+   (pair). The plan tone pairs were the same grey-wash step. The colour pairs were mostly hue and do not overlap.
+5. **Change (GEN_VERSION 2026-10-13):** tone pairs only on colour sheets (elevations: `shaded`; plans: `colour`), and as
+   a hue change: fill and pen moved together 15-30 in (a, b), lightness within +-3 (`revit_render._shift_colour`,
+   `revit_plans._hue_shift`). Line-only sheets / mono plans draw direction or spacing instead. Spacing and direction
+   pairs unchanged. `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0` still reproduce older pools.
+   `--soft-shadows` stays opt-in: every run passes 0.5 already, so making it the default changes no pool.

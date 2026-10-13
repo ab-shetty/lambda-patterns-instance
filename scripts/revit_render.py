@@ -106,7 +106,7 @@ COURSED = {"asphalt": ["brick", "block", "shingle", "lap"], "shingle": ["brick",
 
 
 def _rgb_from_lab(L, a, b):
-    px = np.uint8([[[round(L * 255 / 100), round(a + 128), round(b + 128)]]])
+    px = np.uint8([[[round(L * 255 / 100), round(min(127, max(-128, a)) + 128), round(min(127, max(-128, b)) + 128)]]])
     return tuple(int(v) for v in cv2.cvtColor(px, cv2.COLOR_LAB2BGR)[0, 0][::-1])
 
 
@@ -143,7 +143,12 @@ def plant_colour_pair(styles, shaded, app, fam_seed, S_guess, has_chimney):
 # spacing) and #041 (grey-washed vs bare lines) are these pairs. With probability P one pair, A and B:
 #   direction  lap (horizontal) vs vertical boards at the SAME spacing, colour and pen;
 #   spacing    the same kind, colour and pen, spacing 1.4-2x apart (distinct_looks' own 1.4x line);
-#   tone       the same pattern, fill dE 10-30 (colour sheets) or a grey wash vs bare paper (line-only).
+#   tone       colour sheets only: the same pattern, a HUE change -- fill and pen moved together 15-30 in
+#              CIELAB (a, b), lightness within +-3. (2026-10-13: lightness-only pairs -- a grey wash vs
+#              bare paper on line-only sheets -- measured the same as a cast shadow on one family, |dL| 15-20
+#              vs 16-29, d(a,b) 0 for both, so the pool labelled one change "same family" and "different
+#              family" at once; the screen then dropped shaded wall on rendered sheets. Shadows change
+#              lightness, these pairs change hue.)
 # A = the main wall (a plain one gets lines); B = an upper-storey / wing accent if the house has one, else the
 # roof (drawn as plain lines, as on HF14 25 / 27). Own RNG: P = 0 is byte-identical.
 LINE_KINDS = ("lap", "vertical", "bb")
@@ -160,17 +165,23 @@ def _callout(st, rr):
 
 
 def _shift_colour(rgb, rr, lo, hi):
-    """A colour dE lo..hi away in CIELAB, lightness within +-8."""
+    """A colour lo..hi away in CIELAB (a, b), lightness within +-3: a hue change, never a shade.
+    Returns (colour, (da, db)) or None."""
     L0, a0, b0 = _lab(rgb)
     for _ in range(40):
         d = rr.uniform(lo, hi)
-        dl = rr.uniform(-min(8, d * 0.6), min(8, d * 0.6))
-        r_ab = math.sqrt(max(0.0, d * d - dl * dl))
         h = rr.uniform(0, 2 * math.pi)
-        c = _rgb_from_lab(min(92, max(25, L0 + dl)), a0 + r_ab * math.cos(h), b0 + r_ab * math.sin(h))
-        if lo <= math.dist(_lab(c), (L0, a0, b0)) <= hi + 4:
-            return c
+        da, db = d * math.cos(h), d * math.sin(h)
+        c = _rgb_from_lab(min(92, max(25, L0 + rr.uniform(-3, 3))), a0 + da, b0 + db)
+        L1, a1, b1 = _lab(c)
+        if abs(L1 - L0) <= 3.5 and lo <= math.hypot(a1 - a0, b1 - b0) <= hi + 4:
+            return c, (da, db)
     return None
+
+
+def _move_ab(rgb, da, db):
+    L, a, b = _lab(rgb)
+    return _rgb_from_lab(L, a + da, b + db)
 
 
 def plant_near_pair(styles, shaded, fam_seed, accent_zone):
@@ -182,7 +193,7 @@ def plant_near_pair(styles, shaded, fam_seed, accent_zone):
     # accent, else the roof; a gable triangle or a wainscot band is too small (measured: B unmeasurable
     # on most such sheets)
     fb = "accent" if "accent" in styles and accent_zone in ("upper", "block") else "roof"
-    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30])[0]
+    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30 if shaded else 0])[0]
     A = styles[fa]
     if A.kind not in LINE_KINDS or (what == "direction" and A.kind == "bb"):
         A.kind = rr.choice(["lap", "vertical"])
@@ -202,17 +213,12 @@ def plant_near_pair(styles, shaded, fam_seed, accent_zone):
         f = rr.uniform(1.4, 2.0)
         sp = A.params["sp"]
         B.params["sp"] = sp * f if (sp * f <= 1.4 and rr.random() < 0.5) or sp / f < 0.22 else sp / f
-    else:
-        if shaded:
-            c = _shift_colour(A.base, rr, 10, 30)
-            if c is None:
-                return None
-            B.base = c
-            lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
-            B.line = G.mix(c, (0, 0, 0), 0.35) if lum > 90 else G.mix(c, (255, 255, 255), 0.3)
-        else:               # line-only sheet: one family on a grey wash, the other on bare paper
-            g = rr.randint(190, 222)
-            (A if rr.random() < 0.5 else B).base = (g, g, g)
+    else:                   # tone: colour sheets only (weight 0 above on line-only sheets)
+        got = _shift_colour(A.base, rr, 15, 30)
+        if got is None:
+            return None
+        B.base, (da, db) = got[0], got[1]
+        B.line = _move_ab(A.line, da, db)          # same pen lightness: the pair differs in hue only
     if fb == "roof":
         B.callout = styles["roof"].callout      # the roof keeps its roof note
     styles[fa], styles[fb] = A, B
