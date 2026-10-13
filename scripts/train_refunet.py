@@ -314,7 +314,9 @@ def main():
         missing, unexpected = model.load_state_dict(checkpoint["model"], strict=False)
         if unexpected or any(not k.startswith("roi_proj.") for k in missing):
             raise SystemExit(f"--init-from mismatch: missing={missing} unexpected={unexpected}")
-        start_epoch = int(checkpoint.get("actual_epoch", checkpoint.get("epoch", -1))) + 1
+        # Hub checkpoints (hf_ckpt_to_pth.py) carry epoch None: restart epochs then count from 0.
+        last = checkpoint.get("actual_epoch", checkpoint.get("epoch"))
+        start_epoch = (-1 if last is None else int(last)) + 1
     # `base_model` stays uncompiled: it owns the parameters, so it is what the
     # optimizer, the checkpoint and the per-epoch evaluator use. The evaluator
     # resizes differently from training, so running it through the compiled

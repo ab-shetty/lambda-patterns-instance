@@ -1309,3 +1309,30 @@ redraws roofs as siding), then spacing pairs (inside real within-family spacing 
   `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0 --soft-shadows 0`: the previous commit's code and this one
   give byte-identical 24-sheet pools on this box (one pixel of one image differs from the same pool built before the
   container restarted: environment, not code).
+
+### 2026-10-14 (GH200) -- the wing colour-pair pool passes the screen; mined + long restart started
+
+`revitwingroi` (GEN_VERSION 2026-10-14), same recipe as every 2k arm (seed 7, swin_t, ROI add, 1+8, epoch 8, hand
+boxes). Pool 1,989 sheets; pairs on 195 (all elevation main+accent: 94 hue, 101 hue+spacing). Per-question files
+`eval_baselines/revitwing2k-e8_*`; not on the Hub.
+
+| model @2048 | HF14 | val | val w/o 17 | Gemini30 |
+|---|---:|---:|---:|---:|
+| r32 (no pairs) | 0.8049 | 0.7580 | 0.8448 | 0.7393 |
+| near | 0.7779 | 0.6578 | 0.7895 | 0.7518 |
+| hue | 0.7806 | 0.7161 | 0.7988 | 0.7068 |
+| **wing** | 0.7920 | 0.7527 | 0.8365 | **0.7647** |
+
+@4096: HF14 0.8291, val 0.8010.
+
+- **vs r32: Gemini30 +0.025 (85 / 53, p=0.015; sign p=0.008), val w/o 17 -0.008 (se 0.009), val -0.005, HF14 -0.013
+  (11 / 19, p=0.27).** Gate passes (HF14 at the edge of "~0.01", not significant). vs hue: Gemini30 +0.058 (p=8e-7).
+- **The splitting is gone:** Gemini30 5 / 14 / 28 = 0.939 / 0.879 / 0.825 (r32 0.907 / 0.873 / 0.820; hue 0.583 / 0.689 /
+  0.635). Gemini30 16 0.749 (r32 0.458; +0.29, beyond the 0.14 noise band); 26 0.499 (r32 0.417; within noise).
+  Losses > 0.1 vs r32: Gemini30 4, 10, 25 (-0.11 to -0.14, inside the noise band).
+- **Under / over-selection share of the loss** (r32 -> wing): Gemini30 0.17 / 0.40 -> 0.28 / 0.24; HF14 0.25 / 0.32 ->
+  0.21 / 0.45; val 0.23 / 0.36 -> 0.59 / 0.03 (val is 23 / 72 sheet 17, which reads 0.574 in both).
+- **The probe moves for the first time, on colour:** fill tan vs olive leak 0.98 / 0.86 (hue) -> 0.61 / 0.10; tan vs blue
+  0.66 / 0.51 -> 0.01 / 0.00; spacing x2 0.32 -> 0.12 (A->B). Direction stays blind (0.75-0.98), as expected (no
+  direction pairs).
+- Next (runbook step 3): mining on the wing pool and the 20-epoch restart of longswiss-swa37-41, below.
