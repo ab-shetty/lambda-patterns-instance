@@ -1,21 +1,63 @@
 # Handoff
 
-Last updated: 2026-10-06
+Last updated: 2026-10-13
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds
 every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## GPU runbook (written 2026-10-13 on CPU -- do this first; supersedes the 2026-10-08 runbook below)
+
+What changed since the 2026-10-08 screen: generator GEN_VERSION 2026-10-13 -- tone near-pairs are a HUE change only
+(fill and pen moved 15-30 in CIELAB a/b, lightness within +-3, colour sheets only); the grey-wash-vs-paper tone pairs
+are gone (measured identical to a cast shadow on one family: that contradiction is why the near pool dropped shaded
+wall on real rendered sheets); `--soft-shadows` defaults to 0.5 (every run already passed it). Spacing / direction
+pairs and balcony doors unchanged. Why and the measurements: `synth_progress.md` "2026-10-13 (CPU)". Verified on CPU:
+300-sheet pool (pair mix, colours with / without shading), old flags byte-identical.
+
+0. `git pull`; `set -a; . ~/.env; set +a`.
+1. Gemini30 pool: keep it if the box rebuilt it on 2026-10-08 (#048 relabelled); else
+   `rm -rf data/eval_pools/gemini30_s20261006 && python3 scripts/build_gemini30_pool.py`.
+2. **2k screen, ONE arm** (the pool builds itself; one 2k run; the controls are already scored):
+   `EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revithueroi`
+   Paired comparisons @2048 (outputs `data/evaluations/revit2k/revithueroi_s7_i2048_{val,hf14,gemini30}.json`):
+   ```
+   for S in val hf14 gemini30; do for C in revitfailswissr32-2k-e8 revitnear2k-e8; do
+     python3 scripts/paired_compare.py --a eval_baselines/${C}_${S}_2048.json \
+       --b data/evaluations/revit2k/revithueroi_s7_i2048_$S.json --label-a $C --label-b hue | grep -m2 "paired mean\|better on"
+   done; done
+   ```
+   Reference points @2048: r32 (no pairs) HF14 0.8049 / val 0.7580 / Gemini30 0.7393; near (2026-10-07 pairs)
+   0.7779 / 0.6578 / 0.7518.
+3. **Read it (what the fix predicts):**
+   - Shaded rendered sheets recover to r32: val 5 / 6, HF14 2 / 3 (near lost 0.13-0.16 on each).
+   - Gemini r4 #078 (Gemini30 image 26, tan / olive / red lap) keeps near's gain: mean IoU r32 0.47, near 0.63.
+     `python3 -c "import json,numpy as np;d=json.load(open('data/evaluations/revit2k/revithueroi_s7_i2048_gemini30.json'));print(np.mean([r['iou'] for r in d['selections'] if r['image_index']==26]))"`
+   - Val 17 swings 0.2-0.5 between epochs on its own: read val with and without image 17.
+   - **Gate:** Gemini30 >= r32 + 0.01 and HF14 / val (w/o 17) no worse than r32 by more than ~0.01 -> step 4.
+     If val / HF14 still fall, check the line sheets (val 9 / 13, HF14 12, which lost under near without any colour
+     change): then the spacing / direction pairs are the next suspect -- stop and report, do not mine.
+   - The probe's direction leak is expected to stay ~0.9 (the pairs can still be told apart by region); not a gate.
+4. **If the gate passes:** mine on the new pool and restart the best model, as planned for near:
+   `EXTRA="--roi-ref --roi-ref-mode add" SRC=hue NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7`
+   then the 20-epoch restart of `abshetty/floz-refunet-swint-longswiss-swa37-41` on `data/synthetic/revithue_hard2000`
+   (`run_hard_long.sh`, EP=20, GEN = `--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source
+   data/reference/swiss_dwellings/layouts.pkl.gz`, EXTRA ROI), SWA picked on val (`average_checkpoints.py`,
+   `select_epoch_on_val.py`). Score @4096 with hand boxes on HF14 / val / Gemini30 + probe, paired against
+   `eval_baselines/longswiss-swa37-41_*`.
+5. Publish the 2k arm (`abshetty/floz-refunet-swint-revithue2k-e8`) with `--save-probs` folders for val / HF14 /
+   Gemini30 / probe, and copy its per-question JSONs to `eval_baselines/revithue2k-e8_{val,hf14,gemini30}_2048.json`.
+
 ## Result of the 2026-10-08 GPU runbook (read first)
 
 Steps 1-2 ran (80-min VM); step 3 did NOT, because the gate failed. The near-miss pool does not cut the probe's direction
 leak (0.91-0.98) and costs val -0.100 (p=2e-8) and HF14 -0.027 against its own control; the 32 px reference floor is
 neutral (keep it). Numbers, Hub repos and next steps: `synth_progress.md` "2026-10-08 (GH200, 80-min VM)". The generator
-defaults `--near-pairs 0.35 --near-pairs-plan 0.6 --balcony-doors 0.7` are still on: decide whether to revert them
-before building the next pool.
+defaults `--near-pairs 0.35 --near-pairs-plan 0.6 --balcony-doors 0.7` stay on; the tone pairs were fixed 2026-10-13
+(runbook above).
 
-## GPU runbook (written 2026-10-08 on CPU -- do this first; supersedes the "Next" lists below)
+## GPU runbook of 2026-10-08 (done; kept for reference)
 
 What changed since the GH200 session: generator defaults (near-miss pairs, balcony doors; GEN_VERSION 2026-10-07),
 training default `--ref-min-side 32` (px at training scale), mining default `--min-ref-side 32`, Gemini #048 relabelled

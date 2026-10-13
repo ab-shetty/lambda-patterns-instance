@@ -806,9 +806,10 @@ def main():
     ap.add_argument("--faint-lines", type=float, default=0.0,
                     help="Revit line-only elevations: probability every pattern is drawn in pale grey "
                          "(190-228, finer pen), as on HF14 14; 0 (default) = byte-identical")
-    ap.add_argument("--soft-shadows", type=float, default=0.0,
+    ap.add_argument("--soft-shadows", type=float, default=0.5,
                     help="Revit elevations: probability shadows are lighter (x0.76-0.88), neutral grey and two-level "
-                         "(overlap darker), as on HF14 02; 0 (default) = byte-identical")
+                         "(overlap darker), as on HF14 02. Default 0.5 since 2026-10-13 (every run since 2026-10-02 "
+                         "passed it); 0 = earlier pools")
     ap.add_argument("--roof-lines", type=float, default=0.0,
                     help="Revit elevations: probability the roof is plain tight horizontal lines, 60%% of them over "
                          "looser vertical boards, as on HF14 25 / 27; 0 (default) = byte-identical")

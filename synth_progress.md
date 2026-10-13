@@ -1228,7 +1228,7 @@ pairs. Measured instead of reverted.
    a hue change: fill and pen moved together 15-30 in (a, b), lightness within +-3 (`revit_render._shift_colour`,
    `revit_plans._hue_shift`). Line-only sheets / mono plans draw direction or spacing instead. Spacing and direction
    pairs unchanged. `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0` still reproduce older pools.
-   `--soft-shadows` stays opt-in: every run passes 0.5 already, so making it the default changes no pool.
+   `--soft-shadows` defaults to 0.5 since this date (every run already passed it; pools built without it: add `--soft-shadows 0`).
 6. **Verified** (300 new-default sheets, seed 11, same with / without shading): tone pairs |dL| 1-2, d(a,b) 15-24
    (8 pairs, colour sheets only; shadows on colour sheets |dL| 13-23, d(a,b) 4-16); no lightness-only pair left.
    Pair mix 43 direction / 31 spacing / 8 tone. `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0`: 24 sheets
