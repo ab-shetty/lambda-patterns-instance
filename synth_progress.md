@@ -1363,3 +1363,34 @@ per-question files `eval_baselines/longwing-swa16-19_*_4096.json`.
 - **The pair did its job on its target:** Gemini30 26 (tan / olive / red lap) 0.380 -> 0.665. Also 10 0.77 -> 0.85, 4
   0.66 -> 0.72. Losses: Gemini30 1 0.833 -> 0.432, 0 0.736 -> 0.592, 6, 17; HF14 14 0.882 -> 0.803 (12 0.714 -> 0.794);
   val 9 (line sheet) 0.877 -> 0.745.
+
+### 2026-10-14 (GH200) -- the wing long run by epoch; synthetic vs real; diagnostics on the Hub
+
+CPU-session requests (`codex_doc.md`). All @4096, hand boxes; per-question files in `eval_baselines/` (`longwing-eN_*`,
+`*_synth300_4096`); probability maps on the private Hub dataset `abshetty/floz-diag` (`<model tag>/<split>_<res>/probs`
++ `metrics.json`): longswiss-swa37-41 and longwing-swa16-19 (HF14 / val / Gemini30 / synth300 @4096), revitwing2k-e8 and
+revitfailswissr32-2k-e8 (HF14 / val / Gemini30 @2048); epochs 4 / 9 / 14 / 19 metrics only. The SWA checkpoint is on the
+Hub: `abshetty/floz-refunet-swint-longwing-swa16-19` (private, round-trip identical).
+
+**By epoch** (IoU, then share of the loss from under- / over-selection, pred/target < 0.77 / > 1.3):
+
+| | HF14 | val | val w/o 17 | Gemini30 |
+|---|---|---|---:|---|
+| start (longswiss) | 0.8779 .17/.20 | 0.8766 .23/.00 | 0.9093 | 0.8295 .13/.32 |
+| e4 | 0.8536 .52/.04 | 0.8457 .33/.00 | 0.8870 | 0.8096 .20/.25 |
+| e9 | 0.8710 .27/.16 | **0.8959** .04/.00 | **0.9195** | 0.8325 .13/.28 |
+| e14 | 0.8728 .41/.08 | 0.7966 .61/.00 | 0.8797 | 0.8115 .28/.20 |
+| e19 | 0.8811 .36/.15 | 0.7905 .65/.00 | 0.8830 | 0.8344 .19/.23 |
+| SWA 16-19 | 0.8805 .36/.15 | 0.8161 .52/.00 | 0.8846 | 0.8343 .19/.21 |
+
+- **Splitting starts at once and is not monotonic.** e4 (LR near its 2e-4 peak) under-selects everywhere (HF14 .52);
+  e9 is back to the start's balance and has the best val of any model (0.8959; w/o 17 0.9195) at HF14 0.8710; by e14
+  val splits again (.61, mostly sheet 17) while HF14 and Gemini30 recover by e19. The SWA window (last epochs only)
+  could not pick e9. Fit (run_hard_long): mined-half sheets 0.862 -> 0.877 from e9 to e19, fresh flat 0.886.
+- **Synthetic vs real.** On 300 fresh wing-generator sheets (ids 500000+, 2,718 questions): longswiss 0.8739, longwing
+  0.9000 (+0.026, 821 / 246, p=2e-33); pair elevations 0.832 -> 0.920, other elevations 0.885 -> 0.898, floor plans
+  0.773 -> 0.819, roofs 0.939 -> 0.976; over-selection share 0.32 -> 0.16. On real: HF14 +0.003, Gemini30 +0.005. The run
+  learned what the synthetic sheets teach; almost none of it transfers.
+- **Mined pool** (`pool_manifests/revitwing_hard2000.json`): pair sheets 14.8% of the mined half (20.8% of its
+  elevations) vs 9.8% of the 2k pool, 10.2% of the base half, 9.5% of the fresh 4,000. Not because pair sheets are harder
+  for the miner (pair elevations 0.797 vs other elevations 0.795): they fall in the 17-51% hardness band more often.

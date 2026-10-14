@@ -9,6 +9,11 @@ here.
 
 ## Requests from the CPU session (2026-10-14; do now, alongside the wing long run -- scoring fits next to training)
 
+**Done 2026-10-14 (GH200):** 1-5 all done (maps on `abshetty/floz-diag`, metrics in `eval_baselines/`, epochs 4 / 9 / 14 / 19
+scored after the run, mining scores in `eval_baselines/hardmine_wing/`); longwing SWA on the Hub as
+`abshetty/floz-refunet-swint-longwing-swa16-19`; mined-pool manifest `pool_manifests/revitwing_hard2000.json`. Results:
+`synth_progress.md` "2026-10-14 (GH200) -- the wing long run by epoch".
+
 Goal: see what each model fixes and what it still gets wrong, from probability maps, without CPU rescoring (one
 question at 4096 takes ~1 min on the CPU box). Upload maps to a new private Hub dataset `abshetty/floz-diag` under
 `<model tag>/<split>_<res>/` (folders `--save-probs` writes, plus the metrics JSON); commit only the metrics JSONs to
