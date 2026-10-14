@@ -1669,3 +1669,17 @@ blend `data/runs/ck_single18knp0_blend50.pth` (not on the Hub). Per-question fil
 `--near-pairs` default 0.6 -> 0 after the single18k no-pairs arm (previous GH200 entry): real-sheet scores unchanged,
 Gemini30 1 recovers. The wing / gable arms in `run_revit_2k.sh` / `run_hard_mine.sh` now pass `--near-pairs 0.6`
 explicitly. Pair code stays.
+
+### 2026-10-14 (CPU) -- loss breakdown of single18k-blend50 (maps from floz-diag)
+
+| IoU lost to | HF14 longswiss -> blend50 | val | Gemini30 |
+|---|---|---|---|
+| merge with another family | 0.029 -> 0.005 | 0.002 -> 0.001 | 0.049 -> 0.039 |
+| unlabelled drawing | 0.010 -> 0.008 | 0.035 -> 0.033 | 0.027 -> 0.025 |
+| missed inside the family | 0.046 -> 0.061 | 0.036 -> 0.022 | 0.050 -> 0.042 |
+| missed whole large pieces | 0.022 -> 0.032 | 0.002 -> 0.013 | 0.003 -> 0.003 |
+| total loss | 0.122 -> 0.112 | 0.123 -> 0.104 | 0.171 -> 0.150 |
+
+HF14 is now almost all misses (FN 0.085 of 0.112; 45% of the loss on under-selecting questions), and three sheets hold
+them: 12 (floor plan; 0.020 of whole pieces missed), 14 and 18 -- 0.062 of the 0.112. 0.92 on HF14 means fixing
+those sheets' misses; merges are done.
