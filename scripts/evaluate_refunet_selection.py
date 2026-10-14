@@ -13,7 +13,7 @@ import torch
 from PIL import Image
 
 from refmask2former import load_parquet_records
-from refmask2former.dataset import (_normalize_chw, exclusion_mask, reference_region,
+from refmask2former.dataset import (IMAGENET_MEAN, IMAGENET_STD, _normalize_chw, exclusion_mask, reference_region,
                                     render_instance_mask, sample_reference_box,
                                     scale_matched_reference)
 from refmask2former.ref_unet import RefUNet
@@ -96,140 +96,220 @@ def load_refunet(checkpoint_path, device):
     return model, checkpoint
 
 
+def _prepare_sheet(job):
+    """CPU half of one sheet: decode, masks, reference boxes and crops, box planes, targets.
+    Runs in a worker process when `evaluate_model(workers > 0)`; every step is the same code
+    the in-process path ran, with the same per-question RNG seeds, so the result is identical."""
+    (image_idx, rec, image_max_size, ref_size, scale_matched_ref, ov, fixes, want_box) = job
+    data = rec["image"] if "image" in rec else Path(rec["image_path"]).read_bytes()
+    image0 = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))
+    anns = rec["annotations"]
+    if isinstance(anns, str):
+        anns = json.loads(anns)
+    h0, w0 = image0.shape[:2]
+    masks0 = [render_instance_mask(a["segmentation"], h0, w0).astype(bool) for a in anns]
+    categories = [a.get("category_name", "pattern") for a in anns]
+    # --label-fixes "reassign": an instance moved to another category (a family the labeller
+    # lumped that is really two patterns); boxes are unchanged, only the targets move
+    for fx in fixes:
+        if "reassign" in fx:
+            categories[fx["reassign"]] = fx["category"]
+    # synthetic pools: reference boxes stay off posts / railings / furniture (ref_exclude)
+    excl = exclusion_mask(rec.get("ref_exclude"), h0, w0)
+    # --label-fixes: extra TARGET pixels per category (missed labels); the masks
+    # above, which the reference boxes are sampled from, are left as they are
+    fix_masks = {}
+    for fx in fixes:
+        if "polygon" not in fx:
+            continue
+        m = np.zeros((h0, w0), np.uint8)
+        cv2.fillPoly(m, [np.round(np.array(fx["polygon"], np.float64)).astype(np.int32)], 1)
+        fix_masks[fx["category"]] = fix_masks.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
+    scale = image_max_size / max(h0, w0)
+    nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
+    image = cv2.resize(image0, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    # the sheet's questions: reference box per labelled instance
+    questions = []
+    for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
+        rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
+        region = reference_region(ref_mask, excl)
+        if region is None:      # piece wholly behind a railing / furniture: not a question
+            continue
+        x, y, w, h = sample_reference_box(region, 128, 512, rng=rng)
+        # --boxes: a hand-placed box (native pixels) replaces the automatic one;
+        # null drops the question. The rng draw above still happens, so every
+        # other question keeps its automatic box exactly.
+        if str(ref_idx) in ov:
+            if ov[str(ref_idx)] is None:
+                continue
+            x, y, w, h = (int(round(v)) for v in ov[str(ref_idx)])
+            x, y = max(0, min(x, w0 - 1)), max(0, min(y, h0 - 1))
+            w, h = max(1, min(w, w0 - x)), max(1, min(h, h0 - y))
+        crop = image0[y:y + h, x:x + w]
+        if not crop.size:
+            continue
+        if scale_matched_ref:
+            crop = scale_matched_reference(crop, scale, ref_size)
+        else:
+            crop = cv2.resize(crop, (ref_size, ref_size), interpolation=cv2.INTER_LINEAR)
+        plane = None
+        if want_box:
+            # The anchor plane must be built the same way here as in the
+            # dataset, or an anchored model is evaluated without the input it
+            # was trained on: the native box resized with the image (nearest), so it
+            # stays pixel-aligned. Nearest resizing maps each axis on its own, so the
+            # plane is exactly rows x cols of the resized 1-D indicators (checked
+            # against the 2-D resize on 3,000 random boxes) -- sent as two vectors.
+            rows = np.zeros((h0, 1), np.uint8)
+            rows[y:y + h] = 1
+            cols = np.zeros((1, w0), np.uint8)
+            cols[0, x:x + w] = 1
+            plane = (cv2.resize(rows, (1, nh), interpolation=cv2.INTER_NEAREST)[:, 0],
+                     cv2.resize(cols, (nw, 1), interpolation=cv2.INTER_NEAREST)[0])
+        questions.append((ref_idx, category, (x, y, w, h), crop, plane))
+    targets = {}
+    for category in dict.fromkeys(q[1] for q in questions):
+        target = np.logical_or.reduce([m for m, c in zip(masks0, categories) if c == category])
+        if category in fix_masks:
+            target = target | fix_masks[category]
+        targets[category] = (np.packbits(target), int(target.sum()))
+    return dict(image_idx=image_idx, h0=h0, w0=w0, nh=nh, nw=nw, image=image,
+                questions=questions, targets=targets)
+
+
+def _score_question(job):
+    """IoU of one prediction at native resolution (and the optional probability map)."""
+    pred_small, prob_u8, (h0, w0), (target_bits, target_pixels), save_path = job
+    if save_path:
+        # Inference-resolution probability, quantised to uint8, for offline
+        # ensembling / threshold sweeps (scripts/ensemble_selection.py).
+        np.savez_compressed(save_path, prob=prob_u8)
+    prediction = cv2.resize(pred_small, (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
+    target = np.unpackbits(target_bits, count=h0 * w0).reshape(h0, w0).astype(bool)
+    return int((prediction & target).sum()), int(prediction.sum()), target_pixels
+
+
+def _normalize_on(image_uint8, device):
+    """`_normalize_chw` computed on `device`. Bit-identical on CUDA (checked over all 256 values
+    per channel): the 255 is a device tensor, so the division is a true division, not the
+    reciprocal multiply PyTorch uses for a Python-scalar divisor."""
+    if device.type != "cuda":
+        return _normalize_chw(image_uint8).to(device)
+    t = torch.from_numpy(image_uint8).to(device).float()
+    mean = torch.as_tensor(IMAGENET_MEAN, device=device)
+    std = torch.as_tensor(IMAGENET_STD, device=device)
+    return ((t / torch.full((1,), 255.0, device=device) - mean) / std).permute(2, 0, 1).contiguous()
+
+
+def _worker_init():
+    cv2.setNumThreads(1)    # the pool is the parallelism; per-call threads only oversubscribe
+
+
+class _Inline:
+    """`workers=0`: the same jobs, run in-process as they are submitted."""
+    class _Done:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    def apply_async(self, fn, args):
+        return self._Done(fn(*args))
+
+
 def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                    mask_thresh=0.5, device=None, scale_matched_ref=False, tta=1,
-                   save_probs=None, box_overrides=None, label_fixes=None, q_batch=8):
+                   save_probs=None, box_overrides=None, label_fixes=None, q_batch=8,
+                   workers=0):
     """`tta` averages sigmoid maps over dihedral views of image AND reference
     (the reference crop is a piece of the same image, so it turns with it).
     `q_batch` > 0: models with `forward_cached` (swin) run the image backbone once per
-    sheet and view and the questions `q_batch` at a time; 0 = one full forward each."""
+    sheet and view and the questions `q_batch` at a time; 0 = one full forward each.
+    `workers` > 0: sheet preparation (decode, masks, boxes) and native-resolution scoring
+    run in that many processes while the GPU works, `2 * workers` sheets ahead; 0 = all
+    in-process. Results are identical either way. A record may carry `image_path` instead
+    of `image` bytes (read in the worker)."""
     device = device or next(model.parameters()).device
     transforms = tta_transforms(tta)
-    rows = []
-    with torch.inference_mode():
-        for image_idx in indices:
-            rec = records[image_idx]
-            image0 = np.asarray(Image.open(io.BytesIO(rec["image"])).convert("RGB"))
-            anns = rec["annotations"]
-            if isinstance(anns, str):
-                anns = json.loads(anns)
-            h0, w0 = image0.shape[:2]
-            masks0 = [render_instance_mask(a["segmentation"], h0, w0).astype(bool)
-                      for a in anns]
-            categories = [a.get("category_name", "pattern") for a in anns]
-            # --label-fixes "reassign": an instance moved to another category (a family the labeller
-            # lumped that is really two patterns); boxes are unchanged, only the targets move
-            for fx in (label_fixes or {}).get(str(image_idx), []):
-                if "reassign" in fx:
-                    categories[fx["reassign"]] = fx["category"]
-            # synthetic pools: reference boxes stay off posts / railings / furniture (ref_exclude)
-            excl = exclusion_mask(rec.get("ref_exclude") if isinstance(rec, dict) else None, h0, w0)
-            # --label-fixes: extra TARGET pixels per category (missed labels); the masks
-            # above, which the reference boxes are sampled from, are left as they are
-            fix_masks = {}
-            for fx in (label_fixes or {}).get(str(image_idx), []):
-                if "polygon" not in fx:
-                    continue
-                m = np.zeros((h0, w0), np.uint8)
-                cv2.fillPoly(m, [np.round(np.array(fx["polygon"], np.float64)).astype(np.int32)], 1)
-                fix_masks[fx["category"]] = fix_masks.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
-            scale = image_max_size / max(h0, w0)
-            nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
-            image = cv2.resize(image0, (nw, nh), interpolation=cv2.INTER_LINEAR)
-            image_tensor = _normalize_chw(image).unsqueeze(0).to(device)
-            # 1) the sheet's questions: reference box per labelled instance
-            questions = []
-            for ref_idx, (ref_mask, category) in enumerate(zip(masks0, categories)):
-                rng = random.Random(image_idx * 1_000_003 + ref_idx * 65_537 + 12_345)
-                region = reference_region(ref_mask, excl)
-                if region is None:      # piece wholly behind a railing / furniture: not a question
-                    continue
-                x, y, w, h = sample_reference_box(region, 128, 512, rng=rng)
-                # --boxes: a hand-placed box (native pixels) replaces the automatic one;
-                # null drops the question. The rng draw above still happens, so every
-                # other question keeps its automatic box exactly.
-                ov = (box_overrides or {}).get(str(image_idx), {})
-                if str(ref_idx) in ov:
-                    if ov[str(ref_idx)] is None:
-                        continue
-                    x, y, w, h = (int(round(v)) for v in ov[str(ref_idx)])
-                    x, y = max(0, min(x, w0 - 1)), max(0, min(y, h0 - 1))
-                    w, h = max(1, min(w, w0 - x)), max(1, min(h, h0 - y))
-                crop = image0[y:y + h, x:x + w]
-                if not crop.size:
-                    continue
-                if scale_matched_ref:
-                    crop = scale_matched_reference(crop, scale, ref_size)
-                else:
-                    crop = cv2.resize(crop, (ref_size, ref_size),
-                                      interpolation=cv2.INTER_LINEAR)
-                questions.append((ref_idx, category, (x, y, w, h), _normalize_chw(crop)))
+    use_box = getattr(model, "anchor", False) or getattr(model, "roi_ref", False)
+    # Swin models: the image backbone runs ONCE per sheet and TTA view (it does not depend
+    # on the reference); questions go through the reference encoder + decoder `q_batch` at
+    # a time. Others: one forward each.
+    cached = q_batch > 0 and hasattr(model, "forward_cached")
 
-            def box_plane(x, y, w, h):
-                # The anchor plane must be built the same way here as in the
-                # dataset, or an anchored model is evaluated without the input it
-                # was trained on. Built at native size, then resized with the
-                # image so it stays pixel-aligned.
-                box_native = np.zeros((h0, w0), np.uint8)
-                box_native[y:y + h, x:x + w] = 1
-                return torch.from_numpy(cv2.resize(box_native, (nw, nh),
-                                                   interpolation=cv2.INTER_NEAREST)).float()[None, None]
+    def job(image_idx):
+        rec = records[image_idx]
+        rec = {k: rec[k] for k in ("image", "image_path", "annotations", "ref_exclude")
+               if isinstance(rec, dict) and k in rec} if isinstance(rec, dict) else rec
+        return (image_idx, rec, image_max_size, ref_size, scale_matched_ref,
+                (box_overrides or {}).get(str(image_idx), {}),
+                (label_fixes or {}).get(str(image_idx), []), use_box)
 
-            use_box = getattr(model, "anchor", False) or getattr(model, "roi_ref", False)
-            # 2) probabilities. Swin models: the image backbone runs ONCE per sheet and TTA
-            # view (it does not depend on the reference); questions go through the
-            # reference encoder + decoder `q_batch` at a time. Others: one forward each.
-            cached = q_batch > 0 and hasattr(model, "forward_cached")
-            feats = {}
-            targets = {}
-            for c0 in range(0, len(questions), q_batch if cached else 1):
-                chunk = questions[c0:c0 + (q_batch if cached else 1)]
-                refs = torch.stack([q[3] for q in chunk]).to(device)
-                boxes = torch.cat([box_plane(*q[2]) for q in chunk]).to(device) if use_box else None
-                with torch.autocast("cuda", dtype=torch.bfloat16,
-                                    enabled=device.type == "cuda"):
-                    acc = None
-                    for hf, k in transforms:
-                        img_t = _dihedral(image_tensor, hf, k)
-                        ref_t = _dihedral(refs, hf, k)
-                        box_t = _dihedral(boxes, hf, k) if boxes is not None else None
-                        if cached:
-                            if (hf, k) not in feats:
-                                feats[(hf, k)] = model.features(img_t)
-                            logit = model.forward_cached(feats[(hf, k)], img_t.shape[-2:], ref_t, box_t)
-                        else:
-                            logit = model(img_t, ref_t, ref_box=box_t)
-                        prob = _dihedral_inv(logit.sigmoid().float(), hf, k)[:, 0]
-                        acc = prob if acc is None else acc + prob
-                    probs = acc / len(transforms)
-                # 3) score each question
-                for (ref_idx, category, (x, y, w, h), _), probability in zip(chunk, probs):
-                    if save_probs:
-                        # Inference-resolution probability, quantised to uint8, for offline
-                        # ensembling / threshold sweeps (scripts/ensemble_selection.py).
-                        np.savez_compressed(
-                            Path(save_probs) / f"{image_idx:03d}_{ref_idx:03d}.npz",
-                            prob=(probability.float().cpu().numpy() * 255).round().astype(np.uint8))
-                    pred_small = probability > mask_thresh
-                    prediction = cv2.resize(pred_small.cpu().numpy().astype(np.uint8),
-                                            (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
-                    if category not in targets:
-                        target = np.logical_or.reduce(
-                            [m for m, c in zip(masks0, categories) if c == category])
-                        if category in fix_masks:
-                            target = target | fix_masks[category]
-                        targets[category] = (target, int(target.sum()))
-                    target, target_pixels = targets[category]
-                    intersection = int((prediction & target).sum())
-                    prediction_pixels = int(prediction.sum())
-                    union = prediction_pixels + target_pixels - intersection
-                    rows.append({"image_index": image_idx,
-                                 "reference_instance": ref_idx,
-                                 "category": category,
-                                 "reference_box_native": [x, y, w, h],
-                                 "iou": intersection / max(union, 1),
-                                 "prediction_pixels": prediction_pixels,
-                                 "target_pixels": target_pixels})
+    pool = None
+    if workers > 0:
+        import multiprocessing as mp
+        pool = mp.get_context("spawn").Pool(workers, initializer=_worker_init)
+    runner = pool or _Inline()
+    pending = []            # per question, in order: (row without counts, async result)
+    try:
+        ahead = 2 * workers if workers > 0 else 0
+        prepared = [runner.apply_async(_prepare_sheet, (job(i),)) for i in indices[:ahead + 1]]
+        nxt = len(prepared)
+        with torch.inference_mode():
+            for _ in indices:
+                sheet = prepared.pop(0).get()
+                if nxt < len(indices):
+                    prepared.append(runner.apply_async(_prepare_sheet, (job(indices[nxt]),)))
+                    nxt += 1
+                image_idx, h0, w0, nh, nw = (sheet[k] for k in ("image_idx", "h0", "w0", "nh", "nw"))
+                questions = sheet["questions"]
+                image_tensor = _normalize_on(sheet["image"], device).unsqueeze(0)
+                feats = {}
+                for c0 in range(0, len(questions), q_batch if cached else 1):
+                    chunk = questions[c0:c0 + (q_batch if cached else 1)]
+                    refs = torch.stack([_normalize_chw(q[3]) for q in chunk]).to(device)
+                    boxes = (torch.stack([torch.from_numpy(q[4][0]).to(device).float()[:, None]
+                                          * torch.from_numpy(q[4][1]).to(device).float()[None, :]
+                                          for q in chunk])[:, None]
+                             if use_box else None)
+                    with torch.autocast("cuda", dtype=torch.bfloat16,
+                                        enabled=device.type == "cuda"):
+                        acc = None
+                        for hf, k in transforms:
+                            img_t = _dihedral(image_tensor, hf, k)
+                            ref_t = _dihedral(refs, hf, k)
+                            box_t = _dihedral(boxes, hf, k) if boxes is not None else None
+                            if cached:
+                                if (hf, k) not in feats:
+                                    feats[(hf, k)] = model.features(img_t)
+                                logit = model.forward_cached(feats[(hf, k)], img_t.shape[-2:], ref_t, box_t)
+                            else:
+                                logit = model(img_t, ref_t, ref_box=box_t)
+                            prob = _dihedral_inv(logit.sigmoid().float(), hf, k)[:, 0]
+                            acc = prob if acc is None else acc + prob
+                        probs = acc / len(transforms)
+                    preds = (probs > mask_thresh).to(torch.uint8).cpu().numpy()
+                    prob_u8 = ((probs.float() * 255).round().to(torch.uint8).cpu().numpy()
+                               if save_probs else [None] * len(chunk))
+                    for (ref_idx, category, box, _, _), pred_small, pu8 in zip(chunk, preds, prob_u8):
+                        save_path = (str(Path(save_probs) / f"{image_idx:03d}_{ref_idx:03d}.npz")
+                                     if save_probs else None)
+                        pending.append(({"image_index": image_idx, "reference_instance": ref_idx,
+                                         "category": category, "reference_box_native": list(box)},
+                                        runner.apply_async(_score_question, (
+                                            (pred_small, pu8, (h0, w0), sheet["targets"][category],
+                                             save_path),))))
+        rows = []
+        for row, res in pending:
+            intersection, prediction_pixels, target_pixels = res.get()
+            union = prediction_pixels + target_pixels - intersection
+            rows.append(dict(row, iou=intersection / max(union, 1),
+                             prediction_pixels=prediction_pixels, target_pixels=target_pixels))
+    finally:
+        if pool is not None:
+            pool.close()
+            pool.join()
     return rows
 
 
@@ -261,26 +341,34 @@ def main():
                         help="score a local synthetic pool (images/ + annotations/) instead of the "
                              "real-world test set; --indices then indexes its sorted sheets "
                              "('all' = every sheet)")
+    parser.add_argument("--workers", type=int, default=16,
+                        help="CPU processes preparing sheets and scoring at native resolution while the GPU "
+                             "runs (2026-10-14: the single-thread CPU work left the GPU ~70%% idle); 0 = the "
+                             "old in-process path. Results are identical")
     parser.add_argument("--save-probs", default="",
                         help="directory: write each question's probability map "
                              "(uint8, inference resolution) as <image>_<question>.npz")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
+    if not args.indices:
+        args.indices = "all" if args.local_pool else HOLDOUT
     if args.local_pool:
+        # Only the requested sheets are read; images are read by whoever prepares the sheet.
         pool = Path(args.local_pool)
-        records = []
-        for f in sorted((pool / "annotations").glob("*.json")):
-            ann = json.loads(f.read_text())
-            records.append({"image": (pool / "images" / ann["image"]["file_name"]).read_bytes(),
-                            "annotations": ann["annotations"], "ref_exclude": ann.get("ref_exclude")})
+        ann_files = sorted((pool / "annotations").glob("*.json"))
+        indices = (list(range(len(ann_files))) if args.indices == "all" else
+                   [int(value) for value in args.indices.split(",") if value.strip()])
+        records = {}
+        for i in indices:
+            ann = json.loads(ann_files[i].read_text())
+            records[i] = {"image_path": str(pool / "images" / ann["image"]["file_name"]),
+                          "annotations": ann["annotations"], "ref_exclude": ann.get("ref_exclude")}
     else:
         records = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data",
                                        config="real-world-test", split="test")
-    if not args.indices:
-        args.indices = "all" if args.local_pool else HOLDOUT
-    indices = (list(range(len(records))) if args.indices == "all" else
-               [int(value) for value in args.indices.split(",") if value.strip()])
+        indices = (list(range(len(records))) if args.indices == "all" else
+                   [int(value) for value in args.indices.split(",") if value.strip()])
     ckpt_args = checkpoint.get("args", {}) or {}
     if args.save_probs:
         Path(args.save_probs).mkdir(parents=True, exist_ok=True)
@@ -302,7 +390,8 @@ def main():
                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
                           tta=args.tta, save_probs=args.save_probs or None,
                           box_overrides=box_overrides, q_batch=args.q_batch,
-                          label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None)
+                          label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None,
+                          workers=args.workers)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,
