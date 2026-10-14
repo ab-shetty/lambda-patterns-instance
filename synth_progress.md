@@ -1495,6 +1495,48 @@ fit-diagnostic pool `fit_fresh150_13c3cc06` (GEN 2026-10-14) was renamed `..._ge
   while fit on synthetic keeps rising. Three restarts on three mined pools (failswiss, wing, gable) have all landed
   within +-0.01 of 0.878 on HF14.
 
+### 2026-10-14 (CPU) -- HF14 18's two roofs are two patterns (label fix v2)
+
+The user (2026-10-14): on HF14 18 the left and right roof pieces, both labelled pattern3, are different patterns; either
+answer is acceptable, two families is the correct one. `eval_labels/hf14_fixes_v2.json` = v1 + a "reassign" fix moving
+annotation 9 (right roof) to its own category (`evaluate_refunet_selection.py --label-fixes` now supports "reassign";
+boxes and questions unchanged); `run_revit_2k.sh`'s hf14fix split uses v2. Rescored from the saved maps (sheet 18 only):
+longswiss q8 / q9 0.533 / 0.236 -> 0.321 / 0.298, HF14 0.8779 -> 0.8749; longwing 0.523 / 0.636 -> 0.883 / 0.741, HF14
+0.8805 -> 0.8896. Longwing separates the two roofs; longswiss merges them.
+
+### 2026-10-14 (CPU) -- checkpoint selection on val is per sheet
+
+`select_epoch_on_val.val_score`: the mean over val SHEETS of each sheet's mean IoU, used by `select_epoch_on_val.py` and
+`average_checkpoints.py` to pick (the per-question mean is still printed); `run_hard_long.sh` prints a `val_sheet`
+column. Per question, sheet 17 (23 of 72 questions) decided every pick. On the saved longwing files the per-sheet score
+still ranks e9 first (0.9287), then swa8-10 (0.9257) and longswiss (0.9254); swa16-19 0.9011.
+
+### 2026-10-14 (CPU) -- verifying "val 17's dormers are lighter" and "roof sections turn": wrong / not the cause
+
+- **val 17 (q15, the worst longwing loss):** the reference piece (a dormer cheek, 73x103 px) has fill L72 a5 b-13 --
+  the SAME as the main-wall pieces 9 / 10 (L72). Some dormer faces of the family are darker (L57, same hue; CIEDE2000
+  12.4). Longwing keeps the dormers and drops the main wall, which matches the reference's colour exactly: colour does
+  not explain it. The earlier "dormers are a lighter shade" line was wrong.
+- **Gemini30 17 (q1, hip roof plan):** the family's sections do turn (line direction 0 / 90 deg) and also change spacing
+  2x (9.6-10.7 vs 19.2 px; Gemini inconsistency). But longwing drops same-direction sections as much as turned ones
+  (dir 0: 0.08-0.30 selected; dir 90: 0.06-0.28): direction does not explain it.
+- **What does fit: pieces much bigger than the reference piece.** Over every question x other same-family piece (HF14 +
+  val + Gemini30; `scratchpad piece_size.py`), share selected by piece area / reference-piece area:
+  0-0.25x 0.83 -> 0.83, 0.25-0.8x 0.93 -> 0.91, 0.8-1.25x 0.95 -> 0.94, 1.25-4x 0.91 -> 0.90, 4-16x 0.87 -> 0.85,
+  **> 16x 0.87 -> 0.69** (longswiss -> longwing; n 64, of which val 17 24, Gemini30 9 6, val 13 5, Gemini30 2 / 16 / 17
+  4 each). Longwing skips family pieces far larger than the piece the box sits on -- a small dormer / valley-facet
+  reference loses the main wall / the big roof sections. Small n, concentrated on a few sheets.
+
+### 2026-10-14 (CPU) -- the size check, inference levers, and where 0.92 has to come from
+
+- **Small-reference / big-family questions are NOT missing from synthetic data.** Share of questions whose family has a
+  piece > 16x the reference piece: synthetic (wing generator, 2,824) 9.5%, Gemini30 10.4%, HF14 5.8%, val w/o 17 22%;
+  > 4x: 28% / 24% / 15% / 26%. The longwing size effect (previous section) is not a data gap.
+- **Inference levers on the two long models' saved maps (prob-map resolution, within +0.002-0.006 of official):** a
+  0.5 / 0.5 probability average of longswiss + longwing: HF14 0.888 (0.885 with fix v2), Gemini30 0.844, val per sheet
+  0.927 (longswiss alone 0.929); box-blurring the probabilities before the 0.35 threshold: 9 px +0.002 HF14 / -0.003
+  Gemini30, wider loses. Ceiling of what we hold: ~0.89 HF14.
+
 ### 2026-10-14 (GH200) -- the best model on hard-mined synthetic; 18,000 fresh sheets seen once, with and without DR
 
 **How good is longswiss on hard synthetic?** Scored @4096 (never trained on these) on the 1,000 mined sheets of

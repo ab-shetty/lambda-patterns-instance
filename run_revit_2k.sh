@@ -128,10 +128,10 @@ COMMON="--batch-size 8 --num-workers 16 --prefetch-factor 4 --image-max-size 204
   --ref-size 224 --width 128 --model swin_t --lr 2e-4 --backbone-lr-mult 0.1 \
   --train-split 0.99 --domain-random --mask-thresh 0.35 --seed $SEED --pad-grid 512 ${EXTRA:-}"
 
-score() {   # tag checkpoint   (hf14fix = HF14 with eval_labels/hf14_fixes_v1.json, 2026-10-02)
+score() {   # tag checkpoint   (hf14fix = HF14 with eval_labels/hf14_fixes_v2.json; v1 2026-10-02, v2 2026-10-14)
   for I in 2048 4096; do for split in val hf14 hf14fix; do IDX=$VAL; [ $split != val ] && IDX=$HF14
     local OUT=$E/$1_i${I}_$split.json FIX=""
-    [ $split = hf14fix ] && FIX="--label-fixes eval_labels/hf14_fixes_v1.json"
+    [ $split = hf14fix ] && FIX="--label-fixes eval_labels/hf14_fixes_v2.json"
     [ -f $OUT ] || PYTHONPATH=. python3 scripts/evaluate_refunet_selection.py --checkpoint $2 \
       --indices $IDX --image-max-size $I --ref-size 224 --mask-thresh 0.35 $FIX \
       --metrics-out $OUT > /dev/null 2>&1

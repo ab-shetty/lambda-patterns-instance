@@ -109,12 +109,19 @@ def _prepare_sheet(job):
     h0, w0 = image0.shape[:2]
     masks0 = [render_instance_mask(a["segmentation"], h0, w0).astype(bool) for a in anns]
     categories = [a.get("category_name", "pattern") for a in anns]
+    # --label-fixes "reassign": an instance moved to another category (a family the labeller
+    # lumped that is really two patterns); boxes are unchanged, only the targets move
+    for fx in fixes:
+        if "reassign" in fx:
+            categories[fx["reassign"]] = fx["category"]
     # synthetic pools: reference boxes stay off posts / railings / furniture (ref_exclude)
     excl = exclusion_mask(rec.get("ref_exclude"), h0, w0)
     # --label-fixes: extra TARGET pixels per category (missed labels); the masks
     # above, which the reference boxes are sampled from, are left as they are
     fix_masks = {}
     for fx in fixes:
+        if "polygon" not in fx:
+            continue
         m = np.zeros((h0, w0), np.uint8)
         cv2.fillPoly(m, [np.round(np.array(fx["polygon"], np.float64)).astype(np.int32)], 1)
         fix_masks[fx["category"]] = fix_masks.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
@@ -329,7 +336,7 @@ def main():
     parser.add_argument("--label-fixes", default="",
                         help="JSON {image_index: [{category, polygon: [[x, y], ...]}]} in native pixels: "
                              "add missed pixels to the TARGET of every question of that category "
-                             "(eval_labels/hf14_fixes_v1.json). Boxes and questions are unchanged.")
+                             "(eval_labels/hf14_fixes_v2.json). Boxes and questions are unchanged.")
     parser.add_argument("--local-pool", default="",
                         help="score a local synthetic pool (images/ + annotations/) instead of the "
                              "real-world test set; --indices then indexes its sorted sheets "
