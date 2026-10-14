@@ -67,7 +67,10 @@ for f in glob.glob(f"{o}/e*_*.json"):
         rows.setdefault(int(e), {})[s] = np.mean([r["iou"] for r in sel])
         if s == "val":
             rows[int(e)]["val_no17"] = np.mean([r["iou"] for r in sel if r["image_index"] != 17])
-cols = ["seen_base", "seen_mined", "fresh", "val", "val_no17", "hf14"]
+            by = {}
+            for r in sel: by.setdefault(r["image_index"], []).append(r["iou"])
+            rows[int(e)]["val_sheet"] = np.mean([np.mean(v) for v in by.values()])   # the selection score
+cols = ["seen_base", "seen_mined", "fresh", "val", "val_no17", "val_sheet", "hf14"]
 print("epoch  " + "  ".join(f"{c:>10s}" for c in cols))
 for e in sorted(rows):
     print(f"{e:5d}  " + "  ".join(f"{rows[e].get(c, float('nan')):10.4f}" for c in cols))

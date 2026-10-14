@@ -24,11 +24,20 @@ from scripts.evaluate_refunet_selection import HOLDOUT, evaluate_model, hand_box
 VALIDATION = "4,5,6,8,9,10,13,15,17,19,20,21,22,26"
 
 
-def _mean_iou(model, records, indices, size, ref, thresh, device, tta=1):
+def val_score(rows):
+    """Checkpoint-selection score on val: the mean over SHEETS of each sheet's mean IoU (2026-10-14).
+    Per question, sheet 17 (23 of 72 questions, swinging 0.2-0.5 between epochs on its own) decided every pick."""
+    by = {}
+    for r in rows:
+        by.setdefault(r["image_index"], []).append(r["iou"])
+    return float(np.mean([np.mean(v) for v in by.values()]))
+
+
+def _mean_iou(model, records, indices, size, ref, thresh, device, tta=1, per_sheet=False):
     rows = evaluate_model(model, records, indices, image_max_size=size,
                           ref_size=ref, mask_thresh=thresh, device=device, tta=tta,
                           box_overrides=hand_boxes())
-    return float(np.mean([r["iou"] for r in rows])), len(rows)
+    return (val_score(rows) if per_sheet else float(np.mean([r["iou"] for r in rows]))), len(rows)
 
 
 def main():
@@ -59,7 +68,7 @@ def main():
         for ck in ckpts:
             model, _ = load_refunet(str(ck), device)
             v, nv = _mean_iou(model, records, val_idx, args.image_max_size,
-                              args.ref_size, args.mask_thresh, device, args.tta)
+                              args.ref_size, args.mask_thresh, device, args.tta, per_sheet=True)
             if best is None or v > best[1]:
                 best = (ck, v, model)
             else:

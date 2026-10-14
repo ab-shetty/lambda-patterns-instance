@@ -1503,3 +1503,10 @@ annotation 9 (right roof) to its own category (`evaluate_refunet_selection.py --
 boxes and questions unchanged); `run_revit_2k.sh`'s hf14fix split uses v2. Rescored from the saved maps (sheet 18 only):
 longswiss q8 / q9 0.533 / 0.236 -> 0.321 / 0.298, HF14 0.8779 -> 0.8749; longwing 0.523 / 0.636 -> 0.883 / 0.741, HF14
 0.8805 -> 0.8896. Longwing separates the two roofs; longswiss merges them.
+
+### 2026-10-14 (CPU) -- checkpoint selection on val is per sheet
+
+`select_epoch_on_val.val_score`: the mean over val SHEETS of each sheet's mean IoU, used by `select_epoch_on_val.py` and
+`average_checkpoints.py` to pick (the per-question mean is still printed); `run_hard_long.sh` prints a `val_sheet`
+column. Per question, sheet 17 (23 of 72 questions) decided every pick. On the saved longwing files the per-sheet score
+still ranks e9 first (0.9287), then swa8-10 (0.9257) and longswiss (0.9254); swa16-19 0.9011.
