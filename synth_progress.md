@@ -1748,3 +1748,24 @@ building (the profile); every piece inside got the thin outline, so a band boxed
 with large panels. **Change:** `--heavy-pieces P` (default 0.4): on a sheet chosen with P, surface pieces are re-outlined
 at 0.6-1.0x the heavy profile weight, thin pieces (< 1.5 ft) with probability 0.6, others 0.15; labels unchanged; own
 RNG. 40-elevation check: 14 / 40 change, labels identical, `--heavy-pieces 0` byte-identical; r32 arm passes 0.
+
+### 2026-10-14 (CPU) -- remaining HF14 / val failures; railings 0.35 and the run flags as defaults (GEN_VERSION 2026-10-14f)
+
+Per-piece census (best model single18k-blend50, HF14 + val + Gemini30, 1,509 same-family pieces): only 37 pieces are
+missed as a whole (< 30% selected); most of the loss is partial. Among the 37, "line darkness differs from the reference
+piece by > 30" is 57% (kept pieces 12%) -- HF14 12 (turned boards, fixed), 14 (heavy outlines, fixed), 18 (label, fix
+v2) and val 13. Direction > 30 deg 5% / 9%, spacing > 1.3x 0% / 7%, fill CIEDE2000 > 5 0% / 9%.
+- **val 13 q7 (0.17):** the box sits on a strip under a glazed door whose lap lines are 25 px apart and darker (the
+  family elsewhere: 15 px). Erasing the heavy ground line (0.07), the dashed level line (0.16), both (0.16), or
+  lightening the strip's lines (0.16) changes nothing. The strip looks genuinely different; not a generator gap.
+- **Gemini30 1 (0.24-0.33):** the cf_v1 probe already holds it -- gray 0.69-0.86, flatbg 0.56-0.70, soften 0.45-0.83
+  rescue it for the 18k blend, longswiss needs none. The family's colour is uniform (CIEDE2000 <= 2 across the sheet):
+  pale blue-grey boards close to warm paper. Unexplained; one sheet.
+- **Heavy lines in the box are not a general failure:** boxes with > 2% heavy stroke pixels: HF14 4% (IoU 0.59 vs 0.90:
+  the two sheet-14 band boxes), val 25% (0.88 vs 0.90), Gemini30 0.5%, synthetic 27% (0.92 vs 0.90).
+- **HF14 27 (railing):** the family continues behind a balcony railing and is missed there; replacing the railing with
+  the siding above it: q1 0.865 -> 0.928, q0 0.920 -> 0.928. Synthetic railings (see-through pickets 0.3-0.5 ft, posts,
+  rails) look like the real one, but only on 15% of views and only when a run passes `--railings`.
+**Change:** generator defaults `--railings 0.35` (was 0; runs passed 0.15), `--roof-lines 0.3`, `--faint-lines 0.2`
+(the values every run passed). New defaults == the old code with those three flags (byte-identical, 20 sheets);
+`--roof-lines 0 --railings 0 --faint-lines 0` == the old defaults; the cur / mk50 arms pass the zeros.

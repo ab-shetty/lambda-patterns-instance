@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-14e"
+GEN_VERSION = "2026-10-14f"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -827,16 +827,16 @@ def main():
     ap.add_argument("--masonry-base", type=float, default=0.35,
                     help="Revit elevations: probability the base band is a brick / stone / block wainscot "
                          "instead of concrete or flat. Default 0.35 since 2026-10-01; 0 reproduces earlier pools")
-    ap.add_argument("--faint-lines", type=float, default=0.0,
+    ap.add_argument("--faint-lines", type=float, default=0.2,
                     help="Revit line-only elevations: probability every pattern is drawn in pale grey "
-                         "(190-228, finer pen), as on HF14 14; 0 (default) = byte-identical")
+                         "(190-228, finer pen), as on HF14 14; default 0.2 since 2026-10-14f (every run passed it); 0 = earlier pools")
     ap.add_argument("--soft-shadows", type=float, default=0.5,
                     help="Revit elevations: probability shadows are lighter (x0.76-0.88), neutral grey and two-level "
                          "(overlap darker), as on HF14 02. Default 0.5 since 2026-10-13 (every run since 2026-10-02 "
                          "passed it); 0 = earlier pools")
-    ap.add_argument("--roof-lines", type=float, default=0.0,
+    ap.add_argument("--roof-lines", type=float, default=0.3,
                     help="Revit elevations: probability the roof is plain tight horizontal lines, 60%% of them over "
-                         "looser vertical boards, as on HF14 25 / 27; 0 (default) = byte-identical")
+                         "looser vertical boards, as on HF14 25 / 27; default 0.3 since 2026-10-14f (every run passed it); 0 = earlier pools")
     ap.add_argument("--openings-per-face", type=int, choices=[0, 1], default=1,
                     help="1 (default since 2026-10-02) = every window / door sits on one planar wall face, never "
                          "across the corner of a projecting bay or wing; 0 reproduces earlier pools")
@@ -870,10 +870,11 @@ def main():
     ap.add_argument("--heavy-pieces", type=float, default=0.4,
                     help="Revit elevations: probability a sheet boxes some surface pieces (thin bands more often) in a "
                          "heavy line, labels unchanged. Default 0.4 since 2026-10-14e; 0 = earlier pools")
-    ap.add_argument("--railings", type=float, default=0.0,
+    ap.add_argument("--railings", type=float, default=0.35,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
-                         "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
-                         "0 (default) = byte-identical")
+                         "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27. "
+                         "Default 0.35 since 2026-10-14f (every run passed 0.15 before; HF14 27 q1 0.865 -> 0.928 with "
+                         "its railing removed); 0 = byte-identical to pools built without it")
     ap.add_argument("--cedar-shingle", type=float, default=0.5,
                     help="probability a shingle style is drawn as cedar shingles (narrow, vertical joints "
                          "dominant, broken butt lines, keyway tabs) instead of coursed units; real elevations "

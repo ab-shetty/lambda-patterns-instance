@@ -47,7 +47,7 @@ DR="--domain-random"; TAGX=""
 [ "${NODR:-0}" = 1 ] && { DR=""; TAGX="_nodr"; }
 mkdir -p logs $E $S $R
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-REVIT="--seed 6 --revit --revit-plans --shaped --mode-weights 66,16,18 --soft-shadows 0 --workers $WORKERS"   # soft shadows: default 0.5 since 2026-10-13
+REVIT="--seed 6 --revit --revit-plans --shaped --mode-weights 66,16,18 --soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0 --workers $WORKERS"   # soft shadows: default 0.5 since 2026-10-13
 
 gen() {   # out start n
   need_pool $1 && python3 scripts/generate_synthetic_fc.py --out $1 \

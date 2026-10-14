@@ -33,7 +33,7 @@ SEED=${1:-7}
 SRC=${SRC:-cur}
 NFRESH=${NFRESH:-6000}
 SHARDS=${SHARDS:-4}
-declare -A GENFLAGS=([cur]="--soft-shadows 0" [fail]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
+declare -A GENFLAGS=([cur]="--soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0" [fail]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
   [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [near]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [hue]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"

@@ -108,10 +108,10 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revitfailswissr32roi]=data/synthetic/revitfailswissR_train2000
                  [revithardroi]=data/synthetic/revitcur_hard2000
                  [revithardfailroi]=data/synthetic/revitfail_hard2000)
-declare -A BUILD=([revitmk50roi]="2000 --markup 0.5 --soft-shadows 0" [revit10kmk50roi]="10000 --markup 0.5 --soft-shadows 0"
-                  [revit10kcurroi]="10000 --soft-shadows 0"
+declare -A BUILD=([revitmk50roi]="2000 --markup 0.5 --soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0" [revit10kmk50roi]="10000 --markup 0.5 --soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0"
+                  [revit10kcurroi]="10000 --soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0"
                   [revit10kfailroi]="10000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
-                  [revitcurroi]="2000 --soft-shadows 0"
+                  [revitcurroi]="2000 --soft-shadows 0 --roof-lines 0 --railings 0 --faint-lines 0"
                   [revitfailroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2"
                   [revitfailswissroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revitnearroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
