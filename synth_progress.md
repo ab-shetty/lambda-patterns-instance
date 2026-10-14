@@ -1510,3 +1510,19 @@ longswiss q8 / q9 0.533 / 0.236 -> 0.321 / 0.298, HF14 0.8779 -> 0.8749; longwin
 `average_checkpoints.py` to pick (the per-question mean is still printed); `run_hard_long.sh` prints a `val_sheet`
 column. Per question, sheet 17 (23 of 72 questions) decided every pick. On the saved longwing files the per-sheet score
 still ranks e9 first (0.9287), then swa8-10 (0.9257) and longswiss (0.9254); swa16-19 0.9011.
+
+### 2026-10-14 (CPU) -- verifying "val 17's dormers are lighter" and "roof sections turn": wrong / not the cause
+
+- **val 17 (q15, the worst longwing loss):** the reference piece (a dormer cheek, 73x103 px) has fill L72 a5 b-13 --
+  the SAME as the main-wall pieces 9 / 10 (L72). Some dormer faces of the family are darker (L57, same hue; CIEDE2000
+  12.4). Longwing keeps the dormers and drops the main wall, which matches the reference's colour exactly: colour does
+  not explain it. The earlier "dormers are a lighter shade" line was wrong.
+- **Gemini30 17 (q1, hip roof plan):** the family's sections do turn (line direction 0 / 90 deg) and also change spacing
+  2x (9.6-10.7 vs 19.2 px; Gemini inconsistency). But longwing drops same-direction sections as much as turned ones
+  (dir 0: 0.08-0.30 selected; dir 90: 0.06-0.28): direction does not explain it.
+- **What does fit: pieces much bigger than the reference piece.** Over every question x other same-family piece (HF14 +
+  val + Gemini30; `scratchpad piece_size.py`), share selected by piece area / reference-piece area:
+  0-0.25x 0.83 -> 0.83, 0.25-0.8x 0.93 -> 0.91, 0.8-1.25x 0.95 -> 0.94, 1.25-4x 0.91 -> 0.90, 4-16x 0.87 -> 0.85,
+  **> 16x 0.87 -> 0.69** (longswiss -> longwing; n 64, of which val 17 24, Gemini30 9 6, val 13 5, Gemini30 2 / 16 / 17
+  4 each). Longwing skips family pieces far larger than the piece the box sits on -- a small dormer / valley-facet
+  reference loses the main wall / the big roof sections. Small n, concentrated on a few sheets.
