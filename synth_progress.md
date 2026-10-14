@@ -1669,3 +1669,9 @@ blend `data/runs/ck_single18knp0_blend50.pth` (not on the Hub). Per-question fil
 `--near-pairs` default 0.6 -> 0 after the single18k no-pairs arm (previous GH200 entry): real-sheet scores unchanged,
 Gemini30 1 recovers. The wing / gable arms in `run_revit_2k.sh` / `run_hard_mine.sh` now pass `--near-pairs 0.6`
 explicitly. Pair code stays.
+
+### 2026-10-14 (GH200) -- 18k checkpoints on the Hub
+
+Published (private, safetensors; each round-trip identical to the local file): `abshetty/floz-refunet-swint-single18knp0-dr`,
+`-single18knp0-nodr`, `-single18knp0-blend50`, `-single18k-dr`, `-single18k-nodr` (and earlier `-single18k-blend50`).
+The 54k run was not started (VM shutdown).
