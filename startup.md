@@ -35,11 +35,15 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| `synpre-realmix-lr5e5-e22` (best) | **0.8738** | 0.9087* | 0.8816 |
-| `longswiss-swa37-41` (synthetic only, 2026-10-06) | **0.8779** | 0.8766 | -- |
+| **`single18k-blend50` (best, synthetic only, 2026-10-14)** | **0.8877** | 0.8964 | -- |
+| `synpre-realmix-lr5e5-e22` | 0.8738 | 0.9087* | 0.8816 |
+| `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
 
+`single18k-blend50` (`abshetty/floz-refunet-swint-single18k-blend50`, round-trip verified): the 50/50 weight
+average of two one-epoch restarts of longswiss-swa37-41 on the same 18,000 fresh sheets, with and without
+`--domain-random`; Gemini30 0.8497; recipe and paired tests in `synth_progress.md` (2026-10-14, "50/50 blend").
 *epoch picked on val (automatic boxes), so optimistic. 4096, threshold 0.35, CPU-scored
 2026-10-03; per-question view in the Model Results artifact.
 

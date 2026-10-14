@@ -1568,3 +1568,23 @@ File `eval_baselines/longswiss-swa37-41_gablemined1000_4096.json` (and `_synth30
 - **Gemini30 1 breaks in every model trained on the 2026-10-14 generator** (wing colour pairs): longwing 0.23 / 0.83 /
   0.24, longgable 0.24 / 0.63 / 0.21, 18k DR 0.258, 18k no-DR 0.236 (sheet means), against longswiss 0.833. The trim
   was not the cause (2026-10-14 gable entry); the wing pairs are the common factor.
+
+### 2026-10-14 (GH200) -- 50/50 blend of the two 18k arms: new best, HF14 0.8877
+
+`data/runs/ck_single18k_blend50.pth` = the float mean of `ck_single18k_dr/epoch_0.pth` and `ck_single18k_nodr/epoch_0.pth`
+(no training). Hub: `abshetty/floz-refunet-swint-single18k-blend50` (private; round-trip identical, HF14 re-read
+0.8877). Per-question files `eval_baselines/single18k-blend50_*`; maps on `abshetty/floz-diag` `single18k-blend50/`.
+
+| @4096, hand boxes | HF14 | val | val per-sheet | val w/o 17 | Gemini30 | Gemini30 1 | fresh 300 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| longswiss-swa37-41 | 0.8779 | 0.8766 | 0.9254 | 0.9093 | 0.8295 | 0.833 | 0.8739 |
+| 18k DR | 0.8849 | 0.8860 | 0.9252 | 0.9010 | 0.8211 | 0.258 | +0.010 |
+| 18k no DR | 0.8573 | 0.8802 | 0.9194 | 0.8910 | 0.8622 | 0.236 | +0.029 |
+| **blend 50/50** | **0.8877** | **0.8964** | **0.9339** | **0.9149** | 0.8497 | 0.297 | +0.026 |
+
+- **Paired vs longswiss: HF14 +0.010 (17 / 7, p=0.35; sign p=0.06), val +0.020 (22 / 2, p=0.036), Gemini30 +0.020
+  (81 / 41, p=0.024), fresh synthetic +0.026 (p=2e-38).** Best HF14, val (both the question and the per-sheet mean)
+  and second-best Gemini30 of any model. One candidate, not a selection among many, so val is not optimistic.
+- The blend is better on HF14 than either parent (DR 0.8849, no-DR 0.8573): the two arms err differently (DR over-,
+  no-DR under-selects on HF14), and averaging the weights lands between them.
+- Gemini30 1 is still broken (0.297): the wing-pair failure stays.
