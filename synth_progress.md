@@ -1526,3 +1526,13 @@ still ranks e9 first (0.9287), then swa8-10 (0.9257) and longswiss (0.9254); swa
   **> 16x 0.87 -> 0.69** (longswiss -> longwing; n 64, of which val 17 24, Gemini30 9 6, val 13 5, Gemini30 2 / 16 / 17
   4 each). Longwing skips family pieces far larger than the piece the box sits on -- a small dormer / valley-facet
   reference loses the main wall / the big roof sections. Small n, concentrated on a few sheets.
+
+### 2026-10-14 (CPU) -- the size check, inference levers, and where 0.92 has to come from
+
+- **Small-reference / big-family questions are NOT missing from synthetic data.** Share of questions whose family has a
+  piece > 16x the reference piece: synthetic (wing generator, 2,824) 9.5%, Gemini30 10.4%, HF14 5.8%, val w/o 17 22%;
+  > 4x: 28% / 24% / 15% / 26%. The longwing size effect (previous section) is not a data gap.
+- **Inference levers on the two long models' saved maps (prob-map resolution, within +0.002-0.006 of official):** a
+  0.5 / 0.5 probability average of longswiss + longwing: HF14 0.888 (0.885 with fix v2), Gemini30 0.844, val per sheet
+  0.927 (longswiss alone 0.929); box-blurring the probabilities before the 0.35 threshold: 9 px +0.002 HF14 / -0.003
+  Gemini30, wider loses. Ceiling of what we hold: ~0.89 HF14.
