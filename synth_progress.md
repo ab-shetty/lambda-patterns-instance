@@ -1466,3 +1466,31 @@ the crop median).
   0.08 / 0.83 (wing 0.00 / 0.04) -- one-direction rows are noisy (2026-10-08 note), read with care.
 - The direct test of the fix is the long-run version (mine on this pool, 20-epoch restart of longswiss) against longwing
   on Gemini30 1.
+
+### 2026-10-14 (GH200) -- gable long run; longwing epoch 9 picked on val: neither beats longswiss; the trim does not fix Gemini30 1
+
+**Gable long run.** `run_hard_mine.sh SRC=gable` (miner `revitgableroi` e8, 3,981 fresh sheets, GEN 2026-10-14b; mined
+mean IoU 0.687, fresh kept 0.850) -> `revitgable_hard2000`; then the longwing recipe exactly (20-epoch restart of
+longswiss-swa37-41, ROI add, peak LR 2e-4 cosine). Checkpoints `data/runs/ck_long_hardgable/` (not on the Hub). The old
+fit-diagnostic pool `fit_fresh150_13c3cc06` (GEN 2026-10-14) was renamed `..._gen20261014` so the guard could rebuild it.
+
+| @4096, hand boxes | HF14 | val | val w/o 17 | Gemini30 | Gemini30 1 (q0 / q1 / q2) |
+|---|---:|---:|---:|---:|---|
+| longswiss-swa37-41 (start) | 0.8779 | 0.8766 | 0.9093 | 0.8295 | 0.85 / 0.78 / 0.87 |
+| longwing swa16-19 | 0.8805 | 0.8161 | 0.8846 | 0.8343 | 0.23 / 0.83 / 0.24 |
+| **longwing e9** (val pick of e5-13, swa7-11, swa8-10) | 0.8710 | 0.8959 | 0.9195 | 0.8325 | -- |
+| gable swa14-19 (val pick, last windows) | 0.8674 | 0.8863 | 0.9006 | 0.8404 | 0.37 / 0.49 / 0.28 |
+| **gable swa7-11** (val pick, any window) | 0.8806 | 0.8903 | 0.9054 | 0.8282 | 0.24 / 0.63 / 0.21 |
+| gable e4 / e9 / e14 / e19 | 0.8787 / 0.8736 / 0.8937 / 0.8550 | 0.8739 / 0.8428 / 0.8880 / 0.8803 | | 0.8438 / 0.8053 / 0.8491 / 0.8332 | e9 0.10 / 0.08 / 0.08 |
+
+- **Paired vs longswiss, all noise:** longwing e9 HF14 -0.007 (p=0.70), val +0.019 (p=0.07), Gemini30 +0.003; gable swa7-11
+  HF14 +0.003 (p=0.84), val +0.014, Gemini30 -0.001 (sign test 42 / 70, p=0.01); gable swa14-19 HF14 -0.011, Gemini30
+  +0.011. **longswiss-swa37-41 stays the best model (HF14 0.8779).** Gable e14 reads HF14 0.8937 but val does not pick it.
+- **The gable trim does not fix Gemini30 1.** Every gable checkpoint still splits it (e9: 0.10 / 0.08 / 0.08). The
+  hypothesis that the perfectly predictive trim band caused the split is refuted.
+- **longwing epochs 5-13 on val** (w/o 17): 0.884 / 0.883 / 0.883 / 0.895 / **0.920** / 0.890 / 0.868 / 0.890 / 0.885;
+  swa7-11 0.896, swa8-10 0.912. Epoch 9 is a val peak that does not carry to HF14 or Gemini30: choosing among 11 points
+  on 72 questions finds the lucky one.
+- **Both long runs show the same shape:** a mid-run val bump and HF14 / Gemini30 flat at 0.87-0.88 / 0.83-0.85 throughout,
+  while fit on synthetic keeps rising. Three restarts on three mined pools (failswiss, wing, gable) have all landed
+  within +-0.01 of 0.878 on HF14.
