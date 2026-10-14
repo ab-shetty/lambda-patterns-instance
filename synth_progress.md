@@ -1675,3 +1675,15 @@ explicitly. Pair code stays.
 Published (private, safetensors; each round-trip identical to the local file): `abshetty/floz-refunet-swint-single18knp0-dr`,
 `-single18knp0-nodr`, `-single18knp0-blend50`, `-single18k-dr`, `-single18k-nodr` (and earlier `-single18k-blend50`).
 The 54k run was not started (VM shutdown).
+
+### 2026-10-14 (GH200) -- eval-only weight blends around single18knp0-blend50: all ties
+
+@4096, hand boxes, vs `single18knp0-blend50` (val per-sheet 0.9345, val 0.8961, HF14 0.8894, Gemini30 0.8538), paired. (a)
+single18knp0-blend50 averaged 50/50 with longswiss-swa37-41: val per-sheet 0.9326 (val -0.004, p=0.18), HF14 0.8935
+(+0.004, p=0.38), Gemini30 0.8497 (-0.004, p=0.31). (b) DR 0.7 / no-DR 0.3: val per-sheet 0.9349 (val +0.0002), HF14 0.8855
+(-0.004, p=0.11), Gemini30 0.8477 (-0.006, p=0.001). (c) DR 0.3 / no-DR 0.7: val per-sheet 0.9339 (val -0.0004), HF14
+0.8892 (-0.0002), Gemini30 0.8594 (+0.006, p=0.04). By `val_score` (b) is highest, by 0.0004 -- far inside noise -- and its
+HF14 is 0.004 lower, so nothing replaces single18knp0-blend50. The only consistent signal is the DR share on Gemini30
+(more no-DR, more Gemini30: 0.8477 / 0.8538 / 0.8594 at DR 0.7 / 0.5 / 0.3), matching the no-DR arm and the counterfactual
+soften result; HF14 and val are flat across 0.3-0.7. Per-question files `eval_baselines/single18knp0-blend{70,30,50-longswiss50}_*`;
+blend checkpoints `data/runs/ck_single18knp0_blend{30,70,50_longswiss50}.pth` (not on the Hub).
