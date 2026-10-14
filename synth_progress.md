@@ -1494,3 +1494,35 @@ fit-diagnostic pool `fit_fresh150_13c3cc06` (GEN 2026-10-14) was renamed `..._ge
 - **Both long runs show the same shape:** a mid-run val bump and HF14 / Gemini30 flat at 0.87-0.88 / 0.83-0.85 throughout,
   while fit on synthetic keeps rising. Three restarts on three mined pools (failswiss, wing, gable) have all landed
   within +-0.01 of 0.878 on HF14.
+
+### 2026-10-14 (GH200) -- the best model on hard-mined synthetic; 18,000 fresh sheets seen once, with and without DR
+
+**How good is longswiss on hard synthetic?** Scored @4096 (never trained on these) on the 1,000 mined sheets of
+`revitgable_hard2000` (10,720 questions): **0.812** (boxes >= 32 px: 0.825; family-weighted per sheet, as mining: 0.790);
+elevations 0.838, floor plans 0.733, pair sheets 0.804; loss 45% over-selection, 9% under. Fresh synthetic (300) 0.874,
+HF14 0.878, Gemini30 0.830. So hard synthetic is not solved for the best model -- the limit is transfer, not supply.
+File `eval_baselines/longswiss-swa37-41_gablemined1000_4096.json` (and `_synth300_`).
+
+**18k single pass.** `single18k_s600000`: 18,000 sheets at GEN 2026-10-14b defaults (seed 6, ids 600000+; 17,907 ok,
+7.7 min). Restart of longswiss-swa37-41 with the restart recipe for ONE epoch (2,214 steps, peak LR 2e-4 cosine to
+1e-5, ROI add, `--train-split 0.99`, seed 7), arm `dr` with `--domain-random --dr-scale-min 0.7`, arm `nodr` without
+(flips / rot90 are always on). ~20 min each. Checkpoints `data/runs/ck_single18k_{dr,nodr}/epoch_0.pth` (not on the Hub).
+
+| @4096, hand boxes | HF14 | val | val w/o 17 | Gemini30 | mined 1000 | fresh 300 |
+|---|---:|---:|---:|---:|---:|---:|
+| longswiss-swa37-41 | 0.8779 | 0.8766 | 0.9093 | 0.8295 | 0.8123 | 0.8739 |
+| 18k once, DR | 0.8849 | 0.8860 | 0.9010 | 0.8211 | +0.020 | +0.010 |
+| **18k once, no DR** | 0.8573 | 0.8802 | 0.8910 | **0.8622** | **+0.052** | **+0.029** |
+
+- **DR arm: real flat, synthetic up** -- HF14 +0.007 (p=0.60), val +0.010 (sign 20 / 4), Gemini30 -0.008; mined +0.020
+  (p=1e-42), fresh +0.010. Same picture as the three mined restarts, with no repetition: repetition was not why they
+  stalled.
+- **No-DR arm: Gemini30 +0.033 vs longswiss (p=0.001; +0.041 vs DR, p=6e-8) -- the best Gemini30 of any model -- but
+  HF14 -0.021 (p=0.18; -0.028 vs DR, p=0.11).** Synthetic gains double (mined +0.052, fresh +0.029). Gemini30 4 0.66 ->
+  0.86, 8 0.76 -> 0.84, 11, 17, 26 0.38 -> 0.55 rise. HF14 loss is under-selection (share 0.17 -> 0.58, over 0.20 -> 0.00)
+  on 14 (0.88 -> 0.71) and 12 (0.71 -> 0.64); 0 rises 0.86 -> 0.93. Not small boxes: real questions with native box side
+  < 150 px move -0.006, larger -0.008 (unlike the from-scratch no-DR 2k run of 2026-09-28, where < 32 px lost 0.44).
+  Gemini sheets are consistent renders (one scale, clean tone), which DR's shrink / jitter does not help; HF14 is not.
+- **Gemini30 1 breaks in every model trained on the 2026-10-14 generator** (wing colour pairs): longwing 0.23 / 0.83 /
+  0.24, longgable 0.24 / 0.63 / 0.21, 18k DR 0.258, 18k no-DR 0.236 (sheet means), against longswiss 0.833. The trim
+  was not the cause (2026-10-14 gable entry); the wing pairs are the common factor.
