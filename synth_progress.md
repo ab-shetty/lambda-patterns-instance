@@ -1715,3 +1715,17 @@ those sheets' misses; merges are done.
   `single18knp0-blend50/`.
 - **Gable mining scores** (per-question IoU on 3,981 fresh sheets, miner revitgable2k-e8 @2048):
   `eval_baselines/hardmine_gable/`.
+
+### 2026-10-14 (CPU) -- HF14 12: one deck family whose boards turn; generator --turn-boards (GEN_VERSION 2026-10-14d)
+
+The best model's HF14 loss sits on 12 / 14 / 18. **HF14 12** (floor plan; one family = deck boards around the house): the
+best model (single18k-blend50) selects only the pieces whose boards run like the reference's -- box on a horizontal-board
+deck: horizontal pieces 0.97, vertical pieces 0.06-0.12; box on a vertical deck: the horizontal piece 0.06.
+**Causal test** (CPU, @4096, the model's own boxes): redraw the two vertical decks with the horizontal deck's boards ->
+sheet mean 0.680 -> **0.923** (q1 0.71 -> 0.94, q3 0.32 -> 0.91); control, redrawn with their own vertical boards ->
+0.736. The direction change itself is what the model reads as a family boundary.
+**The gap:** `revit_plans.floor_material` gives a floor family ONE board direction for all its rooms. Real rooms and
+decks turn their boards. **Change:** `--turn-boards P` (default 0.6): on a plan chosen with P, every room (and doorway)
+of a directional floor family (planks, plank lines, joists, 45-degree hatch) gets its own direction; labels unchanged;
+own RNG, and the v3 per-room stream (p3) is consumed exactly as before. 60-plan check: 9 / 59 plans change, labels
+identical on all 59, `--turn-boards 0` byte-identical to the previous commit. `run_revit_2k.sh`'s r32 arm passes 0.

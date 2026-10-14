@@ -2455,11 +2455,30 @@ def compose_floor(image_id, seed, mode_weights):
             elif v3 and (mi is not None or mj is not None):    # the finish runs on through the doorway
                 m_ = mi if mi is not None else mj
                 fams[_mkey(m_)][1].append(op)
+        # --turn-boards P (FC.TURN_BOARDS, default 0.6 since 2026-10-14d): on a sheet chosen with P, a directional
+        # floor (planks, plank lines, joists, 45-degree hatch) is laid per ROOM in a random direction, the family
+        # unchanged -- as real decks / rooms turn their boards (HF14 12: the same deck boards horizontal on one deck,
+        # vertical on the other; the best model kept only the reference's direction, 0.68; redrawn all one way 0.92).
+        # Before, a floor material had one direction for all its rooms. Own RNG: P = 0 is byte-identical.
+        tb = random.Random(seed * 1_000_003 + image_id * 223 + 97)
+        turn = tb.random() < FC.TURN_BOARDS[0]
         for n, (key, (m, polys)) in enumerate(sorted(fams.items(), key=lambda kv: str(kv[0]))):
             reg = unary_union(polys)
             if stair_u is not None:
                 reg = reg.difference(stair_u)
-            if v3 and p3.random() < 0.7:                 # each room starts its own tile / plank layout
+            per_room = v3 and p3.random() < 0.7         # drawn first, as before: the p3 stream is unchanged
+            if turn and m["kind"] in ("plank_lines", "plank", "joists", "hatch45") and len(polys) > 1:
+                if per_room:                             # the draws the per-room path below makes: p3 unchanged
+                    for _ in G.polys_of(reg):
+                        p3.uniform(0, 3), p3.uniform(0, 3)
+                for poly in polys:                       # rooms and doorways, each its own direction
+                    q = poly.difference(stair_u) if stair_u is not None else poly
+                    ang = tb.choice([45, -45]) if m["kind"] == "hatch45" else tb.choice([0, 90])
+                    mq = dict(m, ang=ang)
+                    if v3:
+                        mq.update(ox=tb.uniform(0, 3) * S, oy=tb.uniform(0, 3) * S)
+                    draw_floor(canvas, V.geom(q), mq, S, W, H, lw_pat)
+            elif per_room:                               # each room starts its own tile / plank layout
                 for q in G.polys_of(reg):
                     mq = dict(m, ox=p3.uniform(0, 3) * S, oy=p3.uniform(0, 3) * S)
                     draw_floor(canvas, V.geom(q), mq, S, W, H, lw_pat)
