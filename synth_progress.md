@@ -1406,3 +1406,35 @@ hypothesis (unconfirmed until the long run's maps arrive): once the wing pairs m
 model began using that perfectly predictive band. Change: `--gable-trim P` (default 0.5): a house whose gables are not
 an accent gets the band across every gable base (one decision per house, own RNG), the main family continuing above.
 40-sheet check: 7 / 40 elevation sheets change; `--gable-trim 0` byte-identical to the previous commit.
+
+### 2026-10-14 (GH200) -- are the mined reference boxes too hard? No
+
+Every question of the wing mining run (34,802 on 3,982 fresh sheets, miner `revitwing2k-e8`, automatic boxes) against
+real HF14 + val (123, hand boxes) and Gemini30 (195). Box side at the 2048 training scale; the reference piece's share of
+its family; crop content on the 224 px crop the model sees (Canny edge density; "ink" = pixels > 25 grey levels off
+the crop median).
+
+| | box p10 / p50 / p90 | box < 32 | box >= 128 | piece share < 10% | largest piece | crop edges < 1% |
+|---|---|---:|---:|---:|---:|---:|
+| real HF14 + val | 40 / 76 / 168 | 5% | ~30% | 27% | 41% | 9% |
+| Gemini30 | 41 / 100 / 191 | 6% | ~30% | 34% | 29% | 0% |
+| synth, not mined, all | 16 / 56 / 129 | 29% | 10% | 31% | 29% | -- |
+| synth, mined, all | 17 / 55 / 119 | 27% | 10% | 32% | 28% | -- |
+| synth, not mined, kept (>= 32) | 39 / 72 / 151 | 0% | | 19% | 36% | 8% |
+| synth, mined, kept (>= 32) | 38 / 68 / 135 | 0% | | 21% | 35% | 7% |
+
+- **Mining does not select for small or odd boxes.** Mined and not-mined questions have the same box sizes, piece shares
+  and crop content. The 32 px floor already removes the slivers (27% of synthetic questions vs 5-6% of real): below
+  32 px the miner scores 0.615, real 0.855 (n=18).
+- **Crop content does not predict failure.** Near-empty crops (edges < 1%; a box one pattern period wide on sparse
+  battens / stipple, seen on a contact sheet of 16 hard mined questions) are 7-8% of synthetic and 9% of real
+  questions, and score no worse (synthetic 0.854 vs 0.84 overall); 7% of the mined IoU < 0.6 questions, same as all mined.
+- **What makes a mined sheet hard is over-selection:** of mined kept questions under IoU 0.6, 75% over-select (pred /
+  target > 1.3), 17% under-select. Enriched reference roles: floor-plan floors x4.6-7.3 (miner 0.66), chimney x1.6,
+  accent / accent2 x1.1-1.4; roof plans almost absent (3% of mined sheets vs 21%). That is look-alike families, the
+  intended hardness.
+- **One real gap: synthetic boxes are smaller than the user's.** After the floor, median 68-72 px vs 76 (real) / 100
+  (Gemini); boxes >= 128 px are 10% of synthetic vs ~30% of real. Synthetic pieces are thinner (largest inscribed
+  square median 56-57 px vs 99 / 127). Training draws boxes the same way (`sample_reference_box`, 128-512 native
+  preference, capped by the piece), so large user boxes are under-represented in training; real IoU by box size is
+  flat at 0.82-0.86 (n = 8 above 256 px), so the cost is not measurable here.
