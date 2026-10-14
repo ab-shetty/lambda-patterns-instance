@@ -68,6 +68,10 @@
 # beside the main wall (never the roof / an upper storey / another room); direction / spacing-only and floor-plan
 # pairs off. Same flags / ids / seed / training as revithueroi; pairs with r32 / near / hue in eval_baselines/.
 #   NOCTRL=1 EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitwingroi
+# revitgableroi (2026-10-14): revitwingroi with GEN_VERSION 2026-10-14b, i.e. + the gable-base trim on one-family
+# gables (--gable-trim 0.5 default; 0 reproduces the wing pool). Same flags / ids / seed; pairs with the wing arm
+# (eval_baselines/revitwing2k-e8_*). Tests whether Gemini30 1 stops splitting at the trim bands.
+#   NOCTRL=1 EXTRA="--roi-ref --roi-ref-mode add" ./run_revit_2k.sh 7 revitgableroi
 #   ./run_revit_2k.sh [seed] [arms]      e.g. ./run_revit_2k.sh 7 "revitRL fcplain"
 set -euo pipefail
 . scripts/pool_guard.sh     # need_pool: never silently reuse a pool from older generator defaults
@@ -98,6 +102,7 @@ declare -A POOL=([r8]=data/synthetic/r8_train2000 [revit]=data/synthetic/revit_t
                  [revithueroi]=data/synthetic/revithue_train2000
                  [revithardhueroi]=data/synthetic/revithue_hard2000
                  [revitwingroi]=data/synthetic/revitwing_train2000
+                 [revitgableroi]=data/synthetic/revitgable_train2000
                  [revithardwingroi]=data/synthetic/revitwing_hard2000
                  [revithardnearroi]=data/synthetic/revitnear_hard2000
                  [revitfailswissr32roi]=data/synthetic/revitfailswissR_train2000
@@ -112,6 +117,7 @@ declare -A BUILD=([revitmk50roi]="2000 --markup 0.5 --soft-shadows 0" [revit10km
                   [revitnearroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revithueroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revitwingroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+                  [revitgableroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revitfailswissr32roi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0 --near-pairs-plan 0 --balcony-doors 0 --gable-trim 0"
                   [revitgemroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --tight-crop --pale-ink 0.25 --revit-view-weights 50,45,5")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
