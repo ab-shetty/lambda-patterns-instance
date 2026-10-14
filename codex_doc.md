@@ -7,24 +7,28 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Requests from the CPU session (2026-10-14; do alongside / after the wing long run)
+## Requests from the CPU session (2026-10-14; do now, alongside the wing long run -- scoring fits next to training)
 
-For the synthetic-data error analysis (where does the best model fail on real sheets, and do those failure types exist
-in the synthetic data at all?):
-1. **Score the best model on fresh synthetic sheets**, same protocol as real (4096, mask 0.35), with probabilities:
+Goal: see what each model fixes and what it still gets wrong, from probability maps, without CPU rescoring (one
+question at 4096 takes ~1 min on the CPU box). Upload maps to a new private Hub dataset `abshetty/floz-diag` under
+`<model tag>/<split>_<res>/` (folders `--save-probs` writes, plus the metrics JSON); commit only the metrics JSONs to
+`eval_baselines/`. Hand boxes for HF14 / val (`eval_boxes/hand_v1.json`) and Gemini30 (`eval_boxes/gemini30_v1.json`).
+
+1. **Current best, the long run's starting point** (`abshetty/floz-refunet-swint-longswiss-swa37-41`): `--save-probs`
+   on HF14, val, Gemini30 at 4096 (the Gemini30 maps exist on CPU already; HF14 / val do not).
+2. **The wing 2k arm** (`data/runs/ck_2k_revitwingroi_r2048_s7/epoch_8.pth`) and its control **r32**
+   (`abshetty/floz-refunet-swint-revitfailswissr32-2k-e8`): `--save-probs` on HF14, val, Gemini30 at 2048 (the
+   screen resolution), so the wing pairs' effect can be seen per pixel.
+3. **The wing long run, while it trains:** every 5 epochs, score the newest `epoch_N.pth` on HF14 / val / Gemini30 at
+   4096 (metrics JSONs only, committed as `eval_baselines/longwing-eN_{split}_4096.json`); `--save-probs` for the final
+   SWA checkpoint. Say in `synth_progress.md` how val / HF14 / Gemini30 move with epochs.
+4. **Synthetic diagnostic** (are the real failure types present in the synthetic data?): 300 fresh sheets
    `python3 scripts/generate_synthetic_fc.py --out data/synthetic/diag_wing300 --n 300 --start 500000 --seed 6 --revit
    --revit-plans --shaped --workers 64 --mode-weights 66,16,18 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2
-   --plan-source data/reference/swiss_dwellings/layouts.pkl.gz`, then
-   `evaluate_refunet_selection.py --checkpoint <longswiss-swa37-41> --local-pool data/synthetic/diag_wing300
-   --image-max-size 4096 --mask-thresh 0.35 --metrics-out diag_best_synth300_4096.json --save-probs diag_best_probs/`.
-   Upload the probs folder + metrics JSON to the Hub repo `abshetty/floz-diag` (private dataset, new) under
-   `longswiss-swa37-41/synth300_4096/`; commit only the metrics JSON to `eval_baselines/`.
-2. **When the wing long run finishes:** the same synthetic scoring for its SWA checkpoint, plus `--save-probs` on
-   HF14 / val / Gemini30 at 4096 (hand boxes), uploaded to the same Hub dataset under `<model tag>/`. It is a "select
-   model": probabilities are kept for best-model candidates only.
-3. Commit the mining scores of the wing fresh pool (`data/evaluations/hardmine/wing/fresh_shard*.json`) to
-   `eval_baselines/hardmine_wing/` (per-question IoU on 4,000 synthetic sheets).
-4. No more `eval_baselines/probe_*.json`: write probe leak numbers into `synth_progress.md` only.
+   --plan-source data/reference/swiss_dwellings/layouts.pkl.gz`, scored by (1) and by the wing long run's final
+   checkpoint at 4096 with `--save-probs`.
+5. Commit the wing mining scores (`data/evaluations/hardmine/wing/fresh_shard*.json`) to `eval_baselines/hardmine_wing/`.
+6. No more `eval_baselines/probe_*.json`: probe leak numbers go in `synth_progress.md` only.
 
 ## GPU runbook (written 2026-10-14 on CPU -- do this first; supersedes the 2026-10-13 runbook below)
 
