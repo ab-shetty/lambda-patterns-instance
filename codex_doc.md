@@ -7,22 +7,6 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
-## Requests from the CPU session (2026-10-14, second round -- the long run finished before the first round was done)
-
-The wing long run (longwing-swa16-19) splits single families again: Gemini30 1 (one board-and-batten family in three
-bands divided by trim) q0 / q2 0.85 / 0.87 -> 0.23 / 0.24 at pred/target 0.2; val 17 q12-q25 and val 9 q2 (0.95 -> 0.10)
-the same; under-selection share of the loss up on every set (HF14 0.17 -> 0.36, val 0.23 -> 0.52). The 2k wing arm did
-not do this. Suspect: the mined pool over-represents pair sheets (hard for the miner), so the long run saw far more
-"same pattern, other side of a boundary = another family" than the 2k arm's ~10%. In priority order:
-1. **Publish `data/runs/ck_long_hardwing/avg_e16-19.pth` to the Hub** (`abshetty/floz-refunet-swint-longwing-swa16-19`,
-   private) so the CPU session can rescore single sheets.
-2. **Commit the mined pool's manifest** `pool_manifests/revitwing_hard2000.json` (as for the earlier mined pools) and
-   report in `synth_progress.md` the share of sheets with `near_pair` in: the 2k wing pool, the fresh pool, the mined
-   1,000, the final 2,000.
-3. **Score the saved epochs** `ck_long_hardwing/epoch_{4,9,14}.pth` on HF14 / val / Gemini30 at 4096 (metrics JSONs to
-   `eval_baselines/longwing-e{4,9,14}_{split}_4096.json`): when does the splitting start?
-4. The first-round items below still stand (probability maps, synthetic diagnostic, mining scores).
-
 ## Requests from the CPU session (2026-10-14; do now, alongside the wing long run -- scoring fits next to training)
 
 Goal: see what each model fixes and what it still gets wrong, from probability maps, without CPU rescoring (one
