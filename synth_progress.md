@@ -1438,3 +1438,31 @@ the crop median).
   square median 56-57 px vs 99 / 127). Training draws boxes the same way (`sample_reference_box`, 128-512 native
   preference, capped by the piece), so large user boxes are under-represented in training; real IoU by box size is
   flat at 0.82-0.86 (n = 8 above 256 px), so the cost is not measurable here.
+
+### 2026-10-14 (GH200) -- gable-trim screen: best 2k arm so far, but Gemini30 1 does not split at the bands at 2k
+
+`revitgableroi` = the wing arm's flags / ids / seed with GEN_VERSION 2026-10-14b (`--gable-trim 0.5` default), same
+2k recipe (seed 7, 1+8, epoch 8, hand boxes). Pool 1,989 sheets, 195 pair sheets (= wing). Per-question files
+`eval_baselines/revitgable2k-e8_*`; not on the Hub.
+
+| @2048 | HF14 | val | val w/o 17 | Gemini30 |
+|---|---:|---:|---:|---:|
+| r32 | 0.8049 | 0.7580 | 0.8448 | 0.7393 |
+| wing | 0.7920 | 0.7527 | 0.8365 | 0.7646 |
+| **gable** | **0.8264** | 0.7786 | 0.8525 | 0.7753 |
+
+@4096: HF14 0.8302, val 0.8253.
+
+- **vs wing: HF14 +0.034 (23 / 9, p=0.003), val +0.026 (p=0.07), Gemini30 +0.011 (p=0.13). vs r32: HF14 +0.022 (p=0.06),
+  val +0.021, Gemini30 +0.036 (p=3e-4).** Best 2k screen on HF14. HF14 under-selection share 0.21 -> 0.00 (over 0.45 ->
+  0.40). Sheets moved > 0.08 vs wing: HF14 25 0.72 -> 0.83, 27 0.69 -> 0.81 (shingle roof vs boards), 0 0.81 -> 0.66;
+  Gemini30 17 0.72 -> 0.87, **1 0.82 -> 0.54**.
+- **The test it was built for does not apply at 2k.** The band split on Gemini30 1 (r2 #004) appeared only in the long
+  run (longwing q0 / q2 0.23 / 0.24); the wing 2k arm reads 0.82 / 0.90 / 0.73 there. The gable arm drops to 0.48 /
+  0.77 / 0.38, but its maps show blotchy misses INSIDE every band, the reference's own included -- low confidence on
+  one faint painted board-and-batten family, not a boundary rule. (Wing 2k shows the same blotches, milder, on q2.)
+  So the trim did not fix a band split here (there was none) and did not create one.
+- **Probe:** colour leak back up (tan vs olive 0.95 / 0.78, wing 0.61 / 0.10; tan vs blue 0.32 / 0.00); lap vs brick
+  0.08 / 0.83 (wing 0.00 / 0.04) -- one-direction rows are noisy (2026-10-08 note), read with care.
+- The direct test of the fix is the long-run version (mine on this pool, 20-epoch restart of longswiss) against longwing
+  on Gemini30 1.

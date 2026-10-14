@@ -11,6 +11,7 @@ pool_manifests/gemini30_s20261006.json). Threshold 0.35. Compare at the same inf
 | revitfailswiss2k-e8_{hf14,val,gemini30}_2048 | abshetty/floz-refunet-swint-revitfailswiss2k-e8 (2k screen control) | 0.8090 / 0.7559 / 0.7239 |
 | revithue2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-13 hue-pair screen; checkpoint `data/runs/ck_2k_revithueroi_r2048_s7/epoch_8.pth` on the GH200) | 0.7806 / 0.7161 / 0.7068 |
 | revitwing2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-14 wing colour-pair screen, passed the gate; `data/runs/ck_2k_revitwingroi_r2048_s7/epoch_8.pth` on the GH200) | 0.7920 / 0.7527 / 0.7647 |
+| revitgable2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-14 gable-trim screen; `data/runs/ck_2k_revitgableroi_r2048_s7/epoch_8.pth` on the GH200) | 0.8264 / 0.7786 / 0.7753 |
 
 2026-10-07: Gemini30 sheet 16 (r3 #048) was relabelled by the user (Roboflow r3 v3: one missed pattern3 piece added,
 appended as question 23 so every other automatic box is unchanged). The longswiss Gemini30 file has that sheet's rows
