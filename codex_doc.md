@@ -7,6 +7,25 @@ every number, command and reproduction path. This file holds only what changed
 and where to pick up — if a fact appears in one of those two, it is not repeated
 here.
 
+## Requests from the CPU session (2026-10-14; do alongside / after the wing long run)
+
+For the synthetic-data error analysis (where does the best model fail on real sheets, and do those failure types exist
+in the synthetic data at all?):
+1. **Score the best model on fresh synthetic sheets**, same protocol as real (4096, mask 0.35), with probabilities:
+   `python3 scripts/generate_synthetic_fc.py --out data/synthetic/diag_wing300 --n 300 --start 500000 --seed 6 --revit
+   --revit-plans --shaped --workers 64 --mode-weights 66,16,18 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2
+   --plan-source data/reference/swiss_dwellings/layouts.pkl.gz`, then
+   `evaluate_refunet_selection.py --checkpoint <longswiss-swa37-41> --local-pool data/synthetic/diag_wing300
+   --image-max-size 4096 --mask-thresh 0.35 --metrics-out diag_best_synth300_4096.json --save-probs diag_best_probs/`.
+   Upload the probs folder + metrics JSON to the Hub repo `abshetty/floz-diag` (private dataset, new) under
+   `longswiss-swa37-41/synth300_4096/`; commit only the metrics JSON to `eval_baselines/`.
+2. **When the wing long run finishes:** the same synthetic scoring for its SWA checkpoint, plus `--save-probs` on
+   HF14 / val / Gemini30 at 4096 (hand boxes), uploaded to the same Hub dataset under `<model tag>/`. It is a "select
+   model": probabilities are kept for best-model candidates only.
+3. Commit the mining scores of the wing fresh pool (`data/evaluations/hardmine/wing/fresh_shard*.json`) to
+   `eval_baselines/hardmine_wing/` (per-question IoU on 4,000 synthetic sheets).
+4. No more `eval_baselines/probe_*.json`: write probe leak numbers into `synth_progress.md` only.
+
 ## GPU runbook (written 2026-10-14 on CPU -- do this first; supersedes the 2026-10-13 runbook below)
 
 What changed since the 2026-10-13 (hue) screen, generator GEN_VERSION 2026-10-14 (why: `synth_progress.md`
