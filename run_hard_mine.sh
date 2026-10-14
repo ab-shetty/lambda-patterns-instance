@@ -37,8 +37,8 @@ declare -A GENFLAGS=([cur]="--soft-shadows 0" [fail]="--roof-lines 0.3 --railing
   [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [near]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [hue]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
-  [wing]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
-  [gable]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
+  [wing]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6"
+  [gable]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6")
 declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi [near]=revithardnearroi [hue]=revithardhueroi [wing]=revithardwingroi [gable]=revithardgableroi)
 MINER=data/runs/ck_2k_revit${SRC}roi_r2048_s$SEED/epoch_8.pth
 BASE=data/synthetic/revit${SRC}_train2000

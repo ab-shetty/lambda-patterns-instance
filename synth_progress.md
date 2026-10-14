@@ -1663,3 +1663,9 @@ blend `data/runs/ck_single18knp0_blend50.pth` (not on the Hub). Per-question fil
   generator's other changes) also costs it.
 - The no-pairs blend is a tie with single18k-blend50 for best model (val per-sheet 0.9345 vs 0.9339, HF14 0.8894 vs
   0.8877, all differences noise); not published.
+
+### 2026-10-14 (CPU) -- wing pairs off by default (GEN_VERSION 2026-10-14c)
+
+`--near-pairs` default 0.6 -> 0 after the single18k no-pairs arm (previous GH200 entry): real-sheet scores unchanged,
+Gemini30 1 recovers. The wing / gable arms in `run_revit_2k.sh` / `run_hard_mine.sh` now pass `--near-pairs 0.6`
+explicitly. Pair code stays.

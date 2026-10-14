@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-14b"
+GEN_VERSION = "2026-10-14c"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -80,7 +80,7 @@ REF_EXCLUDE = [True]
 # floors differing in one attribute -- off: it taught "another room = another family" (Gemini30 5 drops a garage).
 # The 2026-10-07 / 2026-10-13 pair pools (direction / spacing / tone, B on the roof) are not rebuildable from
 # here: check out the generator at a73ab1f (2026-10-07) / eb67479 (2026-10-13).
-NEAR_PAIRS = [0.6]
+NEAR_PAIRS = [0.0]      # default 0 since 2026-10-14c: net zero in the best recipe (synth_progress "wing pairs off")
 NEAR_PAIRS_PLAN = [0.0]
 # --balcony-doors P (default 0.7 since 2026-10-07): an upper-floor balcony railing gets a door in the
 # wall behind it (cut out of the wall label like every door; the railing still draws over it), as on
@@ -744,7 +744,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
     DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.05))
     REF_EXCLUDE[0] = bool(flags.pop("ref_exclude", 1))
-    NEAR_PAIRS[0] = float(flags.pop("near_pairs", 0.6))
+    NEAR_PAIRS[0] = float(flags.pop("near_pairs", 0.0))
     NEAR_PAIRS_PLAN[0] = float(flags.pop("near_pairs_plan", 0.0))
     BALCONY_DOORS[0] = float(flags.pop("balcony_doors", 0.7))
     GABLE_TRIM[0] = float(flags.pop("gable_trim", 0.5))
@@ -840,9 +840,10 @@ def main():
     ap.add_argument("--ref-exclude", type=int, choices=[0, 1], default=1,
                     help="1 (default) = annotation files carry ref_exclude (posts, railings, stairs, downspouts, solid "
                          "furniture, rugs) so reference boxes avoid them; 0 omits it (earlier pools' files)")
-    ap.add_argument("--near-pairs", type=float, default=0.6,
+    ap.add_argument("--near-pairs", type=float, default=0.0,
                     help="Revit colour elevations with a side wing: probability the wing is a second family in the "
-                         "main wall's pattern but another hue (or hue + spacing). Default 0.6 since 2026-10-14; 0 = none")
+                         "main wall's pattern but another hue (or hue + spacing). 0.6 on 2026-10-14..14b; default 0 since 2026-10-14c "
+                         "(no net effect on real sheets, breaks Gemini30 1)")
     ap.add_argument("--near-pairs-plan", type=float, default=0.0,
                     help="Revit finish floor plans: probability of two floor families differing in ONE attribute "
                          "(orthogonal vs diagonal lines, spacing 1.4-2x, or tone). Default 0 since 2026-10-14 "

@@ -116,8 +116,8 @@ declare -A BUILD=([revitmk50roi]="2000 --markup 0.5 --soft-shadows 0" [revit10km
                   [revitfailswissroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revitnearroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
                   [revithueroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
-                  [revitwingroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
-                  [revitgableroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+                  [revitwingroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6"
+                  [revitgableroi]="2000 --roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6"
                   [revitfailswissr32roi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0 --near-pairs-plan 0 --balcony-doors 0 --gable-trim 0"
                   [revitgemroi]="2000 --roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz --tight-crop --pale-ink 0.25 --revit-view-weights 50,45,5")
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
