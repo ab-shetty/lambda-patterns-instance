@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-14"
+GEN_VERSION = "2026-10-14b"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -87,6 +87,12 @@ NEAR_PAIRS_PLAN = [0.0]
 # Gemini r4 #098. Before, doors existed only at grade, so every synthetic railing stood in front of
 # siding. Needs --railings > 0. 0 = earlier pools.
 BALCONY_DOORS = [0.7]
+# --gable-trim P (default 0.5 since 2026-10-14b): a house whose gables are NOT an accent family gets a trim board
+# across the base of every gable (frieze / gable-end band), the same family continuing above it, as on Gemini r2 #004.
+# Before, the generator drew that band ONLY under accent gables, so in synthetic data a trim board under a gable
+# always started a new family; the wing long run then split one-family houses at it (Gemini30 1: 0.85 -> 0.23 with
+# the reference in the gable). Own RNG per house (all views agree). 0 = earlier pools.
+GABLE_TRIM = [0.5]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -506,6 +512,9 @@ def build_elevation_fc(house, view, rng):
             b = unary_union(cs).bounds
             trims.append(box(b[0] - 0.3, b[1], b[2] + 0.3, b[1] + 0.5))
     acc = house["accent"]
+    gt = random.Random(_CUR[0] * 929 + 17)            # --gable-trim: own stream, one decision per house
+    gable_trim = acc != "gable" and gt.random() < GABLE_TRIM[0]
+    gable_trim_h = gt.uniform(0.4, 0.8)
     for bi, Fs in walls_by_block.items():
         B = house["blocks"][bi]
         wall = unary_union([F["vis"] for F in Fs])
@@ -519,6 +528,9 @@ def build_elevation_fc(house, view, rng):
             for s in range(1, B.stories):
                 yb = -s * fh
                 belt_polys.append(G.rect(u0 - 0.2, yb - house["belt_h"] / 2, u1 + 0.2, yb + house["belt_h"] / 2))
+
+        if gable_trim and B.roof == "gable" and wall.bounds[1] < y_top - 1.0:
+            belt_polys.append(G.rect(u0 - 0.2, y_top - 0.1, u1 + 0.2, y_top + gable_trim_h))
 
         def zone_for(placement):
             if placement == "gable" and wall.bounds[1] < y_top - 1.0 and (B.roof == "gable" or not G.TRIM_CUT):
@@ -735,6 +747,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     NEAR_PAIRS[0] = float(flags.pop("near_pairs", 0.6))
     NEAR_PAIRS_PLAN[0] = float(flags.pop("near_pairs_plan", 0.0))
     BALCONY_DOORS[0] = float(flags.pop("balcony_doors", 0.7))
+    GABLE_TRIM[0] = float(flags.pop("gable_trim", 0.5))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -837,6 +850,9 @@ def main():
     ap.add_argument("--balcony-doors", type=float, default=0.7,
                     help="Revit elevations with --railings: probability an upper-floor balcony has a door behind its "
                          "railing (cut from the wall label). Default 0.7 since 2026-10-07; 0 = earlier pools")
+    ap.add_argument("--gable-trim", type=float, default=0.5,
+                    help="Revit elevations: probability a house with non-accent gables gets a trim board across each "
+                         "gable base, the same family above and below. Default 0.5 since 2026-10-14b; 0 = earlier pools")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -897,6 +913,7 @@ def main():
     flags["near_pairs"] = args.near_pairs
     flags["near_pairs_plan"] = args.near_pairs_plan
     flags["balcony_doors"] = args.balcony_doors
+    flags["gable_trim"] = args.gable_trim
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

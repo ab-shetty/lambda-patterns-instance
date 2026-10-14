@@ -1394,3 +1394,15 @@ Hub: `abshetty/floz-refunet-swint-longwing-swa16-19` (private, round-trip identi
 - **Mined pool** (`pool_manifests/revitwing_hard2000.json`): pair sheets 14.8% of the mined half (20.8% of its
   elevations) vs 9.8% of the 2k pool, 10.2% of the base half, 9.5% of the fresh 4,000. Not because pair sheets are harder
   for the miner (pair elevations 0.797 vs other elevations 0.795): they fall in the 17-51% hardness band more often.
+
+### 2026-10-14 (CPU) -- gable-base trim on one-family gables (GEN_VERSION 2026-10-14b)
+
+The wing long run splits Gemini30 1 (r2 #004: one board-and-batten family in three bands -- gable, upper, lower --
+divided by white trim boards) at the bands: reference in the gable 0.85 -> 0.23, in the lower storey 0.87 -> 0.24, in
+the upper storey 0.78 -> 0.83 (pred/target 0.2 on the first two). In the generator a trim board across a gable base
+existed ONLY under accent gables (`zone_for("gable")`), i.e. 100% of synthetic gable-base trims start a new family
+(5,000 sampled houses: 1,095 accent gables, 0 same-family gables with a band); storey belts are 65% same family. The
+hypothesis (unconfirmed until the long run's maps arrive): once the wing pairs made pattern alone insufficient, the
+model began using that perfectly predictive band. Change: `--gable-trim P` (default 0.5): a house whose gables are not
+an accent gets the band across every gable base (one decision per house, own RNG), the main family continuing above.
+40-sheet check: 7 / 40 elevation sheets change; `--gable-trim 0` byte-identical to the previous commit.
