@@ -1494,3 +1494,12 @@ fit-diagnostic pool `fit_fresh150_13c3cc06` (GEN 2026-10-14) was renamed `..._ge
 - **Both long runs show the same shape:** a mid-run val bump and HF14 / Gemini30 flat at 0.87-0.88 / 0.83-0.85 throughout,
   while fit on synthetic keeps rising. Three restarts on three mined pools (failswiss, wing, gable) have all landed
   within +-0.01 of 0.878 on HF14.
+
+### 2026-10-14 (CPU) -- HF14 18's two roofs are two patterns (label fix v2)
+
+The user (2026-10-14): on HF14 18 the left and right roof pieces, both labelled pattern3, are different patterns; either
+answer is acceptable, two families is the correct one. `eval_labels/hf14_fixes_v2.json` = v1 + a "reassign" fix moving
+annotation 9 (right roof) to its own category (`evaluate_refunet_selection.py --label-fixes` now supports "reassign";
+boxes and questions unchanged); `run_revit_2k.sh`'s hf14fix split uses v2. Rescored from the saved maps (sheet 18 only):
+longswiss q8 / q9 0.533 / 0.236 -> 0.321 / 0.298, HF14 0.8779 -> 0.8749; longwing 0.523 / 0.636 -> 0.883 / 0.741, HF14
+0.8805 -> 0.8896. Longwing separates the two roofs; longswiss merges them.
