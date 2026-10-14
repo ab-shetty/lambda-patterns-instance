@@ -1729,3 +1729,22 @@ decks turn their boards. **Change:** `--turn-boards P` (default 0.6): on a plan 
 of a directional floor family (planks, plank lines, joists, 45-degree hatch) gets its own direction; labels unchanged;
 own RNG, and the v3 per-room stream (p3) is consumed exactly as before. 60-plan check: 9 / 59 plans change, labels
 identical on all 59, `--turn-boards 0` byte-identical to the previous commit. `run_revit_2k.sh`'s r32 arm passes 0.
+
+### 2026-10-14 (CPU) -- HF14 14: a thin band boxed in heavy lines; generator --heavy-pieces (GEN_VERSION 2026-10-14e)
+
+**HF14 14** (one lap-siding family: four panels under the windows + two thin bands, 76 px tall, 4 lines, boxed in heavy
+lines). The bands' lines match the panels exactly (spacing 15 px, darkness 35, both). Best model, @4096, own boxes;
+selected share of panels 0-3 / band 4:
+
+| variant | q4 (box on band, 64 px) | q0 (box on panel) |
+|---|---|---|
+| original | 0.55 (panels 0.00-0.35) | 0.66 (band 0.12) |
+| heavy band outlines whitened, texture kept | **0.90** | **0.75** (band 0.55) |
+| panel texture inside the band, outlines kept | 0.77 | 0.69 (band 0.13) |
+| control: 64 px box on a panel (q1) | 0.94 (bands 0.94-0.98) | |
+
+The heavy outlines are the cause; box size is not. Synthetic elevations drew heavy lines only around the whole
+building (the profile); every piece inside got the thin outline, so a band boxed in heavy lines was never one family
+with large panels. **Change:** `--heavy-pieces P` (default 0.4): on a sheet chosen with P, surface pieces are re-outlined
+at 0.6-1.0x the heavy profile weight, thin pieces (< 1.5 ft) with probability 0.6, others 0.15; labels unchanged; own
+RNG. 40-elevation check: 14 / 40 change, labels identical, `--heavy-pieces 0` byte-identical; r32 arm passes 0.

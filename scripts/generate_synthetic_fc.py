@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-14d"
+GEN_VERSION = "2026-10-14e"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -97,6 +97,9 @@ GABLE_TRIM = [0.5]
 # joists, 45-degree hatch) is laid per room in a random direction on a sheet chosen with P; see
 # revit_plans.compose_floor. 0 = earlier pools.
 TURN_BOARDS = [0.6]
+# --heavy-pieces P (default 0.4 since 2026-10-14e): on an elevation sheet chosen with P, some surface pieces (thin bands
+# more often) are boxed in a heavy line; see revit_render.compose_revit. 0 = earlier pools.
+HEAVY_PIECES = [0.4]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -753,6 +756,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     BALCONY_DOORS[0] = float(flags.pop("balcony_doors", 0.7))
     GABLE_TRIM[0] = float(flags.pop("gable_trim", 0.5))
     TURN_BOARDS[0] = float(flags.pop("turn_boards", 0.6))
+    HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -863,6 +867,9 @@ def main():
                     help="Revit floor plans: probability a sheet lays each room of a directional floor family "
                          "(planks / plank lines / joists / 45-deg hatch) in its own direction. Default 0.6 since "
                          "2026-10-14d; 0 = earlier pools")
+    ap.add_argument("--heavy-pieces", type=float, default=0.4,
+                    help="Revit elevations: probability a sheet boxes some surface pieces (thin bands more often) in a "
+                         "heavy line, labels unchanged. Default 0.4 since 2026-10-14e; 0 = earlier pools")
     ap.add_argument("--railings", type=float, default=0.0,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27; "
@@ -925,6 +932,7 @@ def main():
     flags["balcony_doors"] = args.balcony_doors
     flags["gable_trim"] = args.gable_trim
     flags["turn_boards"] = args.turn_boards
+    flags["heavy_pieces"] = args.heavy_pieces
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

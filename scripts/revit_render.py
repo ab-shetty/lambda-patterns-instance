@@ -602,6 +602,8 @@ def compose_revit(image_id, seed, mode_weights):
     lw_thin = max(1.0, S * r.uniform(0.010, 0.016))
     lw_heavy = max(2.0, S * r.uniform(0.03, 0.045))
     lw_ground = lw_heavy * r.uniform(1.3, 1.8)
+    hp = random.Random(fam_seed * 241 + 113)              # --heavy-pieces: own stream
+    heavy_on = hp.random() < getattr(FC, "HEAVY_PIECES", [0.0])[0]
     app["outline_lw"] = lw_thin
     for st in styles.values():
         st.lw = max(0.8, lw_thin * r.uniform(0.6, 0.9))
@@ -724,6 +726,17 @@ def compose_revit(image_id, seed, mode_weights):
         # thin edges: every visible face boundary and trim
         for (fam, poly, bi, kind) in e["surfaces"]:
             _outline_geom(canvas, V.geom(poly), ink, lw_thin)
+        # --heavy-pieces P (FC.HEAVY_PIECES, default 0.4 since 2026-10-14e): on a sheet chosen with P, some surface
+        # pieces are boxed in a heavy line -- thin ones (a band under 1.5 ft) with probability 0.6, others 0.15 --
+        # as real sheets draw fascia / band boards as heavy objects. Labels unchanged. HF14 14: a thin band of the
+        # panels' lap siding, boxed in heavy lines, was dropped (0.55 / 0.66); with the heavy lines whitened, 0.90 /
+        # 0.75. Synthetic sheets drew heavy lines only around the whole building. Own RNG: P = 0 is byte-identical.
+        if heavy_on:
+            for (fam, poly, bi, kind) in e["surfaces"]:
+                for q in G.polys_of(poly):
+                    x0q, y0q, x1q, y1q = q.bounds
+                    if hp.random() < (0.6 if min(x1q - x0q, y1q - y0q) < 1.5 else 0.15):
+                        _outline_geom(canvas, V.geom(q), ink, lw_heavy * hp.uniform(0.6, 1.0))
         for tp in e["trims"]:
             _outline_geom(canvas, V.geom(tp), ink, lw_thin)
         if getattr(FC, "SHAPED", [False])[0]:
