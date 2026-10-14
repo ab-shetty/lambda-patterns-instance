@@ -1701,3 +1701,17 @@ blend checkpoints `data/runs/ck_single18knp0_blend{30,70,50_longswiss50}.pth` (n
 HF14 is now almost all misses (FN 0.085 of 0.112; 45% of the loss on under-selecting questions), and three sheets hold
 them: 12 (floor plan; 0.020 of whole pieces missed), 14 and 18 -- 0.062 of the 0.112. 0.92 on HF14 means fixing
 those sheets' misses; merges are done.
+
+### 2026-10-14 (GH200) -- what else is on the Hub before shutdown
+
+- **Swiss layouts:** `data/reference/swiss_dwellings/layouts.pkl.gz` (the `scripts/swiss_plans.py` output, 19,046 layouts)
+  is in the private dataset `abshetty/floz-assets` as `swiss_dwellings/layouts.pkl.gz` (sha256 round-trip identical).
+  Fetch instead of the 932 MB Zenodo download + ~20 min build:
+  `python3 -c "from huggingface_hub import hf_hub_download as d; import shutil; shutil.copy(d('abshetty/floz-assets', 'swiss_dwellings/layouts.pkl.gz', repo_type='dataset'), 'data/reference/swiss_dwellings/layouts.pkl.gz')"`
+  (CC BY 4.0, Archilyse AG, Zenodo 7788422: credit required in any released data or model).
+- **Miners:** `abshetty/floz-refunet-swint-revitgable2k-e8` (miner of `revitgable_hard2000`) and `-revitwing2k-e8` (miner of
+  `revitwing_hard2000`), round-trip identical; re-mining no longer needs the 2k screen retrained.
+- **Maps of the current best** `single18knp0-blend50` (HF14 / val / Gemini30 @4096) on `abshetty/floz-diag`,
+  `single18knp0-blend50/`.
+- **Gable mining scores** (per-question IoU on 3,981 fresh sheets, miner revitgable2k-e8 @2048):
+  `eval_baselines/hardmine_gable/`.
