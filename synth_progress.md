@@ -1343,3 +1343,23 @@ boxes). Pool 1,989 sheets; pairs on 195 (all elevation main+accent: 94 hue, 101 
   0.66 / 0.51 -> 0.01 / 0.00; spacing x2 0.32 -> 0.12 (A->B). Direction stays blind (0.75-0.98), as expected (no
   direction pairs).
 - Next (runbook step 3): mining on the wing pool and the 20-epoch restart of longswiss-swa37-41, below.
+
+### 2026-10-14 (GH200) -- long restart on the mined wing pool: HF14 0.8805, level with longswiss; val -0.06
+
+Runbook step 3. Mining: miner `revitwingroi` e8, 4,000 fresh sheets (ids 100000+), 3,966 ranked, mined mean IoU 0.704
+(fresh kept 0.858) -> `revitwing_hard2000`. Restart: `run_hard_long.sh` EP=20 from the Hub `longswiss-swa37-41`
+(epochs numbered 0-19: Hub checkpoints carry no epoch), ROI add, peak LR 2e-4 cosine to 1e-5, 137 s/epoch. Train loss
+0.19 -> 0.10. SWA windows @4096, hand boxes (val / HF14): e15-19 0.8126 / 0.8781, **e16-19 0.8161 / 0.8805 (val pick)**,
+e17-19 0.8141 / 0.8842, e14-19 0.8117 / 0.8770. Checkpoint `data/runs/ck_long_hardwing/avg_e16-19.pth` (not on the Hub);
+per-question files `eval_baselines/longwing-swa16-19_*_4096.json`.
+
+| @4096, hand boxes | HF14 | val | val w/o 17 | Gemini30 |
+|---|---:|---:|---:|---:|
+| longswiss-swa37-41 (start) | 0.8779 | 0.8766 | 0.9093 | 0.8295 |
+| longwing-swa16-19 | 0.8805 | 0.8161 | 0.8846 | 0.8343 |
+
+- **Paired vs the start: HF14 +0.003 (18 / 13, p=0.88), Gemini30 +0.005 (p=0.59), val -0.061 (p=7e-4; 72% is val 17,
+  0.807 -> 0.670), val w/o 17 -0.025 (se 0.018).** No gain toward 0.92; by the val rule the start stays the best model.
+- **The pair did its job on its target:** Gemini30 26 (tan / olive / red lap) 0.380 -> 0.665. Also 10 0.77 -> 0.85, 4
+  0.66 -> 0.72. Losses: Gemini30 1 0.833 -> 0.432, 0 0.736 -> 0.592, 6, 17; HF14 14 0.882 -> 0.803 (12 0.714 -> 0.794);
+  val 9 (line sheet) 0.877 -> 0.745.
