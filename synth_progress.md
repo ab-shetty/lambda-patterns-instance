@@ -1363,3 +1363,15 @@ per-question files `eval_baselines/longwing-swa16-19_*_4096.json`.
 - **The pair did its job on its target:** Gemini30 26 (tan / olive / red lap) 0.380 -> 0.665. Also 10 0.77 -> 0.85, 4
   0.66 -> 0.72. Losses: Gemini30 1 0.833 -> 0.432, 0 0.736 -> 0.592, 6, 17; HF14 14 0.882 -> 0.803 (12 0.714 -> 0.794);
   val 9 (line sheet) 0.877 -> 0.745.
+
+### 2026-10-14 (CPU) -- gable-base trim on one-family gables (GEN_VERSION 2026-10-14b)
+
+The wing long run splits Gemini30 1 (r2 #004: one board-and-batten family in three bands -- gable, upper, lower --
+divided by white trim boards) at the bands: reference in the gable 0.85 -> 0.23, in the lower storey 0.87 -> 0.24, in
+the upper storey 0.78 -> 0.83 (pred/target 0.2 on the first two). In the generator a trim board across a gable base
+existed ONLY under accent gables (`zone_for("gable")`), i.e. 100% of synthetic gable-base trims start a new family
+(5,000 sampled houses: 1,095 accent gables, 0 same-family gables with a band); storey belts are 65% same family. The
+hypothesis (unconfirmed until the long run's maps arrive): once the wing pairs made pattern alone insufficient, the
+model began using that perfectly predictive band. Change: `--gable-trim P` (default 0.5): a house whose gables are not
+an accent gets the band across every gable base (one decision per house, own RNG), the main family continuing above.
+40-sheet check: 7 / 40 elevation sheets change; `--gable-trim 0` byte-identical to the previous commit.
