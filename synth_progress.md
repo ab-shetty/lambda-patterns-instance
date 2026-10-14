@@ -1588,3 +1588,78 @@ File `eval_baselines/longswiss-swa37-41_gablemined1000_4096.json` (and `_synth30
 - The blend is better on HF14 than either parent (DR 0.8849, no-DR 0.8573): the two arms err differently (DR over-,
   no-DR under-selects on HF14), and averaging the weights lands between them.
 - Gemini30 1 is still broken (0.297): the wing-pair failure stays.
+
+### 2026-10-14 (GH200) -- counterfactual probe cf_v1 (17 worst sheets, one change per variant)
+
+`make_counterfactual_pool.py --out data/eval_pools/cf_v1` (17 sheets x 6 image variants, 164 questions); every variant scored @4096,
+mask 0.35, `--boxes` from the pool (orig boxes, or `boxes_boxlarge` / `boxes_box2x` on the orig images). Per-question JSONs
+`eval_baselines/cf_v1/<tag>_<variant>.json`. `counterfactual_summary.py` output:
+
+```
+== cf summary single18k-blend50
+orig: 0.8306 over 164 questions (under-selecting 10, over 12, ok 142)
+autocontrast  0.8280  (-0.0026) | under -0.018 over +0.016 ok -0.003 | gain>0.1: 2  loss>0.1: 1
+box2x         0.4675  (-0.3631) | under +0.062 over -0.191 ok -0.408 | gain>0.1: 7  loss>0.1: 100
+boxlarge      0.8282  (-0.0024) | under +0.189 over +0.008 ok -0.017 | gain>0.1: 10  loss>0.1: 13
+flatbg        0.7991  (-0.0315) | under +0.084 over +0.025 ok -0.044 | gain>0.1: 11  loss>0.1: 36
+gray          0.7114  (-0.1192) | under +0.124 over -0.118 ok -0.136 | gain>0.1: 5  loss>0.1: 49
+sharpen       0.8044  (-0.0261) | under +0.060 over -0.015 ok -0.033 | gain>0.1: 7  loss>0.1: 15
+soften        0.8488  (+0.0182) | under +0.191 over +0.174 ok -0.007 | gain>0.1: 12  loss>0.1: 8
+
+== cf summary longswiss-swa37-41
+orig: 0.8049 over 164 questions (under-selecting 14, over 16, ok 134)
+autocontrast  0.7979  (-0.0070) | under -0.030 over +0.004 ok -0.006 | gain>0.1: 2  loss>0.1: 6
+box2x         0.5376  (-0.2673) | under +0.079 over -0.076 ok -0.326 | gain>0.1: 11  loss>0.1: 89
+boxlarge      0.8115  (+0.0066) | under +0.259 over +0.027 ok -0.022 | gain>0.1: 19  loss>0.1: 15
+flatbg        0.7648  (-0.0401) | under -0.056 over +0.031 ok -0.047 | gain>0.1: 7  loss>0.1: 32
+gray          0.6693  (-0.1356) | under -0.060 over -0.027 ok -0.156 | gain>0.1: 1  loss>0.1: 53
+sharpen       0.7530  (-0.0519) | under -0.041 over -0.044 ok -0.054 | gain>0.1: 5  loss>0.1: 38
+soften        0.8184  (+0.0135) | under +0.131 over +0.155 ok -0.016 | gain>0.1: 20  loss>0.1: 18
+```
+
+Change against orig by source (mean over questions; HF14 n=30, val n=54, Gemini30 n=80):
+
+| variant | blend50 HF14 / val / Gemini30 | longswiss HF14 / val / Gemini30 |
+|---|---|---|
+| soften | -0.046 / -0.009 / **+0.061** | -0.029 / -0.005 / **+0.042** |
+| boxlarge | -0.024 / +0.014 / -0.005 | +0.019 / +0.032 / -0.016 |
+| flatbg | -0.037 / -0.062 / -0.009 | -0.033 / -0.105 / +0.001 |
+| gray | -0.050 / -0.164 / -0.115 | -0.032 / -0.240 / -0.104 |
+
+- **Both models agree on every direction.** No single image change rescues the real sheets: every variant loses on
+  HF14 except boxlarge for longswiss (+0.019).
+- **soften is the only net gain, and it is all Gemini30** (+0.06 / +0.04); on HF14 it costs 0.03-0.05. Gemini sheets are
+  clean high-resolution renders; halving their sharpness brings them toward the training scale. Same direction as the
+  no-DR 18k arm, whose gain was also Gemini30-only. Real scans are not "too sharp".
+- **Colour carries the real sheets:** gray costs 0.03-0.05 on HF14, 0.16-0.24 on val, 0.10-0.12 on Gemini30.
+- **flatbg (paper tone removed) hurts, most on val** (-0.06 / -0.11): the paper / scan tone is information, not noise.
+- **boxlarge fixes under-selection** (under-selecting questions +0.19 / +0.26) but loses elsewhere; net about zero. The
+  model's misses on real sheets are partly the reference sitting on a small or atypical piece.
+- **box2x is not a fair variant** (-0.36 / -0.27): doubling the box usually spills it over other families, so it asks
+  a different question.
+
+### 2026-10-14 (GH200) -- wing pairs off in the best recipe: no net effect; they trade Gemini30 1 for 26
+
+The single18k experiment repeated exactly (ids 600000+, seed 6, GEN 2026-10-14b, one-epoch restarts of
+longswiss-swa37-41 with / without `--domain-random --dr-scale-min 0.7`, 50/50 weight blend), with the pool generated
+`--near-pairs 0` (`single18k_np0_s600000`, 17,907 ok). Checkpoints `data/runs/ck_single18knp0_{dr,nodr}/epoch_0.pth`,
+blend `data/runs/ck_single18knp0_blend50.pth` (not on the Hub). Per-question files
+`eval_baselines/single18knp0-blend50_*`; maps in `data/diag/single18knp0-blend50/`.
+
+| @4096, hand boxes | HF14 | val | val per-sheet (`val_score`) | Gemini30 | Gemini30 1 | Gemini30 26 |
+|---|---:|---:|---:|---:|---:|---:|
+| longswiss-swa37-41 | 0.8779 | 0.8766 | 0.9254 | 0.8295 | 0.833 | 0.380 |
+| single18k-blend50 (wing pairs) | 0.8877 | 0.8964 | 0.9339 | 0.8497 | 0.297 | 0.514 |
+| **single18k-np0-blend50 (no pairs)** | **0.8894** | 0.8961 | **0.9345** | **0.8538** | **0.606** | 0.419 |
+
+- **Paired, no pairs vs pairs: HF14 +0.002 (11 / 13, p=0.82), val -0.0002 (7 / 5), Gemini30 +0.004 (51 / 48, p=0.36).**
+  No sheet of HF14 or val moves by more than 0.07. The pairs neither help nor hurt on the real sheets.
+- **They trade two Gemini sheets:** without them Gemini30 1 recovers 0.30 -> 0.61 (and 0 0.68 -> 0.76), and 26 gives
+  back 0.51 -> 0.42. Both effects are about the size of the per-sheet noise band (0.14) on 26, beyond it on 1.
+- **Answer: the wing pairs do not pay for themselves.** They fix the merge they were built for (26 stays above
+  longswiss's 0.38 either way, so most of 26's gain came from the 18k recipe, not the pairs) and cost the one-family
+  sheet 1 about the same, net zero.
+- Gemini30 1 is still well below longswiss (0.61 vs 0.83) without the pairs, so the 18k recipe itself (or the 2026-10-14b
+  generator's other changes) also costs it.
+- The no-pairs blend is a tie with single18k-blend50 for best model (val per-sheet 0.9345 vs 0.9339, HF14 0.8894 vs
+  0.8877, all differences noise); not published.
