@@ -22,6 +22,9 @@
 # SRC=wing (2026-10-14): the 2026-10-14 generator (colour pairs on side wings only); miner revitwingroi, mined
 # pool revitwing_hard2000.
 #   EXTRA="--roi-ref --roi-ref-mode add" SRC=wing NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7
+# SRC=gable (2026-10-14): GEN_VERSION 2026-10-14b (wing pairs + gable-base trim); miner revitgableroi, mined pool
+# revitgable_hard2000.
+#   EXTRA="--roi-ref --roi-ref-mode add" SRC=gable NFRESH=4000 SHARDS=8 NOTRAIN=1 ./run_hard_mine.sh 7
 # NOTRAIN=1 (2026-10-06): stop after building the mined pool (no 2k arm on it), e.g. when the next
 # step restarts an existing long-schedule model on the mined pool instead.
 set -euo pipefail
@@ -34,8 +37,9 @@ declare -A GENFLAGS=([cur]="--soft-shadows 0" [fail]="--roof-lines 0.3 --railing
   [failswiss]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [near]="--roof-lines 0.3 --railings 0.15 --soft-shadows 0.5 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
   [hue]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
-  [wing]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
-declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi [near]=revithardnearroi [hue]=revithardhueroi [wing]=revithardwingroi)
+  [wing]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz"
+  [gable]="--roof-lines 0.3 --railings 0.15 --faint-lines 0.2 --plan-source data/reference/swiss_dwellings/layouts.pkl.gz")
+declare -A ARM=([cur]=revithardroi [fail]=revithardfailroi [failswiss]=revithardfailswissroi [near]=revithardnearroi [hue]=revithardhueroi [wing]=revithardwingroi [gable]=revithardgableroi)
 MINER=data/runs/ck_2k_revit${SRC}roi_r2048_s$SEED/epoch_8.pth
 BASE=data/synthetic/revit${SRC}_train2000
 FRESH=data/synthetic/revit${SRC}_fresh$NFRESH
