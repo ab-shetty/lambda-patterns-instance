@@ -1898,3 +1898,13 @@ and the turned boards. Per-question files `eval_baselines/single18kq-blend50_{hf
   vs kf > 0.05: 0 0.68 -> 0.77, 1 0.46 -> 0.63 up, 8 0.84 -> 0.76 down (as in kp). val: no sheet > 0.05.
 - **Gate (vs single18kf-blend50: Gemini30 up, val per-sheet and HF14 not down): fails on HF14** (0.9088 < 0.9157; Gemini30 +0.009 and
   val per-sheet +0.0009 pass). Not published; single18kf-blend50 stays the best. Checkpoints `data/runs/ck_single18kq_*` (local).
+
+### 2026-10-15 (GH200) -- single18kq-blend50 made the best (the user's call); publish gate revised
+
+Published `abshetty/floz-refunet-swint-single18kq-blend50` (private, round-trip identical 243 / 243); HF14 / val / Gemini30 re-scored
+@4096 with `--save-probs` (per-question IoU identical to `eval_baselines/single18kq-blend50_*`), maps + metrics on `abshetty/floz-diag`
+`single18kq-blend50/{hf14,val,gemini30}_4096/` (51 + 72 + 195). It replaces single18kf-blend50 as the best in `startup.md`;
+single18kf-blend50 stays listed as the HF14-best reference (0.9157 vs 0.9088). **New gate** (`startup.md`): vs the current best,
+Gemini30 up; val per-sheet and HF14 no significant drop (paired p < 0.1); no sheet down > 0.05 from the change itself. kq vs kf
+under it: Gemini30 +0.009, val per-sheet +0.0009, HF14 -0.007 (p=0.35); the two sheets down > 0.05 (HF14 2, Gemini30 8) are
+elevations, untouched by the plan-only change.

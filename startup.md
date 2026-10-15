@@ -35,27 +35,39 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| **`single18kf-blend50` (best, synthetic only, 2026-10-15)** | **0.9157** | 0.8971 | -- |
+| **`single18kq-blend50` (best, synthetic only, 2026-10-15)** | 0.9088 | 0.8973 | -- |
+| `single18kf-blend50` (HF14-best reference, 2026-10-15) | **0.9157** | 0.8971 | -- |
 | `single18kp-blend50` (GEN 2026-10-15 plan pairs; published, Gemini30 0.8605, 2026-10-15) | 0.8983 | 0.8964 | -- |
-| `single18kq-blend50` (GEN 2026-10-15b; not published: HF14 below best, Gemini30 0.8616) | 0.9088 | 0.8973 | -- |
 | `single18k-blend50` (synthetic only, 2026-10-14) | 0.8877 | 0.8964 | -- |
 | `synpre-realmix-lr5e5-e22` | 0.8738 | 0.9087* | 0.8816 |
 | `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
 
-**Publish gate (the user's rule, from 2026-10-15):** publish a new candidate (Hub + `--save-probs` maps on
-`abshetty/floz-diag`) only if, against the current best at @4096 with hand boxes, **Gemini30 goes up and neither val per-sheet
-(`val_score`) nor HF14 drops**. single18kp-blend50 was published under the older gate (val per-sheet and Gemini30 only),
-which it passed, with HF14 -0.017; under this gate it would not have been published.
+**Publish gate (the user's rule, revised 2026-10-15):** publish a new candidate (Hub + HF14 / val / Gemini30 `--save-probs`
+maps on `abshetty/floz-diag`) and make it the best only if, against the current best at @4096 with hand boxes,
+**(1) Gemini30 goes up; (2) neither val per-sheet (`val_score`) nor HF14 drops significantly (paired p < 0.1 counts as a drop);
+(3) no single sheet (HF14 / val / Gemini30) falls by more than 0.05 because of the change itself.** For (3), a sheet the
+changed generator feature cannot touch (e.g. an elevation under a plan-only change) does not count, but say so. Earlier
+gates: val per-sheet + Gemini30 >= best (single18kp-blend50 passed it with HF14 -0.017, p=0.027); then Gemini30 up and
+neither val per-sheet nor HF14 down at all (single18kq-blend50 failed it on HF14 -0.007, p=0.35).
 
-`single18kf-blend50` (`abshetty/floz-refunet-swint-single18kf-blend50`, round-trip verified): the 50/50 weight
+`single18kq-blend50` (`abshetty/floz-refunet-swint-single18kq-blend50`, round-trip verified; made the best by the user
+2026-10-15): the same recipe at GEN 2026-10-15b -- plan direction pairs (`--near-pairs-plan 0.3`, kinds `direction`),
+`--turn-boards 0.9`, pair sheets always turn (`TAG=single18kq ./run_single_pass.sh`, 17,906 sheets); HF14 fix v2 0.9126, val
+per-sheet 0.9351, Gemini30 0.8616. Against single18kf-blend50: Gemini30 +0.009 (p=0.13), val per-sheet +0.0009, HF14 -0.007
+(p=0.35, not significant), fix v2 -0.010 (p=0.18). Sheets down > 0.05: HF14 2 0.910 -> 0.858 and Gemini30 8 0.838 -> 0.763,
+both elevations that the plan-only change cannot touch (both also fell in single18kp). Gemini30 4 0.666 -> 0.941 (the
+diagonal / orthogonal merge fixed), HF14 12 0.893 -> 0.880. Maps (HF14 / val / Gemini30) on `abshetty/floz-diag`
+`single18kq-blend50/`; paired tests in `synth_progress.md` (2026-10-15, "GEN 2026-10-15b").
+
+`single18kf-blend50` (`abshetty/floz-refunet-swint-single18kf-blend50`, round-trip verified; HF14-best reference): the 50/50 weight
 average of two one-epoch restarts of longswiss-swa37-41 on the same 17,907 fresh sheets at GEN 2026-10-14f, with and
 without `--domain-random --dr-scale-min 0.7` (`TAG=single18kf ./run_single_pass.sh`); HF14 with fix v2 0.9224, val
 per-sheet 0.9342, Gemini30 0.8526. Against `single18knp0-blend50` (same recipe at GEN 2026-10-14b without the wing
-pairs; the best before it): HF14 +0.026 (p=0.006), val and Gemini30 ties. The HF14 gain sits on sheets 12 / 14 / 27,
-which the generator changes were designed from, so HF14 is not a clean holdout for it. Maps (val / Gemini30) on
-`abshetty/floz-diag` `single18kf-blend50/`; paired tests in `synth_progress.md` (2026-10-15).
+pairs): HF14 +0.026 (p=0.006), val and Gemini30 ties. The HF14 gain sits on sheets 12 / 14 / 27,
+which the generator changes were designed from, so HF14 is not a clean holdout for it. Maps (HF14 / val / Gemini30) on
+`abshetty/floz-diag` `single18kf-blend50/`.
 Previous: `single18k-blend50` (`abshetty/floz-refunet-swint-single18k-blend50`): the same recipe at GEN 2026-10-14b
 with wing pairs; Gemini30 0.8497 (`synth_progress.md` 2026-10-14, "50/50 blend").
 *epoch picked on val (automatic boxes), so optimistic. 4096, threshold 0.35, CPU-scored
