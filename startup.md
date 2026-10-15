@@ -37,6 +37,7 @@ older automatic-only protocol (every number below this section that does not say
 |---|---:|---:|---:|
 | **`single18kf-blend50` (best, synthetic only, 2026-10-15)** | **0.9157** | 0.8971 | -- |
 | `single18kp-blend50` (GEN 2026-10-15 plan pairs; published, Gemini30 0.8605, 2026-10-15) | 0.8983 | 0.8964 | -- |
+| `single18kq-blend50` (GEN 2026-10-15b; not published: HF14 below best, Gemini30 0.8616) | 0.9088 | 0.8973 | -- |
 | `single18k-blend50` (synthetic only, 2026-10-14) | 0.8877 | 0.8964 | -- |
 | `synpre-realmix-lr5e5-e22` | 0.8738 | 0.9087* | 0.8816 |
 | `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |

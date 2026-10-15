@@ -1873,3 +1873,28 @@ vertical porch / strip (0.93 -> 0.82). The direction pairs (orthogonal vs 45-deg
 turns its boards, so both rules are on one sheet. 7 of 40 test plan sheets change (most plans have no multi-room
 directional family, so turn-boards' reach is limited by the floor mix). Byte-identical: `--turn-boards 0.6 --pair-turns 0`
 == the 2026-10-15 code's defaults (40 plan sheets). Not measured yet: needs a training run.
+
+### 2026-10-15 (GH200) -- turn-boards 0.9 + pair sheets always turn (GEN 2026-10-15b): HF14 12 q3 recovered, gate fails on HF14
+
+`TAG=single18kq ./run_single_pass.sh`, same ids / seed (600000+, seed 6, default GEN 2026-10-15b, only `--plan-source`); pool
+17,906 ok (same as kp). Against single18kp only the turned boards differ; against single18kf (current best) the plan direction pairs
+and the turned boards. Per-question files `eval_baselines/single18kq-blend50_{hf14,hf14fix2,val,gemini30}_4096.json`.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| single18kf-blend50 (best) | **0.9157** | **0.9224** | 0.8971 | 0.9342 | 0.8526 |
+| single18kp-blend50 (pairs) | 0.8983 | 0.9000 | 0.8964 | 0.9343 | 0.8605 |
+| **single18kq-blend50** (pairs + turns) | 0.9088 | 0.9126 | 0.8973 | **0.9351** | **0.8616** |
+| kq - kp, paired | +0.011 (10 / 3, p=0.11) | +0.013 (p=0.09) | +0.001 (p=0.21) | +0.0008 | +0.001 (45 / 23, sign p=0.01) |
+| kq - kf, paired | -0.007 (7 / 14, p=0.35) | -0.010 (6 / 15, p=0.18) | +0.0002 (p=0.93) | +0.0009 | +0.009 (48 / 48, p=0.13) |
+
+- **HF14 12 (kf / kp / kq):** q0 0.94 / 0.94 / 0.94, q1 0.93 / 0.82 / 0.83, q2 0.94 / 0.94 / 0.94, **q3 0.77 / 0.53 / 0.81** (pred/tgt
+  0.83); sheet 0.893 / 0.805 / 0.880. The turns undo the pairs' q3 split; q1 stays down 0.10.
+- **Gemini30 4 keeps the pairs' fix:** q0 0.96 / 0.94 / 0.93, q1 0.95 / 0.93 / 0.93, q2 0.32 / 0.92 / 0.92, q3 0.33 / 0.90 / 0.91,
+  q4 0.72 / 0.98 / 0.97, q5 0.71 / 0.98 / 0.98; sheet 0.666 -> 0.941.
+- **Where HF14 still trails kf (-0.007, not significant):** HF14 2 (rendered elevation, not a plan) 0.910 -> 0.858, 44% of the gap
+  (q0 0.89 / 0.85 / 0.81, q1 0.87 / 0.77 / 0.79, both under-selecting, pred/tgt 0.81-0.83 -- it fell in kp too, so it moves with the
+  pairs pool rather than the turns), 25 -0.027, 0 -0.021 (q0 / q1 0.94 / 0.93 -> 0.92 / 0.91), 12 -0.014. Other Gemini30 sheets
+  vs kf > 0.05: 0 0.68 -> 0.77, 1 0.46 -> 0.63 up, 8 0.84 -> 0.76 down (as in kp). val: no sheet > 0.05.
+- **Gate (vs single18kf-blend50: Gemini30 up, val per-sheet and HF14 not down): fails on HF14** (0.9088 < 0.9157; Gemini30 +0.009 and
+  val per-sheet +0.0009 pass). Not published; single18kf-blend50 stays the best. Checkpoints `data/runs/ck_single18kq_*` (local).
