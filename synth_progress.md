@@ -1931,3 +1931,15 @@ single18kq-blend50 (the best). Per-question files `eval_baselines/single18kq-ble
   between models (0.30 / 0.61 / 0.46 / 0.65 / 0.63 for 18k / np0 / kf / kp / kq). No other sheet falls > 0.05 (blend70: Gemini30 10
   and 11). **Not published** pending the user's call; HF14 / val / Gemini30 maps exist locally (`data/diag/single18kq-blend30/`, IoU
   identical) for a quick upload.
+
+### 2026-10-15 (GH200, last ~40 min of the VM) -- single18kq-blend30 made the best; single18kw nodr arm (wing pairs back on)
+
+- **single18kq-blend30 is the best** (the user's call; it fails the gate's sheet rule only on Gemini30 1, the most volatile sheet):
+  `abshetty/floz-refunet-swint-single18kq-blend30` (private, round-trip identical 243 / 243), maps (HF14 / val / Gemini30, 51 + 72 + 195,
+  IoU identical to `eval_baselines/single18kq-blend30_*`) on `abshetty/floz-diag` `single18kq-blend30/`. `startup.md` updated.
+- **single18kw** (wing colour pairs back on top of GEN 2026-10-15b): pool `single18kw_s600000` = `run_single_pass.sh`'s generator call
+  with `GEN="--plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6"` (ids 600000+, seed 6): 17,906 ok, 473 s.
+  ONLY the nodr arm trained (one-epoch restart of longswiss-swa37-41, run_single_pass.sh's recipe without `--domain-random`), started
+  05:28. **Status: in progress at the time of writing (see the next line). No scoring.** The dr arm was not trained; to finish the run,
+  train it with the same pool (`TAG=single18kw GEN="..." ./run_single_pass.sh` skips nothing that exists: rebuild the pool first --
+  it is deterministic -- and put the Hub nodr arm at `data/runs/ck_single18kw_nodr/epoch_0.pth` with a `.done` file to skip it).
