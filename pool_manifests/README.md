@@ -8,7 +8,8 @@ Rebuild a pool without re-mining:
    flags; since 2026-10-04 ALSO pass `--plan-v2 1 --cut-standing 1 --downspouts 0 --ref-exclude 0`,
    the defaults these pools were built with; pools from the 2026-10-04 defaults (`*_v1004`,
    `revitfailswiss_*`) need `--near-pairs 0 --near-pairs-plan 0 --balcony-doors 0` since 2026-10-07 (and `--gable-trim 0` since
-   2026-10-14b, `--turn-boards 0` since 2026-10-14d, `--heavy-pieces 0` since 2026-10-14e),
+   2026-10-14b, `--turn-boards 0` since 2026-10-14d, `--heavy-pieces 0` since 2026-10-14e;
+   pools from the 2026-10-14..14f defaults, e.g. `single18kf_s600000`, need `--near-pairs-plan 0` since 2026-10-15),
    and the older ones need both sets): `revitcur_*` = the 2026-10-02 defaults (since 2026-10-13 also pass
    `--soft-shadows 0`: 0.5 became the default), `revitfail_*` = + `--roof-lines 0.3 --railings 0.15
    --soft-shadows 0.5 --faint-lines 0.2`; base ids 0-1999 n=2000, fresh ids 100000+ with

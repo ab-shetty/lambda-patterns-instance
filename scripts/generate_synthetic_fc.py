@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-14f"
+GEN_VERSION = "2026-10-15"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -76,12 +76,20 @@ REF_EXCLUDE = [True]
 # --near-pairs P (default 0.6 since 2026-10-14): a colour elevation whose house has a side wing gets, with
 # probability P, the wing as a second family in the main wall's line pattern but another hue (CIEDE2000 10-25),
 # or another hue plus spacing 1.4-2x (~14% of elevations); see revit_render.plant_near_pair. 0 = no pairs.
-# --near-pairs-plan P (default 0 since 2026-10-14; 0.6 on 2026-10-07..13): finish floor plans, two rooms'
-# floors differing in one attribute -- off: it taught "another room = another family" (Gemini30 5 drops a garage).
+# --near-pairs-plan P (default 0.3 since 2026-10-15; 0 on 2026-10-14..14f; 0.6 on 2026-10-07..13): finish floor
+# plans, two rooms' floors differing in one attribute, the attributes in --near-pairs-plan-kinds (default "direction"
+# since 2026-10-15: orthogonal lines vs 45-degree hatch, same spacing). 2026-10-14 all three kinds were turned off: they
+# taught "another room = another family" (Gemini30 5 drops a garage). Back for direction only because --turn-boards
+# taught the opposite with no counter-example and _distinct never lets direction separate two families, so a
+# diagonal hatch next to orthogonal lines at the same spacing was always one family in synthetic data: the GEN 14f
+# model merged them on Gemini30 4 (q4 0.95 -> 0.72, q2 0.41 -> 0.32). Turned boards turn 0 <-> 90 (lines) or
+# 45 <-> -45 (hatch), never orthogonal <-> diagonal, so the two rules do not contradict.
+# Old pools: --near-pairs-plan 0.6 --near-pairs-plan-kinds direction,spacing,tone (2026-10-07..13), 0 (14..14f).
 # The 2026-10-07 / 2026-10-13 pair pools (direction / spacing / tone, B on the roof) are not rebuildable from
 # here: check out the generator at a73ab1f (2026-10-07) / eb67479 (2026-10-13).
 NEAR_PAIRS = [0.0]      # default 0 since 2026-10-14c: net zero in the best recipe (synth_progress "wing pairs off")
-NEAR_PAIRS_PLAN = [0.0]
+NEAR_PAIRS_PLAN = [0.3]
+NEAR_PAIRS_PLAN_KINDS = [("direction",)]
 # --balcony-doors P (default 0.7 since 2026-10-07): an upper-floor balcony railing gets a door in the
 # wall behind it (cut out of the wall label like every door; the railing still draws over it), as on
 # Gemini r4 #098. Before, doors existed only at grade, so every synthetic railing stood in front of
@@ -752,7 +760,8 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     DOWNSPOUTS[0] = float(flags.pop("downspouts", 0.05))
     REF_EXCLUDE[0] = bool(flags.pop("ref_exclude", 1))
     NEAR_PAIRS[0] = float(flags.pop("near_pairs", 0.0))
-    NEAR_PAIRS_PLAN[0] = float(flags.pop("near_pairs_plan", 0.0))
+    NEAR_PAIRS_PLAN[0] = float(flags.pop("near_pairs_plan", 0.3))
+    NEAR_PAIRS_PLAN_KINDS[0] = tuple(flags.pop("near_pairs_plan_kinds", "direction").split(","))
     BALCONY_DOORS[0] = float(flags.pop("balcony_doors", 0.7))
     GABLE_TRIM[0] = float(flags.pop("gable_trim", 0.5))
     TURN_BOARDS[0] = float(flags.pop("turn_boards", 0.6))
@@ -853,10 +862,13 @@ def main():
                     help="Revit colour elevations with a side wing: probability the wing is a second family in the "
                          "main wall's pattern but another hue (or hue + spacing). 0.6 on 2026-10-14..14b; default 0 since 2026-10-14c "
                          "(no net effect on real sheets, breaks Gemini30 1)")
-    ap.add_argument("--near-pairs-plan", type=float, default=0.0,
+    ap.add_argument("--near-pairs-plan", type=float, default=0.3,
                     help="Revit finish floor plans: probability of two floor families differing in ONE attribute "
-                         "(orthogonal vs diagonal lines, spacing 1.4-2x, or tone). Default 0 since 2026-10-14 "
-                         "(0.6 on 2026-10-07..13)")
+                         "from --near-pairs-plan-kinds. Default 0.3 since 2026-10-15 (0 on 2026-10-14..14f, "
+                         "0.6 on 2026-10-07..13)")
+    ap.add_argument("--near-pairs-plan-kinds", default="direction",
+                    help="comma list of direction (orthogonal vs diagonal lines), spacing (1.4-2x), tone (colour "
+                         "plans). Default direction since 2026-10-15; direction,spacing,tone = 2026-10-07..13")
     ap.add_argument("--balcony-doors", type=float, default=0.7,
                     help="Revit elevations with --railings: probability an upper-floor balcony has a door behind its "
                          "railing (cut from the wall label). Default 0.7 since 2026-10-07; 0 = earlier pools")
@@ -930,6 +942,7 @@ def main():
     flags["ref_exclude"] = args.ref_exclude
     flags["near_pairs"] = args.near_pairs
     flags["near_pairs_plan"] = args.near_pairs_plan
+    flags["near_pairs_plan_kinds"] = args.near_pairs_plan_kinds
     flags["balcony_doors"] = args.balcony_doors
     flags["gable_trim"] = args.gable_trim
     flags["turn_boards"] = args.turn_boards

@@ -1649,7 +1649,8 @@ def _move_ab(rgb, da, db):
     L, a, b = _to_lab(rgb)
     return _from_lab(L, a + da, b + db)
 
-# ---- near-miss floor pairs (FC.NEAR_PAIRS_PLAN, --near-pairs-plan P, default 0.6 since 2026-10-07):
+# ---- near-miss floor pairs (FC.NEAR_PAIRS_PLAN, --near-pairs-plan P; 0.6 2026-10-07..13, 0 14..14f, 0.3 direction
+# only since 2026-10-15, FC.NEAR_PAIRS_PLAN_KINDS):
 # _distinct / _separate keep every two floor families of one pattern type >= 1.4x apart in spacing or
 # clearly apart in tone, and direction never separates two families, so the model was never asked
 # to tell orthogonal from diagonal lines, a 1.5x spacing step or a grey wash from bare lines on one
@@ -1675,7 +1676,11 @@ def plant_near_pair_plan(zone_mat, zones_present, colour, fam_seed):
     zb = next((z for z in order if z != za and z != "garage"), None) or next((z for z in order if z != za), None)
     if za is None or zb is None:
         return None
-    what = rr.choices(["direction", "spacing", "tone"], weights=[40, 30, 30 if colour else 0])[0]
+    kinds = getattr(FC, "NEAR_PAIRS_PLAN_KINDS", [("direction", "spacing", "tone")])[0]
+    wts = [40 * ("direction" in kinds), 30 * ("spacing" in kinds), 30 * ("tone" in kinds and bool(colour))]
+    if not any(wts):
+        return None
+    what = rr.choices(["direction", "spacing", "tone"], weights=wts)[0]
     A = zone_mat[za]
     if what == "direction" and A["kind"] not in ("plank_lines", "hatch45") or _spacing(A, A["kind"])[0] is None:
         A = dict(A, kind="plank_lines", sp=rr.uniform(0.4, 0.75), ang=rr.choice([0, 90]))

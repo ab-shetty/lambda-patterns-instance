@@ -1802,3 +1802,26 @@ and the baseline's `eval_baselines/single18knp0-blend50_hf14fix2_4096.json`.
 - **Published anyway (the user's call, same day): new best.** `abshetty/floz-refunet-swint-single18kf-blend50` (private,
   safetensors, round-trip identical: 243 / 243 tensors). val / Gemini30 re-scored @4096 with `--save-probs`, per-question IoU
   identical to the files above; maps + metrics on `abshetty/floz-diag` `single18kf-blend50/{val,gemini30}_4096/` (72 + 195).
+
+### 2026-10-15 (CPU) -- Gemini30 drops of single18kf-blend50: diagonal vs orthogonal floor lines merged; plan direction pairs back (GEN 2026-10-15)
+
+Maps `single18kf-blend50/gemini30_4096`. The new model loses > 0.08 on 7 Gemini30 questions (none on HF14 / val), on 3 sheets:
+- **Gemini30 4 (crawlspace plan), q4 0.95 -> 0.72, q2 0.41 -> 0.32, q5 0.80 -> 0.71:** a room of 45-degree hatch and a room of
+  horizontal lines at the same spacing and pen are two families; the new model selects both (pred/tgt 1.04 -> 1.38). The
+  older single18k-blend50 already leaked into the other room (q2 pred/tgt 2.77), turn-boards made it worse. Cause in the
+  generator: `_distinct` puts `hatch45` and `plank_lines` in one look class and never lets direction separate two families,
+  so in synthetic data diagonal next to orthogonal at one spacing never was two families; `--turn-boards` then added
+  "direction changes across rooms, same family" with no counter-example. The plan near pairs that supplied the
+  counter-example were off since 2026-10-14 (all three kinds taught "another room = another family", Gemini30 5).
+- **Gemini30 0 (coloured plan), q1 0.77 -> 0.62, q3 0.66 -> 0.55:** the tile reference also takes the sofas / chairs; the
+  older single18k-blend50 does the same (pred/tgt 1.21 / 1.38). Not new, no fix.
+- **Gemini30 1 (board-and-batten, orange marker), q0 0.35 -> 0.21, q2 0.64 -> 0.34:** the model takes the battens only, not
+  the boards between; single18k-blend50 does the same (0.24 / 0.32) -- np0's 0.64 was the outlier. Unexplained (2026-10-14:
+  grey rescues it), no fix.
+
+**Change:** `--near-pairs-plan` default 0.3 with new `--near-pairs-plan-kinds` default `direction` (orthogonal plank lines
+vs 45-degree hatch, same spacing, pen and fill, two zones). Turned boards turn 0 <-> 90 or 45 <-> -45, never
+orthogonal <-> diagonal, so the two rules are consistent: "a 90-degree turn is the same family, diagonal vs orthogonal is
+another". 9 of 40 test plan sheets get a pair (finish sheets only). Byte-identical (40 plan sheets): `--near-pairs-plan 0`
+== the 14f code's defaults; `--near-pairs-plan 0.6 --near-pairs-plan-kinds direction,spacing,tone` == the 14f code with
+`--near-pairs-plan 0.6` (2026-10-07..13 behaviour). Not measured yet: needs a training run (GPU).
