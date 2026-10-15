@@ -43,6 +43,11 @@ older automatic-only protocol (every number below this section that does not say
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
 
+**Publish gate (the user's rule, from 2026-10-15):** publish a new candidate (Hub + `--save-probs` maps on
+`abshetty/floz-diag`) only if, against the current best at @4096 with hand boxes, **Gemini30 goes up and neither val per-sheet
+(`val_score`) nor HF14 drops**. single18kp-blend50 was published under the older gate (val per-sheet and Gemini30 only),
+which it passed, with HF14 -0.017; under this gate it would not have been published.
+
 `single18kf-blend50` (`abshetty/floz-refunet-swint-single18kf-blend50`, round-trip verified): the 50/50 weight
 average of two one-epoch restarts of longswiss-swa37-41 on the same 17,907 fresh sheets at GEN 2026-10-14f, with and
 without `--domain-random --dr-scale-min 0.7` (`TAG=single18kf ./run_single_pass.sh`); HF14 with fix v2 0.9224, val

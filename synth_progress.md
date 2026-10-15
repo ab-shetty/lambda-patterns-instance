@@ -1853,3 +1853,10 @@ another". 9 of 40 test plan sheets get a pair (finish sheets only). Byte-identic
   `abshetty/floz-refunet-swint-single18kp-blend50` (private, round-trip identical 243 / 243); val / Gemini30 maps re-scored with
   `--save-probs` (IoU identical) on `abshetty/floz-diag` `single18kp-blend50/{val,gemini30}_4096/`. **Not made the best model in
   `startup.md`:** HF14 -0.017 is significant (p=0.027) and sits on the sheet the 14f changes fixed. The gate did not look at HF14.
+
+### 2026-10-15 (GH200) -- HF14 maps of both 18k blends; HF14 in the publish gate
+
+single18kf-blend50 and single18kp-blend50 re-scored on HF14 @4096 (hand boxes) with `--save-probs`: per-question IoU identical to
+`eval_baselines/single18k{f,p}-blend50_hf14_4096.json`; maps (51 each) + metrics on `abshetty/floz-diag` `<tag>/hf14_4096/`.
+Both blends now have HF14 / val / Gemini30 maps there. **Publish gate from now on** (`startup.md`): Gemini30 up, and neither
+val per-sheet nor HF14 down, against the current best.
