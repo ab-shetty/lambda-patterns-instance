@@ -287,8 +287,12 @@ class InstanceSegDataset(Dataset):
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
                  repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0,
-                 legacy_ref_jitter=False, ref_sample="family"):
+                 legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0):
         self.records = records
+        # --image-max-size-max (training only, 0 = off, byte-identical): each training sheet's long side is drawn
+        # uniformly in [image_max_size, image_max_size_max] instead of fixed. Scored at 4096 while trained at 2048, the
+        # model is scale-sensitive: Gemini30 sheets swing +-0.17 between 2048 and 4096 inputs (2026-10-15, CPU).
+        self.image_max_size_max = image_max_size_max if augment else 0
         # "instance" (training only): draw the reference instance uniformly over ALL
         # labelled instances and ask for its family -- the HF14 protocol's question mix,
         # which asks once per instance, so a wall in 16 pieces is 16 questions, most of
@@ -466,7 +470,10 @@ class InstanceSegDataset(Dataset):
             ref_patches = [ref_patch]
 
         # Aspect-preserving resize of image + masks.
-        scale = self.image_max_size / max(h0, w0)
+        side = self.image_max_size
+        if self.image_max_size_max > self.image_max_size:
+            side = random.randint(self.image_max_size, self.image_max_size_max)
+        scale = side / max(h0, w0)
         nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
         image_r = cv2.resize(image, (nw, nh), interpolation=cv2.INTER_LINEAR)
         if masks:
@@ -748,7 +755,7 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
                    small_ref_prob=0.0, refs_per_image=0, ref_min_side=0,
-                   legacy_ref_jitter=False, ref_sample="family"):
+                   legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -767,7 +774,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   refs_per_image=refs_per_image,
                                   ref_min_side=ref_min_side,
                                   legacy_ref_jitter=legacy_ref_jitter,
-                                  ref_sample=ref_sample)
+                                  ref_sample=ref_sample,
+                                  image_max_size_max=image_max_size_max)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,

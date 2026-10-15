@@ -102,6 +102,10 @@ def parse_args():
     p.add_argument("--bce-weight", type=float, default=1.0)
     p.add_argument("--dice-weight", type=float, default=2.0)
     p.add_argument("--domain-random", action="store_true")
+    p.add_argument("--image-max-size-max", type=int, default=0,
+                   help="multi-resolution training: each training sheet's long side drawn uniformly in "
+                        "[--image-max-size, this] (0 = off, the fixed size). Gemini30 sheets swing +-0.17 between "
+                        "2048 and 4096 inputs for a model trained at 2048 (2026-10-15)")
     p.add_argument("--dr-scale-min", type=float, default=0.4,
                    help="floor of --domain-random's random downscale (historical 0.4)")
     p.add_argument("--small-ref-prob", type=float, default=0.0,
@@ -255,7 +259,7 @@ def main():
         scale_matched_ref=args.scale_matched_ref, dr_scale_min=args.dr_scale_min,
         small_ref_prob=args.small_ref_prob, refs_per_image=args.refs_per_image,
         ref_min_side=args.ref_min_side, legacy_ref_jitter=args.legacy_ref_jitter,
-        ref_sample=args.ref_sample)
+        ref_sample=args.ref_sample, image_max_size_max=args.image_max_size_max)
     collate = partial(collate_fn, size_divisible=args.pad_grid,
                       union_only=args.rank_weight <= 0)
     loader_options = ({"persistent_workers": True,

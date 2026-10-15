@@ -1946,3 +1946,37 @@ single18kq-blend50 (the best). Per-question files `eval_baselines/single18kq-ble
   the Hub arm at `data/runs/ck_single18kw_nodr/epoch_0.pth` (`scripts/hf_ckpt_to_pth.py`) and `touch data/runs/ck_single18kw_nodr/.done`,
   so the script trains only the dr arm, blends 50/50 and scores. Compare against single18kq (same ids / seed / GEN except the wing pairs);
   the best is single18kq-blend30, so also score the 0.3 / 0.7 blend.
+
+### 2026-10-15 (CPU) -- Gemini30 loss of single18kq-blend30: input scale is the biggest lever found
+
+Loss budget (maps `single18kq-blend30/gemini30_4096`, 0.132): unlabelled drawing selected 0.050 (0.028 far from the target),
+other family 0.028 (26 alone 0.016), target missed 0.040, paper 0.011. Eight sheets (26 28 7 19 16 17 23 1) hold 0.085.
+
+**Scale (CPU re-scores of the same model, the same hand boxes, one-sheet pools):**
+
+| single18kq-blend30, Gemini30 | 4096 (protocol) | 2048 |
+|---|---:|---:|
+| mean IoU | 0.868 | 0.875 |
+| sheets > +0.1 | | 26 +0.17, 8 +0.14, 1 +0.13, 0 +0.13, 19 +0.13 |
+| sheets < -0.1 | | 6 -0.16, 17 -0.16 |
+
+- Gemini30 1 is a scale + texture case: 0.553 / 0.579 / 0.687 / **0.898** at 4096 / 3072 / 2048 / 1536; a 5x5 median
+  filter at 4096 (removes the fill's fine Gemini "grain", keeps the battens) 0.782. The grain is on sheet 1 only (native crops of
+  all 30 sheets), so no generator change for it.
+- No per-sheet predictor found: the gain from 2048 does not track pattern period, box size or native size (rank corr <= 0.18).
+
+**Probability averaging (offline, maps resized to native with linear interpolation, then > 0.35):**
+
+| | HF14 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|
+| 4096 | 0.9170 | 0.9029 | 0.9376 | 0.8712 |
+| 2048 | 0.8592 | 0.8601 | 0.9140 | 0.8784 |
+| 4096 + 2048 (1 : 1) | 0.9055 | 0.9015 | 0.9385 | **0.8833** |
+| 4096 + 2048 (0.7 : 0.3) | 0.9156 | 0.9027 | 0.9388 | 0.8795 |
+
+- Linear-resize-then-threshold alone is worth +0.003 Gemini30 / +0.0014 HF14 over the evaluator's threshold-then-nearest
+  (0.8680 -> 0.8712, 0.9156 -> 0.9170); not adopted (changes the protocol).
+- 1 : 1 lifts Gemini30 +0.012 with no Gemini sheet down > 0.02 (64 questions up / 11 down), but costs HF14 0.011, on the
+  fine-line sheets (14 -0.048, 27 -0.028, 25 -0.019): they need 4096's detail, Gemini's large-pattern sheets want less.
+- So the model is scale-sensitive in both directions. **New training option `--image-max-size-max N`** (`train_refunet.py`,
+  `dataset.py`; 0 = off, byte-identical, checked on 6 samples): each training sheet's long side drawn in [`--image-max-size`, N].
