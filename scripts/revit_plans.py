@@ -2467,6 +2467,12 @@ def compose_floor(image_id, seed, mode_weights):
         # Before, a floor material had one direction for all its rooms. Own RNG: P = 0 is byte-identical.
         tb = random.Random(seed * 1_000_003 + image_id * 223 + 97)
         turn = tb.random() < FC.TURN_BOARDS[0]
+        # 2026-10-15b: a direction-pair sheet always turns its boards, so the two rules come on one sheet -- orthogonal
+        # vs diagonal = two families, 0 <-> 90 (or 45 <-> -45) = one. Separate, the pairs undid half of turn-boards'
+        # HF14 12 gain (0.89 -> 0.81: turned decks split again). Needs --turn-boards > 0; off = the 2026-10-15 sheets.
+        if near_fl is not None and near_fl[2] == "direction" and FC.TURN_BOARDS[0] > 0 \
+                and getattr(FC, "PAIR_TURNS", [True])[0]:
+            turn = True
         for n, (key, (m, polys)) in enumerate(sorted(fams.items(), key=lambda kv: str(kv[0]))):
             reg = unary_union(polys)
             if stair_u is not None:

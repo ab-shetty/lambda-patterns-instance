@@ -1860,3 +1860,16 @@ single18kf-blend50 and single18kp-blend50 re-scored on HF14 @4096 (hand boxes) w
 `eval_baselines/single18k{f,p}-blend50_hf14_4096.json`; maps (51 each) + metrics on `abshetty/floz-diag` `<tag>/hf14_4096/`.
 Both blends now have HF14 / val / Gemini30 maps there. **Publish gate from now on** (`startup.md`): Gemini30 up, and neither
 val per-sheet nor HF14 down, against the current best.
+
+### 2026-10-15 (CPU) -- HF14 12 under single18kp: the turned decks split again; more turned boards (GEN 2026-10-15b)
+
+HF14 maps `single18k{f,p}-blend50/hf14_4096`, sheet 12. The decks are plank lines: vertical on the top-right strip and the
+covered porch, horizontal on the left L-deck and part of the top strip, all one family. single18kp keeps the reference's
+direction only: q3 (box on the vertical top-right strip) drops the horizontal L-deck (0.77 -> 0.53), q1 drops the
+vertical porch / strip (0.93 -> 0.82). The direction pairs (orthogonal vs 45-degree) were learned as the wider rule
+"another direction = another family", outweighing the turned boards.
+
+**Change:** `--turn-boards` default 0.6 -> 0.9, and new `--pair-turns 1` (default): a sheet with a direction pair always
+turns its boards, so both rules are on one sheet. 7 of 40 test plan sheets change (most plans have no multi-room
+directional family, so turn-boards' reach is limited by the floor mix). Byte-identical: `--turn-boards 0.6 --pair-turns 0`
+== the 2026-10-15 code's defaults (40 plan sheets). Not measured yet: needs a training run.
