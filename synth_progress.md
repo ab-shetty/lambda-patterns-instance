@@ -1799,3 +1799,6 @@ and the baseline's `eval_baselines/single18knp0-blend50_hf14fix2_4096.json`.
   read once and is the targeted-sheet effect the CPU diagnoses predicted, but those diagnoses were made on HF14 sheets, so HF14
   is no longer a clean holdout for these three changes; val does not confirm them (val has no turned-board / heavy-band sheet
   of that kind). No maps saved.
+- **Published anyway (the user's call, same day): new best.** `abshetty/floz-refunet-swint-single18kf-blend50` (private,
+  safetensors, round-trip identical: 243 / 243 tensors). val / Gemini30 re-scored @4096 with `--save-probs`, per-question IoU
+  identical to the files above; maps + metrics on `abshetty/floz-diag` `single18kf-blend50/{val,gemini30}_4096/` (72 + 195).

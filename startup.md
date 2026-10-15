@@ -35,16 +35,22 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| **`single18k-blend50` (best, synthetic only, 2026-10-14)** | **0.8877** | 0.8964 | -- |
-| `single18kf-blend50` (GEN 14f, not published: val tie, 2026-10-15) | 0.9157 | 0.8971 | -- |
+| **`single18kf-blend50` (best, synthetic only, 2026-10-15)** | **0.9157** | 0.8971 | -- |
+| `single18k-blend50` (synthetic only, 2026-10-14) | 0.8877 | 0.8964 | -- |
 | `synpre-realmix-lr5e5-e22` | 0.8738 | 0.9087* | 0.8816 |
 | `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
 
-`single18k-blend50` (`abshetty/floz-refunet-swint-single18k-blend50`, round-trip verified): the 50/50 weight
-average of two one-epoch restarts of longswiss-swa37-41 on the same 18,000 fresh sheets, with and without
-`--domain-random`; Gemini30 0.8497; recipe and paired tests in `synth_progress.md` (2026-10-14, "50/50 blend").
+`single18kf-blend50` (`abshetty/floz-refunet-swint-single18kf-blend50`, round-trip verified): the 50/50 weight
+average of two one-epoch restarts of longswiss-swa37-41 on the same 17,907 fresh sheets at GEN 2026-10-14f, with and
+without `--domain-random --dr-scale-min 0.7` (`TAG=single18kf ./run_single_pass.sh`); HF14 with fix v2 0.9224, val
+per-sheet 0.9342, Gemini30 0.8526. Against `single18knp0-blend50` (same recipe at GEN 2026-10-14b without the wing
+pairs; the best before it): HF14 +0.026 (p=0.006), val and Gemini30 ties. The HF14 gain sits on sheets 12 / 14 / 27,
+which the generator changes were designed from, so HF14 is not a clean holdout for it. Maps (val / Gemini30) on
+`abshetty/floz-diag` `single18kf-blend50/`; paired tests in `synth_progress.md` (2026-10-15).
+Previous: `single18k-blend50` (`abshetty/floz-refunet-swint-single18k-blend50`): the same recipe at GEN 2026-10-14b
+with wing pairs; Gemini30 0.8497 (`synth_progress.md` 2026-10-14, "50/50 blend").
 *epoch picked on val (automatic boxes), so optimistic. 4096, threshold 0.35, CPU-scored
 2026-10-03; per-question view in the Model Results artifact.
 
