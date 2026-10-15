@@ -1908,3 +1908,26 @@ single18kf-blend50 stays listed as the HF14-best reference (0.9157 vs 0.9088). *
 Gemini30 up; val per-sheet and HF14 no significant drop (paired p < 0.1); no sheet down > 0.05 from the change itself. kq vs kf
 under it: Gemini30 +0.009, val per-sheet +0.0009, HF14 -0.007 (p=0.35); the two sheets down > 0.05 (HF14 2, Gemini30 8) are
 elevations, untouched by the plan-only change.
+
+### 2026-10-15 (GH200) -- arms on the Hub; kq blend ratio: DR 0.3 beats 0.5 on HF14 and Gemini30, fails the sheet rule on Gemini30 1
+
+**Arms published** (private, each round-trip identical): `abshetty/floz-refunet-swint-single18k{f,p,q}-{dr,nodr}` -- any blend of
+the three runs can now be rebuilt without retraining (float `w * dr + (1 - w) * nodr` of the `model` tensors).
+
+**Blend ratio, eval only** (blendNN = DR share NN%; `data/runs/ck_single18kq_blend{30,70}.pth`, local), @4096 hand boxes, paired vs
+single18kq-blend50 (the best). Per-question files `eval_baselines/single18kq-blend{30,70}_*`.
+
+| | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| blend50 (best) | 0.9088 | 0.9126 | 0.8973 | 0.9351 | 0.8616 |
+| **blend30** (DR 0.3 / no-DR 0.7) | **0.9156** (+0.007, p=0.014) | **0.9221** (+0.009, p=0.028) | 0.8976 (+0.0003) | **0.9357** | **0.8680** (+0.006, p=0.003) |
+| blend70 (DR 0.7 / no-DR 0.3) | 0.8963 (-0.013, p=0.003) | -- | 0.8958 (-0.0015, p=0.03) | 0.9342 | 0.8502 (-0.011, p=1e-6) |
+
+- Same direction as the np0 sweep (2026-10-14): more no-DR weight, more Gemini30 -- and this time HF14 rises with it too. blend30
+  equals single18kf-blend50 on HF14 (0.9156 vs 0.9157, paired -0.0001) while keeping kq's Gemini30 4 fix (0.94).
+- HF14 12: q3 0.81 -> 0.87, q1 0.83 -> 0.84. Gemini30 4 unchanged (0.94-0.98 on all six questions).
+- **Gate vs blend50: (1) Gemini30 up, (2) no val / HF14 drop -- pass; (3) fails on Gemini30 1: 0.632 -> 0.557** (q0 0.38 -> 0.34,
+  q1 0.82 -> 0.74, q2 0.70 -> 0.60). A blend ratio touches every sheet, so this counts. Gemini30 1 is the sheet that swings most
+  between models (0.30 / 0.61 / 0.46 / 0.65 / 0.63 for 18k / np0 / kf / kp / kq). No other sheet falls > 0.05 (blend70: Gemini30 10
+  and 11). **Not published** pending the user's call; HF14 / val / Gemini30 maps exist locally (`data/diag/single18kq-blend30/`, IoU
+  identical) for a quick upload.
