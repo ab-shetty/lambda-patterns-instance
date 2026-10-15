@@ -1825,3 +1825,31 @@ orthogonal <-> diagonal, so the two rules are consistent: "a 90-degree turn is t
 another". 9 of 40 test plan sheets get a pair (finish sheets only). Byte-identical (40 plan sheets): `--near-pairs-plan 0`
 == the 14f code's defaults; `--near-pairs-plan 0.6 --near-pairs-plan-kinds direction,spacing,tone` == the 14f code with
 `--near-pairs-plan 0.6` (2026-10-07..13 behaviour). Not measured yet: needs a training run (GPU).
+
+### 2026-10-15 (GH200) -- plan direction pairs on (GEN 2026-10-15): Gemini30 4 fixed, HF14 12 loses half its turn-boards gain
+
+`TAG=single18kp ./run_single_pass.sh`: same ids / seed as single18kf (600000+, seed 6, default GEN = 2026-10-15, only
+`--plan-source`), so against single18kf-blend50 only the plan direction pairs differ (`--near-pairs-plan 0.3`, kinds
+`direction`). Pool 17,906 ok (one plan sheet fewer than kf). Same training / blend. Per-question files
+`eval_baselines/single18kp-blend50_{hf14,hf14fix2,val,gemini30}_4096.json`.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet (`val_score`) | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| single18kf-blend50 | **0.9157** | **0.9224** | 0.8971 | 0.9342 | 0.8526 |
+| single18kp-blend50 (plan pairs) | 0.8983 | 0.9000 | 0.8964 | 0.9343 | **0.8605** |
+| paired | **-0.017 (5 / 16, p=0.027)** | -0.022 (5 / 16, p=0.015) | -0.001 (4 / 10, p=0.73) | +0.0001 | +0.008 (47 / 46, p=0.20) |
+
+- **Gemini30 4 fixed, as designed:** 0.666 -> **0.943**; q2 0.32 -> 0.92 (pred/tgt 3.04 -> 1.04), q3 0.33 -> 0.90 (2.90 -> 1.05),
+  q4 0.72 -> 0.98, q5 0.71 -> 0.98; q0 / q1 0.96 / 0.95 -> 0.94 / 0.93. The diagonal-vs-orthogonal merge is gone.
+- **Gemini30 5 does not split:** 0.958 -> 0.951 (q0 0.96 -> 0.96, q1 0.96 -> 0.96, q2 0.95 -> 0.93) -- direction-only pairs do not bring
+  back the "another room = another family" error of the 2026-10-07..13 pairs.
+- **HF14 12 gives back half of turn-boards' gain:** 0.893 -> **0.805** (q1 0.93 -> 0.82, q3 0.77 -> 0.53; pred/tgt 0.87 / 0.54:
+  under-selection is back). The pairs and turn-boards pull against each other on 12's decks. HF14 0 also drops 0.936 -> 0.896
+  (q0 0.94 -> 0.90, q1 0.93 -> 0.89), 7 0.946 -> 0.929. Every other HF14 sheet within 0.05; no HF14 sheet gains more than 0.01.
+- Other plan sheets moving > 0.05: Gemini30 0 0.682 -> 0.747 (q1 0.62 -> 0.78, the sofa leak shrinks: pred/tgt 1.28 -> 0.95).
+  No roof plan moves > 0.03 (Gemini30 17 +0.027). Non-plan: Gemini30 1 0.455 -> 0.650 (q0 0.21 -> 0.39, q2 0.34 -> 0.69), Gemini30
+  8 0.838 -> 0.763 (q3 / q4 0.69 / 0.67 -> 0.51 / 0.51, over-selection 1.3 -> 1.6). val: no sheet moves > 0.05.
+- **Gate (val per-sheet and Gemini30 >= single18kf-blend50): passed, by 0.0001 on val**, so published:
+  `abshetty/floz-refunet-swint-single18kp-blend50` (private, round-trip identical 243 / 243); val / Gemini30 maps re-scored with
+  `--save-probs` (IoU identical) on `abshetty/floz-diag` `single18kp-blend50/{val,gemini30}_4096/`. **Not made the best model in
+  `startup.md`:** HF14 -0.017 is significant (p=0.027) and sits on the sheet the 14f changes fixed. The gate did not look at HF14.
