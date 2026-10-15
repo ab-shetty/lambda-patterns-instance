@@ -1980,3 +1980,8 @@ other family 0.028 (26 alone 0.016), target missed 0.040, paper 0.011. Eight she
   fine-line sheets (14 -0.048, 27 -0.028, 25 -0.019): they need 4096's detail, Gemini's large-pattern sheets want less.
 - So the model is scale-sensitive in both directions. **New training option `--image-max-size-max N`** (`train_refunet.py`,
   `dataset.py`; 0 = off, byte-identical, checked on 6 samples): each training sheet's long side drawn in [`--image-max-size`, N].
+- Oracle (each Gemini30 sheet at its better scale of 4096 / 2048): 0.899 vs 0.871 -- the headroom a scale-robust model could
+  take. Adding 3072 to the 4096 + 2048 average adds nothing (0.883 either way, 154 questions).
+- Checked and ruled out on the way: furniture (Gemini30 23 / 0 draw it white-filled as the generator does, 90% of furnished
+  rooms; the orange in my overlays was the missed-target colour, not paint), fill grain (sheet 1 only).
+- `run_single_pass.sh` takes `POOL=` (reuse a pool), `TRAINX=` (extra training flags) and `BATCH=`.

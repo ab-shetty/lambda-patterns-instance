@@ -6,6 +6,8 @@
 #   TAG   name of the run (pool data/synthetic/${TAG}_s$START, checkpoints data/runs/ck_${TAG}_{dr,nodr,blend50})
 #   GEN   extra generator flags (default: only the Swiss layouts)
 #   INIT  checkpoint to restart from (default longswiss-swa37-41, fetched with scripts/hf_ckpt_to_pth.py)
+#   POOL  reuse another run's pool (default data/synthetic/${TAG}_s$START)
+#   TRAINX extra train_refunet.py flags for both arms (e.g. "--image-max-size-max 3072"); BATCH (default 8)
 #   TAG=single18kf ./run_single_pass.sh        # ~8 min pool, ~20 min per arm, ~25 min scoring (GH200)
 # The arms run one after the other: two at 2048 need ~2 x 47 GB and OOM on the 94.5 GB GH200.
 set -euo pipefail
@@ -14,7 +16,8 @@ set -a; . ~/.env; set +a      # HF_TOKEN: train_refunet's per-epoch real-sheet c
 TAG=${TAG:?set TAG}; N=${N:-18000}; START=${START:-600000}; SEED=${SEED:-7}
 INIT=${INIT:-data/runs/ck_best/longswiss-swa37-41.pth}
 GEN=${GEN:---plan-source data/reference/swiss_dwellings/layouts.pkl.gz}
-POOL=data/synthetic/${TAG}_s$START
+POOL=${POOL:-data/synthetic/${TAG}_s$START}
+TRAINX=${TRAINX:-}; BATCH=${BATCH:-8}
 VAL=4,5,6,8,9,10,13,15,17,19,20,21,22,26
 HF14=12,16,27,7,11,25,23,1,18,2,0,3,14,24
 G=data/eval_pools/gemini30_s20261006
@@ -29,10 +32,10 @@ for ARM in dr nodr; do
   CK=data/runs/ck_${TAG}_$ARM
   [ -f $CK/.done ] && continue
   PYTHONPATH=. python3 scripts/train_refunet.py --local-data $POOL --checkpoint-dir $CK \
-      --epochs 1 --batch-size 8 --num-workers 16 --prefetch-factor 4 \
+      --epochs 1 --batch-size $BATCH --num-workers 16 --prefetch-factor 4 \
       --image-max-size 2048 --ref-size 224 --width 128 --model swin_t --lr 2e-4 --backbone-lr-mult 0.1 \
       --train-split 0.99 $([ $ARM = dr ] && echo --domain-random --dr-scale-min 0.7) --mask-thresh 0.35 \
-      --seed $SEED --pad-grid 512 --reset-optimizer --init-from $INIT --roi-ref --roi-ref-mode add \
+      --seed $SEED --pad-grid 512 --reset-optimizer --init-from $INIT --roi-ref --roi-ref-mode add $TRAINX \
       > logs/${TAG}_$ARM.log 2>&1 || { echo "arm $ARM failed: logs/${TAG}_$ARM.log"; exit 1; }
   touch $CK/.done
 done
