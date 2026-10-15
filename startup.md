@@ -35,7 +35,8 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| **`single18kq-blend50` (best, synthetic only, 2026-10-15)** | 0.9088 | 0.8973 | -- |
+| **`single18kq-blend30` (best, synthetic only, 2026-10-15)** | **0.9156** | 0.8976 | -- |
+| `single18kq-blend50` (2026-10-15) | 0.9088 | 0.8973 | -- |
 | `single18kf-blend50` (HF14-best reference, 2026-10-15) | **0.9157** | 0.8971 | -- |
 | `single18kp-blend50` (GEN 2026-10-15 plan pairs; published, Gemini30 0.8605, 2026-10-15) | 0.8983 | 0.8964 | -- |
 | `single18k-blend50` (synthetic only, 2026-10-14) | 0.8877 | 0.8964 | -- |
@@ -52,7 +53,15 @@ changed generator feature cannot touch (e.g. an elevation under a plan-only chan
 gates: val per-sheet + Gemini30 >= best (single18kp-blend50 passed it with HF14 -0.017, p=0.027); then Gemini30 up and
 neither val per-sheet nor HF14 down at all (single18kq-blend50 failed it on HF14 -0.007, p=0.35).
 
-`single18kq-blend50` (`abshetty/floz-refunet-swint-single18kq-blend50`, round-trip verified; made the best by the user
+`single18kq-blend30` (`abshetty/floz-refunet-swint-single18kq-blend30`, round-trip verified; made the best by the user
+2026-10-15): 0.3 x `single18kq-dr` + 0.7 x `single18kq-nodr` (float weight blend of the two arms, both on the Hub; no training).
+HF14 0.9156, fix v2 0.9221, val per-sheet 0.9357, Gemini30 0.8680. Against single18kq-blend50: HF14 +0.007 (p=0.014), fix v2
++0.009 (p=0.028), val per-sheet +0.0006, Gemini30 +0.006 (p=0.003); level with single18kf-blend50 on HF14 (paired -0.0001)
+while keeping Gemini30 4 at 0.94. **Fails the gate's sheet rule only on Gemini30 1** (0.632 -> 0.557), the most volatile sheet
+(0.30 / 0.61 / 0.46 / 0.65 / 0.63 across the last five models); made the best on the user's call. Maps (HF14 / val / Gemini30)
+on `abshetty/floz-diag` `single18kq-blend30/`; `synth_progress.md` (2026-10-15, "kq blend ratio").
+
+`single18kq-blend50` (`abshetty/floz-refunet-swint-single18kq-blend50`, round-trip verified; previous best, made the best by the user
 2026-10-15): the same recipe at GEN 2026-10-15b -- plan direction pairs (`--near-pairs-plan 0.3`, kinds `direction`),
 `--turn-boards 0.9`, pair sheets always turn (`TAG=single18kq ./run_single_pass.sh`, 17,906 sheets); HF14 fix v2 0.9126, val
 per-sheet 0.9351, Gemini30 0.8616. Against single18kf-blend50: Gemini30 +0.009 (p=0.13), val per-sheet +0.0009, HF14 -0.007
