@@ -36,6 +36,7 @@ older automatic-only protocol (every number below this section that does not say
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
 | **`single18k-blend50` (best, synthetic only, 2026-10-14)** | **0.8877** | 0.8964 | -- |
+| `single18kf-blend50` (GEN 14f, not published: val tie, 2026-10-15) | 0.9157 | 0.8971 | -- |
 | `synpre-realmix-lr5e5-e22` | 0.8738 | 0.9087* | 0.8816 |
 | `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |

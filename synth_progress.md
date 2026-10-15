@@ -1769,3 +1769,33 @@ v2) and val 13. Direction > 30 deg 5% / 9%, spacing > 1.3x 0% / 7%, fill CIEDE20
 **Change:** generator defaults `--railings 0.35` (was 0; runs passed 0.15), `--roof-lines 0.3`, `--faint-lines 0.2`
 (the values every run passed). New defaults == the old code with those three flags (byte-identical, 20 sheets);
 `--roof-lines 0 --railings 0 --faint-lines 0` == the old defaults; the cur / mk50 arms pass the zeros.
+
+### 2026-10-15 (GH200) -- single18k-np0 repeated at GEN 2026-10-14f: HF14 0.9157 (+0.026, p=0.006), val per-sheet a tie
+
+The single18knp0 experiment repeated exactly on a pool at the 2026-10-14f defaults (turn-boards 0.6, heavy-pieces 0.4,
+railings 0.35, roof-lines 0.3, faint-lines 0.2, wing pairs off) with only `--plan-source`: `single18kf_s600000` (ids 600000+,
+seed 6, 17,907 ok -- same count as np0, 469 s), one-epoch restarts of longswiss-swa37-41 with / without `--domain-random
+--dr-scale-min 0.7` (2,215 steps, ROI add, seed 7, one arm after the other: both at once OOM the 94.5 GB GH200), float 50/50
+blend. Now scripted: `TAG=single18kf ./run_single_pass.sh`. Checkpoints `data/runs/ck_single18kf_{dr,nodr}/epoch_0.pth`,
+`data/runs/ck_single18kf_blend50.pth` (local only). FreeCAD 2026.09.16 (conda-forge) on this VM. Baseline re-read first:
+single18knp0-blend50 HF14 0.8894 exactly. Per-question files `eval_baselines/single18kf-blend50_{hf14,hf14fix2,val,gemini30}_4096.json`
+and the baseline's `eval_baselines/single18knp0-blend50_hf14fix2_4096.json`.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet (`val_score`) | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| single18knp0-blend50 | 0.8894 | 0.9038 | 0.8961 | **0.9345** | 0.8538 |
+| **single18kf-blend50** | **0.9157** | **0.9224** | 0.8971 | 0.9342 | 0.8526 |
+| paired | +0.026 (17 / 4, p=0.006) | +0.019 (16 / 5, p=0.08) | +0.001 (5 / 3, p=0.46) | -0.0003 | -0.001 (38 / 47, p=0.73) |
+
+- **HF14: the targeted sheets moved.** 12 (turned boards) 0.709 -> **0.893** (q0 0.92 -> 0.94, q1 0.72 -> 0.93, q2 0.80 -> 0.94,
+  q3 0.40 -> 0.77): 78% of the gain, close to the 0.923 the causal redraw promised. 14 (heavy outlines) 0.867 -> 0.882 (q4, the
+  box on the band, 0.84 -> 0.91; q0 0.62 -> 0.61). 27 (railing) 0.846 -> 0.886 (q0 0.91 -> 0.93, q1 0.84 -> 0.85, q2 0.69 -> 0.77,
+  q4 0.87 -> 0.94) -- q1, the behind-railing question, barely moves. No HF14 sheet loses more than 0.003 on the original labels.
+- **Fix v2 gain is smaller because of 18:** with 18's two roofs as two patterns, 18 loses 0.030 (q8 0.80 -> 0.67, q9 0.97 -> 0.79):
+  the new model merges the two roofs more. On the original labels (one family) 18 rises 0.875 -> 0.884.
+- **val: flat** (no sheet moves > 0.05). **Gemini30: flat overall, sheets trade:** 8 0.77 -> 0.84, 19 0.40 -> 0.46, 26 0.42 -> 0.47
+  up; 1 0.61 -> 0.46, 0 0.76 -> 0.68, 4 0.74 -> 0.67 down. Gemini30 1 is lower again (it was 0.30 with the wing pairs, 0.61 without).
+- **Not published:** the gate was val per-sheet above single18knp0-blend50, and it is a tie (0.9342 vs 0.9345). The HF14 gain is
+  read once and is the targeted-sheet effect the CPU diagnoses predicted, but those diagnoses were made on HF14 sheets, so HF14
+  is no longer a clean holdout for these three changes; val does not confirm them (val has no turned-board / heavy-band sheet
+  of that kind). No maps saved.
