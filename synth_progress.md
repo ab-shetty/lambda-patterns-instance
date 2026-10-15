@@ -1940,6 +1940,9 @@ single18kq-blend50 (the best). Per-question files `eval_baselines/single18kq-ble
 - **single18kw** (wing colour pairs back on top of GEN 2026-10-15b): pool `single18kw_s600000` = `run_single_pass.sh`'s generator call
   with `GEN="--plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6"` (ids 600000+, seed 6): 17,906 ok, 473 s.
   ONLY the nodr arm trained (one-epoch restart of longswiss-swa37-41, run_single_pass.sh's recipe without `--domain-random`), started
-  05:28. **Status: in progress at the time of writing (see the next line). No scoring.** The dr arm was not trained; to finish the run,
-  train it with the same pool (`TAG=single18kw GEN="..." ./run_single_pass.sh` skips nothing that exists: rebuild the pool first --
-  it is deterministic -- and put the Hub nodr arm at `data/runs/ck_single18kw_nodr/epoch_0.pth` with a `.done` file to skip it).
+  05:28, **finished 05:48:57** and published as `abshetty/floz-refunet-swint-single18kw-nodr` (private, round-trip identical 243 / 243).
+  **Not scored. The dr arm was not trained** (VM shutdown). To finish the run: rebuild the pool (deterministic, ~8 min) with
+  `TAG=single18kw GEN="--plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6" ./run_single_pass.sh` after placing
+  the Hub arm at `data/runs/ck_single18kw_nodr/epoch_0.pth` (`scripts/hf_ckpt_to_pth.py`) and `touch data/runs/ck_single18kw_nodr/.done`,
+  so the script trains only the dr arm, blends 50/50 and scores. Compare against single18kq (same ids / seed / GEN except the wing pairs);
+  the best is single18kq-blend30, so also score the 0.3 / 0.7 blend.
