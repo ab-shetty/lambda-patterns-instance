@@ -2141,3 +2141,28 @@ as the metric. It is the natural first step of the polygon output.
 - **Risk to watch:** Gemini30 1 (one family across two trim bands) and 17; HF14 / val one-family elevations (val 9, HF14 14).
   Screen: `TAG=single18kg ./run_single_pass.sh` (GEN 2026-10-17 defaults, ids 600000+, seed 6 -- the kq recipe plus this),
   blend30, then also 0.5 with xblend-kq30-kms30; gate vs xblend-kq30-kms30.
+
+### 2026-10-17 (GH200) -- gable tone pairs (single18kg, GEN 2026-10-17): Gemini30 26 +0.11, but sheet 1 -0.32; both candidates fail the gate
+
+`TAG=single18kg ./run_single_pass.sh` at the new defaults (ids 600000+, seed 6; the kq recipe plus `--gable-pairs 0.4`): pool 17,907 ok
+(461 s; one more than kq), 1,621 sheets carry a gable pair (803 tone, 818 twin). Arms dr 1,197 s / nodr 1,252 s, published as
+`abshetty/floz-refunet-swint-single18kg-{dr,nodr}` (round-trip 243 / 243). Blend30 as for kq. Per-question files
+`eval_baselines/single18kg-blend{30,50}_*`, `eval_baselines/xblend-xa-kg30_*`. (Eight 4096 scoring jobs at once OOM the GH200; four is the limit.)
+
+| @4096, hand boxes, paired vs xblend-kq30-kms30 | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| xblend-kq30-kms30 (best) | 0.9163 | 0.9290 | 0.8988 | 0.9364 | **0.8740** |
+| kg30 | **0.9223** (+0.006, p=0.35) | 0.9262 (-0.003, p=0.62) | 0.8878 (**-0.011, p=0.048**) | 0.9294 | 0.8613 (**-0.013, p=0.040**; 32 / 66) |
+| kg50 | 0.9199 | 0.9232 | 0.8884 | -- | 0.8579 |
+| 0.5 xblend + 0.5 kg30 | **0.9231** (+0.007, p=0.09; 10 / 1) | 0.9296 (+0.0005) | 0.8985 (-0.0003) | 0.9363 | 0.8691 (-0.005, p=0.11; 23 / 53) |
+
+- **Gemini30 per sheet (best -> kg30 -> mix):** **26 0.478 -> 0.590 -> 0.498**, **1 0.654 -> 0.335 -> 0.496**, 17 0.853 -> 0.855 -> 0.877,
+  19 0.495 -> 0.449 -> 0.465; kg30 also 11 0.883 -> 0.767.
+- **What moved (kg30, pred / target area):** sheet 26's merges shrink as intended (q4 / q5 / q7: 3.7-4.2 -> 1.7-2.6, IoU +0.14-0.30; q0 / q3
+  +0.23-0.29), but q1 now splits its own family (0.92 -> 0.41, IoU 0.81 -> 0.40). Gemini30 1 (one board-and-batten family across trim
+  bands) is split harder (q0 0.42 -> 0.20, q2 0.72 -> 0.20; IoU 0.67 -> 0.18) -- the twins did not protect it. val 9 q2 (one-family
+  elevation, flagged as a risk) 0.974 -> 0.626 (pred / tgt 1.01 -> 0.64). Gemini30 11 merges more (1.13 -> 1.66). HF14 / val sheets
+  moving > 0.03: only val 9 (-0.061); in the mix none.
+- So the tone pairs teach the chroma split sheet 26 needs, and push the model to split within-family drift too (Gemini30 1, val 9, 26 q1).
+- **Gate:** kg30 fails (1), (2) (val p=0.048) and (3) (val 9, Gemini30 1, Gemini30 11). The mix fails (1) (Gemini30 -0.005) and (3)
+  (Gemini30 1 -0.158); it passes (2) and lifts HF14 +0.007 (p=0.09). Not published; xblend-kq30-kms30 stays the best.
