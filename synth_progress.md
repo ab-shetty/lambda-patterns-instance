@@ -2166,3 +2166,18 @@ as the metric. It is the natural first step of the polygon output.
 - So the tone pairs teach the chroma split sheet 26 needs, and push the model to split within-family drift too (Gemini30 1, val 9, 26 q1).
 - **Gate:** kg30 fails (1), (2) (val p=0.048) and (3) (val 9, Gemini30 1, Gemini30 11). The mix fails (1) (Gemini30 -0.005) and (3)
   (Gemini30 1 -0.158); it passes (2) and lifts HF14 +0.007 (p=0.09). Not published; xblend-kq30-kms30 stays the best.
+
+### 2026-10-17 (CPU) -- is fill grain why colour pairs break Gemini30 1? No
+
+Gemini30 1 @4096 (hand boxes, CPU, `--workers 1`), raw sheet vs the same sheet median-filtered 5x5 (removes the fill's fine
+grain; the 2026-10-15 probe). Checkpoints rebuilt from the Hub; kg30 = 0.3 single18kg-dr + 0.7 single18kg-nodr.
+
+| | raw (q0 / q1 / q2) | median 5x5 | gain |
+|---|---:|---:|---:|
+| xblend-kq30-kms30 (best) | 0.655 (0.39 / 0.91 / 0.66) | 0.893 (0.95 / 0.83 / 0.90) | +0.238 |
+| single18kg-blend30 | 0.337 (0.19 / 0.64 / 0.18) | 0.518 (0.76 / 0.46 / 0.34) | +0.181 |
+
+- Raw scores reproduce the GPU's (0.654 / 0.335). Grain costs both models ~0.2 on this sheet, but filtering it out does not
+  close kg30's gap (0.32 raw, 0.38 filtered): the colour-pair model splits the clean sheet too. So the trade (26 up, 1 down)
+  is not grain; the gable-twin colour drift (CIEDE2000 0.4-2) matches sheet 1's piece gaps (0.3-1.6) and still did not
+  stop the split. Grain alone is worth ~+0.24 on sheet 1 for the best model (+0.008 Gemini30), sheet 1 only.
