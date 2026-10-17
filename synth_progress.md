@@ -1985,3 +1985,81 @@ other family 0.028 (26 alone 0.016), target missed 0.040, paper 0.011. Eight she
 - Checked and ruled out on the way: furniture (Gemini30 23 / 0 draw it white-filled as the generator does, 90% of furnished
   rooms; the orange in my overlays was the missed-target colour, not paint), fill grain (sheet 1 only).
 - `run_single_pass.sh` takes `POOL=` (reuse a pool), `TRAINX=` (extra training flags) and `BATCH=`.
+
+### 2026-10-17 (GH200) -- multi-resolution training (single18kms): fails the gate; scale sensitivity not reduced
+
+`TAG=single18kms POOL=data/synthetic/single18kq_s600000 TRAINX="--image-max-size-max 3072" BATCH=4 ./run_single_pass.sh` -- the
+kq recipe (same pool, rebuilt at GEN 2026-10-15b: 17,906 ok, same count as kq) with each training sheet's long side drawn in
+[2048, 3072]. **Batch 8 OOMs** with the range (dr arm, first step); batch 4 fits (78 GB) but, with no grad accumulation in
+`train_refunet.py`, doubles the steps at the same LR (4,431 vs 2,215), so batch size is a second difference from kq. Arms: dr
+1,875 s, nodr 2,520 s. Blend30 (0.3 dr / 0.7 nodr) built as for kq. Per-question files `eval_baselines/single18kms-blend{30,50}_*`.
+Sanity first: single18kq-blend30 re-scored on HF14 @4096 on this VM = 0.915633, identical to the baseline.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 | Gemini30 per-sheet |
+|---|---:|---:|---:|---:|---:|---:|
+| single18kq-blend30 (best) | **0.9156** | 0.9221 | 0.8976 | 0.9357 | **0.8680** | 0.8611 |
+| single18kms-blend30 | 0.9089 | **0.9263** | 0.8980 | 0.9359 | 0.8652 | 0.8651 |
+| kms30 - kq30, paired | -0.007 (12 / 10, p=0.32) | +0.004 (14 / 9, p=0.58) | +0.0004 (p=0.74) | +0.0002 | -0.003 (58 / 34, p=0.64; sign p=0.016) | +0.004 |
+| single18kms-blend50 | 0.9054 | 0.9240 | 0.8989 | 0.9368 | 0.8636 | 0.8659 |
+
+- **Gemini30 per sheet, kq30 -> kms30:** 26 0.470 -> 0.490, 8 0.780 -> 0.828, 1 0.557 -> 0.570, 0 0.771 -> 0.861, 19 0.482 -> 0.491,
+  6 0.906 -> 0.900, **17 0.891 -> 0.697**; also 7 +0.05, 22 +0.03, 28 +0.03, 12 -0.02. Most questions improve (58 / 34); the mean
+  falls only because of sheet 17 (13 questions, -0.194 each, 459% of the net difference).
+- **Gemini30 17** (r4 #016, a hip-roof plan, one shingle family on every plane, native 2400 px so upsampled 1.7x at 4096): kq30
+  selects it cleanly (q1-q10 0.93-0.96, pred/tgt ~1.0); kms30 leaves blotchy half-confident coverage over the whole roof (q1 0.96
+  -> 0.35, q2 0.95 -> 0.33, q8 0.89 -> 0.47, q10 0.95 -> 0.65; pred/tgt 0.33-0.66). Not a direction split -- a texture-wide
+  confidence collapse. It is one of the two sheets that lose 0.16 at 2048 on kq30 (2026-10-15 CPU).
+- **HF14 12** (turned deck boards) q1 0.84 -> 0.72, q3 0.87 -> 0.78 (under-selection, pred/tgt 0.77-0.81); sheet -0.048 (0.798 in
+  blend50). With fix v2, HF14 18 0.921 -> 0.954 and 2 / 7 +0.03 carry the HF14 fix v2 gain.
+- **Gate vs single18kq-blend30: fails (1)** (Gemini30 -0.003) **and (3)** (Gemini30 17 -0.19; HF14 12 -0.048 just under the line).
+  (2) passes (no significant HF14 / fix v2 / val drop). Not published. Checkpoints `data/runs/ck_single18kms_{dr,nodr,blend30,blend50}`
+  (local).
+
+**Did multi-res make the model scale-robust? No.** Same model scored @2048 (`eval_baselines/single18k{q,ms}-blend30_*_2048`):
+
+| per-sheet 2048 - 4096 | mean abs gap kq30 / kms30 | sd | sheets abs > 0.1 | mean gap |
+|---|---:|---:|---:|---:|
+| Gemini30 | 0.049 / 0.046 | 0.071 / 0.073 | 7 / 3 | +0.018 / +0.000 |
+| HF14 fix v2 | 0.036 / 0.031 | 0.058 / 0.033 | 1 / 1 | -0.028 / -0.029 |
+| val | 0.032 / 0.037 | 0.072 / 0.081 | 1 / 2 | -0.024 / -0.028 |
+
+- Gemini30 gaps kq30 -> kms30: 26 +0.17 -> +0.06, 8 +0.14 -> +0.06, 0 +0.13 -> +0.05, 1 +0.13 -> **+0.17**, 19 +0.12 -> **+0.16**,
+  6 -0.16 -> **-0.26**, 17 -0.15 -> -0.08 (because 4096 fell), 20 +0.01 -> -0.08. HF14 14 -0.22 -> -0.12; val 13 -0.27 -> -0.29.
+- So the 4096 operating point moved (Gemini30's mean gap went to zero: some sheets' 2048 gains now appear at 4096), but the swings
+  between scales did not shrink. A 1.5x training range does not cover the 2x test gap, and widening it needs memory (no gradient
+  checkpointing in the code) and an LR fix for the smaller batch. Not pursued further today.
+
+### 2026-10-17 (CPU, beside the GH200 runs) -- what the remaining real-sheet loss is, and what mask post-processing buys
+
+`scripts/postproc_probe.py` on single18kq-blend30's @4096 maps (`abshetty/floz-diag single18kq-blend30/{hf14,val}_4096`); it rebuilds
+the evaluator's targets with `_prepare_sheet` (baseline IoU reproduces exactly: val 0.8976, HF14 0.9156, fix v2 0.9221). Loss split
+per question in IoU units (sum = 1 - IoU; boundary = within 4 native px of the target edge; wrong region = a predicted component
+< 10% on the target; missed region = a target component < 25% recalled):
+
+| | HF14 | HF14 fix v2 | val |
+|---|---:|---:|---:|
+| boundary (fp + fn) | 0.032 | 0.032 | 0.045 |
+| under-filled inside found regions | 0.028 | 0.025 | 0.009 |
+| missed regions | 0.014 | 0.005 | 0.013 |
+| wrong regions (other family + unlabelled) | 0.006 | 0.013 | 0.031 |
+| spill near found regions | 0.005 | 0.004 | 0.005 |
+| total (1 - IoU) | 0.084 | 0.078 | 0.102 |
+
+**Post-processing, chosen on val, HF14 read once:**
+
+| | val | HF14 | HF14 fix v2 |
+|---|---:|---:|---:|
+| linear upsample of the probability + fill holes <= 4096 px (inference res) | +0.006 (25 / 1) | +0.002 | +0.002 |
+| linear upsample only | +0.005 | +0.0014 | +0.0013 |
+| drop components < 0.2% of the mask | +0.001 (2 / 0) | +0.0005 | +0.0007 |
+| close 15 / open 15 / hysteresis 0.9 | +0.001 | +0.002 / 0.000 / -0.001 | +0.001 / +0.003 / 0.000 |
+| fill every hole | **-0.052** (targets have windows / doors cut out) | | |
+| drop components < 3% | -0.024 | | |
+| threshold 0.25-0.5 | within +-0.001 | | |
+
+- Morphology cannot close the gap to the user's 0.95 target: it reaches ~+0.002-0.006 of the 0.034-0.05 needed. "Under-filled" is
+  not small holes (filling <= 4096 px recovers almost none of it); boundary is partly label precision.
+- **Shapes for the frontend (final output = polygons, the user 2026-10-17):** raw predictions have median 12 (HF14) / 17 (val)
+  components, p90 39 / 30, vs 2 / 3 in the target; holes median 4 / 8. Speck drop (0.2%) -> components 4 / 5 (p90 6 / 15); + hole
+  fill <= 4096 px -> holes 0 / 0 (p90 4 / 8), both IoU-neutral or better. The polygon step (speck drop, small-hole fill, contour
+  trace, simplify) should be scored as the model's output: IoU of the rasterised polygons, gated like any other change.

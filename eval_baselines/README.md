@@ -12,6 +12,8 @@ pool_manifests/gemini30_s20261006.json). Threshold 0.35. Compare at the same inf
 | revithue2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-13 hue-pair screen; checkpoint `data/runs/ck_2k_revithueroi_r2048_s7/epoch_8.pth` on the GH200) | 0.7806 / 0.7161 / 0.7068 |
 | revitwing2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-14 wing colour-pair screen, passed the gate; `data/runs/ck_2k_revitwingroi_r2048_s7/epoch_8.pth` on the GH200) | 0.7920 / 0.7527 / 0.7647 |
 | revitgable2k-e8_{hf14,val,gemini30}_2048 | not published (2026-10-14 gable-trim screen; `data/runs/ck_2k_revitgableroi_r2048_s7/epoch_8.pth` on the GH200) | 0.8264 / 0.7786 / 0.7753 |
+| single18kq-blend30_{hf14,hf14fix2,val,gemini30}_2048 | abshetty/floz-refunet-swint-single18kq-blend30 (best) at 2048, for the scale gap (2026-10-17) | 0.8582 / 0.8764 / 0.8566 / 0.8750 |
+| single18kms-blend{30,50}_{hf14,hf14fix2,val,gemini30}_4096, -blend30_*_2048 | not published (2026-10-17 multi-res arm, `--image-max-size-max 3072`, failed the gate; `data/runs/ck_single18kms_*` on the GH200) | b30 @4096 0.9089 / 0.9263 / 0.8980 / 0.8652 |
 
 2026-10-07: Gemini30 sheet 16 (r3 #048) was relabelled by the user (Roboflow r3 v3: one missed pattern3 piece added,
 appended as question 23 so every other automatic box is unchanged). The longswiss Gemini30 file has that sheet's rows
