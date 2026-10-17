@@ -19,6 +19,8 @@ pool_manifests/gemini30_s20261006.json). Threshold 0.35. Compare at the same inf
 | xblend-kq30-kw30_{hf14,hf14fix2,val,gemini30}_4096 | not published (0.5 kq30 + 0.5 kw30, failed the gate) | 0.9156 / 0.9225 / 0.8994 / 0.8680 |
 | single18kg-blend{30,50}_{hf14,hf14fix2,val,gemini30}_4096 | arms `abshetty/floz-refunet-swint-single18kg-{dr,nodr}` (2026-10-17 gable tone pairs + twins, GEN 2026-10-17; failed the gate) | b30 0.9223 / 0.9262 / 0.8878 / 0.8613 |
 | xblend-xa-kg30_{hf14,hf14fix2,val,gemini30}_4096 | not published (0.5 xblend-kq30-kms30 + 0.5 kg30, failed the gate) | 0.9231 / 0.9296 / 0.8985 / 0.8691 |
+| single36k-blend{30,50}_{hf14,hf14fix2,val,gemini30}_4096 | arms `abshetty/floz-refunet-swint-single36k-{dr,nodr}` (2026-10-17, 35,812 sheets at the kq config, one epoch; failed the gate) | b30 0.9048 / 0.9211 / 0.8912 / 0.8704 |
+| xblend-xa-s36k30_{hf14,hf14fix2,val,gemini30}_4096 | not published (0.5 xblend-kq30-kms30 + 0.5 s36k30; passes the gate's letter at noise level, held for the user) | 0.9126 / 0.9293 / 0.8976 / 0.8750 |
 
 2026-10-07: Gemini30 sheet 16 (r3 #048) was relabelled by the user (Roboflow r3 v3: one missed pattern3 piece added,
 appended as question 23 so every other automatic box is unchanged). The longswiss Gemini30 file has that sheet's rows
