@@ -2210,3 +2210,9 @@ questions, CPU; larger sheets OOM at 15 GB):
   (0.011) is spread over sheets.
 - Ceiling for a trim fix: the 4-25 px bucket, 0.017 of Gemini30's 0.126; on the real sheets the analogous spill is ~0.005
   (2026-10-17 postproc probe), so the risk to real 28 is small (trim stays cut from the labels).
+- **Counterfactual (CPU): corner boards are not the cause.** Corner boards drawn onto the same four synthetic sheets (white
+  strip at both ends of every main / accent / accent2 wall piece, ink line on its inner side, cut from the labels; 0.45 ft =
+  7-8 px and 0.8 ft = 12-15 px), best model @4096: it selects **0-11% of the board pixels next to the target** (mean ~5%; IoU
+  cost 0.0003-0.0072 per question), and sheet IoU moves <= 0.007. So the model already stops at a white board it has never seen
+  when the board is drawn in our style; Gemini's 4-25 px bleed comes from how Gemini draws (line weight / softness, board vs
+  siding look), not from a missing trim type. No corner-board generator change. Scratchpad `fpu/cb/`.
