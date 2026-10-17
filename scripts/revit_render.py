@@ -214,6 +214,69 @@ def near_pair_planned(seed, image_id, shaded, house):
     return random.Random(seed * 1_000_003 + image_id * 197 + 89).random() < FC.NEAR_PAIRS[0]
 
 
+# ---- gable tone pairs (FC.GABLE_PAIRS, --gable-pairs P, default 0.4 since 2026-10-17): Gemini30 26 (r4 #078) is one
+# lap siding at one spacing (12.5 vs 13-14 px), tan on the storeys and olive on the gable and dormer, two families:
+# the olive is the tan desaturated (b* 31 -> 16, hue angle 6 deg apart, L* -3.5), CIEDE2000 8.5. No synthetic pair
+# looks like it: wing pairs need a hue angle >= 20 deg, sit on side wings only, and reach 7-9 only with a spacing
+# change, so every model merges the two (26 ~0.48, the largest per-sheet loss on Gemini30). Here a colour elevation
+# whose house has a gable (else a second storey) gets, with probability P, the gable (or upper storey) as the accent
+# zone in the main wall's style, and half of those are
+#   tone  the accent's fill moved in chroma (x0.35-0.7 or x1.4-2.4), hue +-15 deg, L* +-4, CIEDE2000 6-12:
+#         labelled as two families;
+#   twin  the same zone and trim band, a within-family drift (CIEDE2000 0.4-2, as Gemini30 1's pieces differ by
+#         0.3-1.6): labelled as ONE family.
+# The twin is the point: the 2026-10-07 / 13 pairs (B on gables / upper storeys, no twin) taught "another zone = another
+# family" and split one-family sheets at exactly those boundaries (Gemini30 1, 5, 14), and the wing pairs still broke
+# Gemini30 1. With twins the zone carries no information; only the colour gap does (real within-family piece gaps:
+# 85% < 3; Gemini30 98% < 3). Not with a wing pair on the same sheet. Own RNG streams: P = 0 is byte-identical.
+def gable_pair_planned(seed, image_id, shaded, house, near_on):
+    """Decided before the geometry: (zone, "tone" | "twin") or None; compose_revit makes the zone the accent."""
+    if getattr(FC, "GABLE_PAIRS", [0.0])[0] <= 0 or not shaded or near_on:
+        return None
+    gable = any(b.roof == "gable" for b in house["blocks"])
+    upper = house["blocks"][0].stories >= 2
+    gr = random.Random(seed * 1_000_003 + image_id * 211 + 97)
+    if not (gable or upper) or gr.random() >= FC.GABLE_PAIRS[0]:
+        return None
+    zone = "gable" if gable and (not upper or gr.random() < 0.6) else "upper"
+    return zone, "twin" if gr.random() < 0.5 else "tone"
+
+
+def _tone_shift(rgb, rr, lo, hi, twin):
+    """rgb with its chroma (and a little hue / lightness) moved, CIEDE2000 lo..hi; twin = a small drift on all
+    three. From a near-grey (chroma < 8) a tone pair takes chroma 8-20 at any hue. Returns (colour, CIEDE2000) or None."""
+    L0, a0, b0 = _lab(rgb)
+    C0, h0 = math.hypot(a0, b0), math.degrees(math.atan2(b0, a0))
+    for _ in range(120):
+        if twin:
+            L, C, h = L0 + rr.uniform(-1.5, 1.5), C0 * rr.uniform(0.85, 1.15), h0 + rr.uniform(-5, 5)
+        elif C0 >= 8:
+            f = rr.uniform(0.35, 0.7) if rr.random() < 0.6 else rr.uniform(1.4, 2.4)
+            L, C, h = L0 + rr.uniform(-4, 4), C0 * f, h0 + rr.uniform(-15, 15)
+        else:
+            L, C, h = L0 + rr.uniform(-4, 4), rr.uniform(8, 20), rr.uniform(0, 360)
+        c = _rgb_from_lab(min(92, max(25, L)), C * math.cos(math.radians(h)), C * math.sin(math.radians(h)))
+        de = _de2000((L0, a0, b0), _lab(c))
+        if lo <= de <= hi:
+            return c, de
+    return None
+
+
+def plant_gable_pair(styles, fam_seed, what):
+    A = styles["main"]
+    if A.kind == "flat":
+        return None
+    rr = random.Random(fam_seed * 179 + 67)       # own stream: the sheet's RNG is untouched
+    got = _tone_shift(A.base, rr, *((0.4, 2.0) if what == "twin" else (6, 12)), twin=what == "twin")
+    if got is None:
+        return None
+    B = _copy_style(A, "accent")
+    B.base = got[0]
+    _finish_style(B, True, None)                 # the pen follows the fill, as for every colour family
+    styles["accent"] = B
+    return what, round(got[1], 1)
+
+
 def plant_near_pair(styles, fam_seed):
     rr = random.Random(fam_seed * 173 + 61)      # own stream: the sheet's RNG is untouched
     A = styles["main"]
@@ -431,6 +494,11 @@ def compose_revit(image_id, seed, mode_weights):
     near_on = near_pair_planned(seed, image_id, shaded, house)
     if near_on:                                     # the pair's B is a side wing: make the wing the accent zone
         house["accent"] = "block"
+    gp = gable_pair_planned(seed, image_id, shaded, house, near_on)
+    if gp:                                          # the gable (or upper storey) is the accent zone
+        house["accent"] = gp[0]
+        if house.get("accent2") in ("gable", gp[0]):
+            house["accent2"] = None
     ink_v = r.randint(0, 30)
     ink = (ink_v,) * 3
     pat_v = r.randint(110, 175) if not shaded else r.randint(60, 120)
@@ -530,6 +598,7 @@ def compose_revit(image_id, seed, mode_weights):
                     continue        # sparse pale dots vanish at 2048: a labelled wall that reads blank
                 st.line, st.lw = (v,) * 3, max(1.0, st.lw * k_lw)
     near = plant_near_pair(styles, fam_seed) if near_on else None
+    gpair = plant_gable_pair(styles, fam_seed, gp[1]) if gp and "accent" in styles else None
 
     label_fams = {"main"}
     for f in ("accent", "accent2"):
@@ -555,6 +624,11 @@ def compose_revit(image_id, seed, mode_weights):
         label_fams |= {pair_fam, "roof"}
     if near:                    # so is a near-miss pair: both families labelled, as two
         label_fams |= set(near[:2])
+    relabel = {}
+    if gpair:                   # a tone pair is two families; a twin's gable is the main family
+        label_fams |= {"main", "accent"}
+        if gpair[0] == "twin":
+            relabel["accent"] = "main"
     hole_mode = r.random() < G.WINDOW_HOLE_PROB
     mk = None
     if getattr(G, "MARKUP", 0) > 0 and not shaded:
@@ -657,7 +731,7 @@ def compose_revit(image_id, seed, mode_weights):
                 for q in G.polys_of(lab):
                     if G.TRIM_CUT and G._thin(q):
                         continue
-                    labelled.append((fam, V.geom(q)))
+                    labelled.append((relabel.get(fam, fam), V.geom(q)))
         # trims: white boards
         for tp in e["trims"]:
             G.cv_fill(canvas, V.geom(tp), (255, 255, 255) if not shaded else (242, 242, 240))
@@ -835,6 +909,8 @@ def compose_revit(image_id, seed, mode_weights):
            "px_per_ft": round(S, 2), "annotations": anns, "render": "revit"}
     if near:
         out["near_pair"] = {"families": list(near[:2]), "differs": near[2]}
+    if gpair:
+        out["gable_pair"] = {"zone": gp[0], "kind": gpair[0], "de2000": gpair[1]}
     rx = FC.ref_exclude_rings(excl_px, W, H)
     if rx:
         out["ref_exclude"] = rx

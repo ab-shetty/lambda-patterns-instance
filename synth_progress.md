@@ -2117,3 +2117,27 @@ wrong regions 0.024. Raw predictions are fragmented: median 44 components (p90 1
 matters more on Gemini than on the real sheets (12 / 17). Across the three sets "linear + fill" is +0.006 val / +0.002 HF14 /
 +0.006 Gemini30 (worst single question -0.022, on HF14); it changes the evaluation protocol, so it is not adopted
 as the metric. It is the natural first step of the polygon output.
+
+### 2026-10-17 (CPU) -- gable tone pairs with one-family twins for Gemini30 26 (GEN_VERSION 2026-10-17)
+
+- **What sheet 26 is** (r4 #078; 0.478 on xblend-kq30-kms30, the largest per-sheet loss: 0.021 of Gemini30's 0.126). One lap
+  siding at one spacing (FFT period 12.5 px tan vs 13-14 px olive), two families: tan on the storeys, olive on the gable and
+  dormer. Measured fills (CIELAB, eroded pieces): tan (70.6, 7, 31), olive (67, 2, 16) -- the olive is the tan **desaturated**
+  (chroma 32 -> 16, hue angle 6 deg apart, L* -3.5), CIEDE2000 7.9-9.3 between pieces, <= 1.7 within each family. The
+  2026-10-14 note that it also differs in spacing 1.8x was wrong.
+- **Why no synthetic pair covered it:** wing pairs (`--near-pairs`) need a hue angle >= 20 deg and CIEDE2000 >= 10 (7-9 only
+  together with spacing 1.4-2x), and sit on a side wing; sheet 26 is a chroma step at 8.5, same spacing, on the gable.
+- **Change (`--gable-pairs 0.4`, default):** a colour elevation whose house has a gable (else a second storey) gets with P the
+  gable (60% if both) or upper storey as the accent zone in the main wall's exact style, and half of those are a **tone pair**
+  (fill chroma x0.35-0.7 or x1.4-2.4, hue +-15 deg, L* +-4, CIEDE2000 6-12, pen recomputed from the fill; two families) and half
+  a **twin** (CIEDE2000 0.4-2, the drift Gemini30 1's pieces show; labelled ONE family across the trim band). The twin is the
+  new part: the 2026-10-07 / 13 gable / upper-storey pairs had none and split one-family sheets at exactly those boundaries
+  (Gemini30 1, 5, 14); wing pairs still broke Gemini30 1. With twins the zone and its trim band carry no information, only the
+  colour gap does. Never on a sheet with a wing pair; own RNG streams. Annotation files carry `gable_pair` {zone, kind, de2000}.
+- **Verified** (60 elevations, `--mode-weights 1,0,0`, seed 9, ids 820000+): `--gable-pairs 0` is byte-identical to the
+  2026-10-15b code (120 / 120 files). Default: 26 colour elevations, 10 planted (6 tone: 5 gable, 1 upper; 4 twin), only those
+  10 sheets change. Rendered main-vs-accent fill CIEDE2000 on the tone sheets 8.0 / 8.9 / 10.2 / 10.3 / 10.8 / 16.7 (the last
+  one's gables sit in eave shadow); accent area 2-171% of the main wall's. Twins: accent merged into `main` in the labels.
+- **Risk to watch:** Gemini30 1 (one family across two trim bands) and 17; HF14 / val one-family elevations (val 9, HF14 14).
+  Screen: `TAG=single18kg ./run_single_pass.sh` (GEN 2026-10-17 defaults, ids 600000+, seed 6 -- the kq recipe plus this),
+  blend30, then also 0.5 with xblend-kq30-kms30; gate vs xblend-kq30-kms30.
