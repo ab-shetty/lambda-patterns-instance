@@ -33,6 +33,17 @@ the model output -- IoU of the rasterised polygons. `scripts/postproc_probe.py` 
 
 **User's submission target:** "0.95 on real" (protocol -- HF14 vs val, per question vs per sheet -- not pinned down yet).
 
+**Next GPU session (planned 2026-10-17, end of day):** today's single-run changes (kms, kw, kg, s36k) all failed alone while
+the same Gemini30 sheets swung 0.2-0.3 between runs (17: kq 0.89 vs 0.68-0.86; 26 +0.11 with gable pairs and also +0.11 from 36k
+sheets without them) -- we have never measured seed noise, so per-sheet moves cannot be told from luck.
+1. Add `--save-every N` to `train_refunet.py`; retrain the kq nodr arm on `single18kq_s600000` (rebuild: GEN 2026-10-17b defaults =
+   2026-10-15b) saving every 100 steps; score the swing sheets (Gemini30 1 6 17 26, HF14 14, val 9 13) per checkpoint. Flat
+   oscillation -> average late checkpoints (SWA within the epoch); jumps -> data attribution (batch composition from the seeded
+   order, or TracIn against val / Gemini30 -- never HF14).
+2. A kq seed replicate (`SEED=8`, same pool) for the per-sheet noise floor; then make the gate's sheet rule "beyond noise".
+3. Eval-only: a uniform soup of all Hub arms (kq, kms, kw, kg, s36k; one-epoch restarts of the same init).
+Held for the user: 0.5 xblend-kq30-kms30 + 0.5 s36k30 passes the gate's letter at noise level (Gemini30 +0.001, HF14 -0.004).
+
 **Open problems** (`synth_progress.md` 2026-10-14 .. 17):
 - Gemini30 17 (hip-roof shingle plan, native 2400 px) collapses to blotchy half-confidence in both kms and kw (0.89 -> 0.68-0.70);
   only kq gets it right. Fragile, not specific to multi-res.
