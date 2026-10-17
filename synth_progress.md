@@ -2181,3 +2181,32 @@ grain; the 2026-10-15 probe). Checkpoints rebuilt from the Hub; kg30 = 0.3 singl
   close kg30's gap (0.32 raw, 0.38 filtered): the colour-pair model splits the clean sheet too. So the trade (26 up, 1 down)
   is not grain; the gable-twin colour drift (CIEDE2000 0.4-2) matches sheet 1's piece gaps (0.3-1.6) and still did not
   stop the split. Grain alone is worth ~+0.24 on sheet 1 for the best model (+0.008 Gemini30), sheet 1 only.
+
+### 2026-10-17 (CPU) -- Gemini30's unlabelled false positives are trim bleed: synthetic sheets have no corner boards
+
+Best model (xblend-kq30-kms30) Gemini30 @4096 maps (`abshetty/floz-diag xblend-kq30-kms30/gemini30_4096`). Per question, the
+predicted pixels on no label at all, in IoU units, split by distance from the target (scratchpad `fpu/split3.py`). Same split on
+four synthetic colour / mono elevations from the training distribution (GEN 2026-10-15b defaults, ids 820002-820012, 52
+questions, CPU; larger sheets OOM at 15 GB):
+
+| IoU units per question | synthetic (IoU 0.942) | Gemini30 (IoU 0.874) |
+|---|---:|---:|
+| inside the target's / any label's openings | 0.0017 | 0.0055 |
+| <= 4 px from the target (label precision) | 0.0137 | 0.0183 |
+| **4-25 px out (trim boards, casings, rakes)** | **0.0002** | **0.0170** |
+| > 25 px away (other drawing, label gaps) | 0.0002 | 0.0191 (sheet 19 alone 0.0085) |
+| of <= 25 px: on white (>= 235) pixels | 0.0007 | 0.0128 |
+| of <= 25 px: between pieces of the target / along its outer edge | 0.0023 / 0.0116 | 0.0096 / 0.0257 |
+
+- The model stops at trim on our sheets and runs over it on Gemini's. Zooms (sheets 28, 20, 16): Gemini draws trim as white
+  boards between two ink lines -- corner boards at every wall end and inside corner, boards up both sides of the chimney, rake
+  boards along every gable, window casings -- and next to board-and-batten or lap siding such a strip reads as one more board;
+  the model takes the whole strip.
+- **Gap found:** the Revit elevation path (`build_elevation_fc`) draws fascia, rakes (slab-edge "trim" faces), belts, gable-trim
+  bands, the chimney cap and casings (white on mono sheets, white / dark / pale on colour ones, always 0.3 ft), but **no corner
+  boards** -- wall ends and inside corners are a single outline. (v6's own elevation code has `corner_boards`; the Revit path never
+  used it.)
+- Sheet 19's far-away FP is the unlabelled joist field of an under-floor framing plan (a label gap, 0.0085); the rest of "away"
+  (0.011) is spread over sheets.
+- Ceiling for a trim fix: the 4-25 px bucket, 0.017 of Gemini30's 0.126; on the real sheets the analogous spill is ~0.005
+  (2026-10-17 postproc probe), so the risk to real 28 is small (trim stays cut from the labels).
