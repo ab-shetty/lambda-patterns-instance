@@ -214,7 +214,8 @@ def near_pair_planned(seed, image_id, shaded, house):
     return random.Random(seed * 1_000_003 + image_id * 197 + 89).random() < FC.NEAR_PAIRS[0]
 
 
-# ---- gable tone pairs (FC.GABLE_PAIRS, --gable-pairs P, default 0.4 since 2026-10-17): Gemini30 26 (r4 #078) is one
+# ---- gable tone pairs (FC.GABLE_PAIRS, --gable-pairs P; 0.4 on 2026-10-17, default 0 since 2026-10-17b: single18kg lifted
+# Gemini30 26 0.48 -> 0.59 but split one-family sheets anyway, Gemini30 1 0.65 -> 0.34, val 9 -0.06 -- the twins did not protect them): Gemini30 26 (r4 #078) is one
 # lap siding at one spacing (12.5 vs 13-14 px), tan on the storeys and olive on the gable and dormer, two families:
 # the olive is the tan desaturated (b* 31 -> 16, hue angle 6 deg apart, L* -3.5), CIEDE2000 8.5. No synthetic pair
 # looks like it: wing pairs need a hue angle >= 20 deg, sit on side wings only, and reach 7-9 only with a spacing

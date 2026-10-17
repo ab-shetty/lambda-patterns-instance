@@ -56,7 +56,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-17"
+GEN_VERSION = "2026-10-17b"
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -112,10 +112,10 @@ PAIR_TURNS = [True]
 # --heavy-pieces P (default 0.4 since 2026-10-14e): on an elevation sheet chosen with P, some surface pieces (thin bands
 # more often) are boxed in a heavy line; see revit_render.compose_revit. 0 = earlier pools.
 HEAVY_PIECES = [0.4]
-# --gable-pairs P (default 0.4 since 2026-10-17): a colour elevation whose house has a gable (else a second storey) gets,
+# --gable-pairs P (default 0 since 2026-10-17b; 0.4 on 2026-10-17 -- single18kg: Gemini30 26 +0.11 but 1 -0.32, val 9 -0.06): a colour elevation whose house has a gable (else a second storey) gets,
 # with P, the gable / upper storey in the main wall's style at another chroma (CIEDE2000 6-12, two families: Gemini30 26)
 # or, half the time, a within-family drift (CIEDE2000 0.4-2, one family); see revit_render.gable_pair_planned. 0 = earlier pools.
-GABLE_PAIRS = [0.4]
+GABLE_PAIRS = [0.0]
 SHAPED = [False]      # --shaped: notched / U / chamfered / bayed houses (3D), set in main()
 
 
@@ -775,7 +775,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     TURN_BOARDS[0] = float(flags.pop("turn_boards", 0.9))
     PAIR_TURNS[0] = bool(flags.pop("pair_turns", 1))
     HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
-    GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.4))
+    GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -895,10 +895,10 @@ def main():
     ap.add_argument("--heavy-pieces", type=float, default=0.4,
                     help="Revit elevations: probability a sheet boxes some surface pieces (thin bands more often) in a "
                          "heavy line, labels unchanged. Default 0.4 since 2026-10-14e; 0 = earlier pools")
-    ap.add_argument("--gable-pairs", type=float, default=0.4,
+    ap.add_argument("--gable-pairs", type=float, default=0.0,
                     help="Revit colour elevations with a gable or second storey: probability the gable / upper storey "
                          "is drawn in the main wall's style at another chroma (two families) or, half the time, a "
-                         "within-family drift (one family). Default 0.4 since 2026-10-17; 0 = earlier pools")
+                         "within-family drift (one family). 0.4 on 2026-10-17 (single18kg); default 0 since 2026-10-17b (breaks Gemini30 1)")
     ap.add_argument("--railings", type=float, default=0.35,
                     help="Revit elevations: probability a view gets a balcony / raised deck railing (half with an "
                          "exterior stair) in front of a wall, the wall label running on behind it, as on HF14 27. "
