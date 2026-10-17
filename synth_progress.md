@@ -2216,3 +2216,31 @@ questions, CPU; larger sheets OOM at 15 GB):
   cost 0.0003-0.0072 per question), and sheet IoU moves <= 0.007. So the model already stops at a white board it has never seen
   when the board is drawn in our style; Gemini's 4-25 px bleed comes from how Gemini draws (line weight / softness, board vs
   siding look), not from a missing trim type. No corner-board generator change. Scratchpad `fpu/cb/`.
+
+### 2026-10-17 (GH200) -- single36k: 36k fresh sheets seen once at the kq config -- no clear gain over 18k; the best + s36k30 mix ties
+
+Pool `single36k_s600000` (35,812 sheets) = `single18kq_s600000` (ids 600000-617999, GEN 2026-10-15b) + `single36k_ext_s618000` (ids
+618000-635999, 17,906 ok, 465 s): today's code with `--gable-pairs 0`, which is byte-identical to 2026-10-15b (20 kq sheets
+regenerated: 40 / 40 files identical; flags equal except `gable_pairs: 0`). Per-id RNG, so it is exactly one 36k build. Hard-linked
+union with `merge_manifest.json` (version 2026-10-15b; run with `ALLOW_STALE_POOLS=1` on purpose).
+`TAG=single36k N=36000 POOL=data/synthetic/single36k_s600000 ALLOW_STALE_POOLS=1 ./run_single_pass.sh` -- the kq recipe at batch 8,
+4,431 steps per arm (fresh one-epoch cosine over 2x the steps): dr 2,349 s, nodr 2,467 s. Arms published
+`abshetty/floz-refunet-swint-single36k-{dr,nodr}` (round-trip 243 / 243). Per-question files `eval_baselines/single36k-blend{30,50}_*`,
+`eval_baselines/xblend-xa-s36k30_*`.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| xblend-kq30-kms30 (best) | **0.9163** | 0.9290 | **0.8988** | **0.9364** | 0.8740 |
+| kq30 (same first 18k, same recipe) | 0.9156 | 0.9221 | 0.8976 | 0.9357 | 0.8680 |
+| s36k30 | 0.9048 | 0.9211 | 0.8912 | 0.9310 | 0.8704 |
+| s36k50 | 0.9043 | 0.9214 | 0.8944 | -- | 0.8682 |
+| 0.5 best + 0.5 s36k30 | 0.9126 (-0.004, p=0.37) | **0.9293** (+0.0002) | 0.8976 (-0.001, p=0.38) | 0.9358 | **0.8750** (+0.001, p=0.59; 31 / 32) |
+
+- **Data doubling (s36k30 vs kq30):** HF14 -0.011 (p=0.20; sheet 14 0.880 -> 0.812, 2 +0.046), fix v2 -0.001, val -0.006 (p=0.20; val 9
+  0.897 -> 0.846), Gemini30 +0.002 (70 / 44 questions). **Gemini30 26 0.470 -> 0.580** from more data alone (kg's gable pairs gave 0.590,
+  with sheet 1 -0.32; here sheet 1 +0.026), 19 +0.047, 17 0.891 -> 0.813 (again: kq is the run that gets 17 right), 6 0.906 -> 0.791.
+  Twice the sheets seen once is not a clear win at this recipe.
+- **Gate vs xblend-kq30-kms30:** s36k30 fails (1) and (3) (HF14 14, val 9, Gemini30 0 / 1 / 6 / 11 down > 0.05). The mix passes the
+  letter of all three -- Gemini30 +0.001, no significant drop (HF14 -0.004, p=0.37), no sheet > 0.05 (Gemini30 per sheet 26 0.478 ->
+  0.525, 1 0.654 -> 0.627, 17 0.853 -> 0.853, 19 0.495 -> 0.507) -- but the Gemini30 gain is a coin flip (31 / 32) and it costs plain
+  HF14 0.004. **Not published / not made the best: held for the user's call.**
