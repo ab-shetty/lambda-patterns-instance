@@ -2063,3 +2063,57 @@ per question in IoU units (sum = 1 - IoU; boundary = within 4 native px of the t
   components, p90 39 / 30, vs 2 / 3 in the target; holes median 4 / 8. Speck drop (0.2%) -> components 4 / 5 (p90 6 / 15); + hole
   fill <= 4096 px -> holes 0 / 0 (p90 4 / 8), both IoU-neutral or better. The polygon step (speck drop, small-hole fill, contour
   trace, simplify) should be scored as the model's output: IoU of the rasterised polygons, gated like any other change.
+
+### 2026-10-17 (GH200) -- single18kw finished (wing colour pairs): fails the gate; Gemini30 26 +0.06 but 1 / 17 / 4 / 19 fall
+
+`TAG=single18kw GEN="--plan-source data/reference/swiss_dwellings/layouts.pkl.gz --near-pairs 0.6" ./run_single_pass.sh` with the
+Hub nodr arm placed as done: pool rebuilt (17,906 ok, 464 s, same count as kq), dr arm trained (1,190 s, batch 8), published as
+`abshetty/floz-refunet-swint-single18kw-dr` (round-trip 243 / 243). Per-question files `eval_baselines/single18kw-blend{30,50}_*`.
+
+| @4096, hand boxes | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 |
+|---|---:|---:|---:|---:|---:|
+| single18kq-blend30 (best then) | 0.9156 | 0.9221 | 0.8976 | 0.9357 | **0.8680** |
+| single18kw-blend30 | 0.9146 (-0.001, p=0.84) | 0.9224 (+0.0004, p=0.94) | 0.8997 (+0.002, p=0.15) | 0.9356 | 0.8495 (-0.019, p=0.004) |
+| single18kw-blend50 | 0.9106 | 0.9187 | 0.9011 | 0.9364 | 0.8454 |
+
+- Gemini30 per sheet kq30 -> kw30: **26 0.470 -> 0.527** (the colour-pair target), 0 +0.04, 7 +0.04, 8 +0.04; **1 0.557 -> 0.328,
+  17 0.891 -> 0.677, 4 0.945 -> 0.827, 19 0.482 -> 0.383**. HF14 12 0.895 -> 0.919 (q1 / q3 recover).
+- Gate: fails (1) and (3). Gemini30 17 collapses here too (as in kms) -- so that loss is not a multi-res effect; kq is the run
+  that happens to get 17 right.
+
+### 2026-10-17 (GH200) -- cross-run weight blends (no training): 0.5 kq30 + 0.5 kms30 passes the gate, the new best
+
+All arms are one-epoch restarts of longswiss-swa37-41, so blends across runs are float averages of the `model` tensors (the
+run_single_pass.sh blend with weights). @4096 hand boxes, paired vs single18kq-blend30; per-question files
+`eval_baselines/xblend-kq30-{kms30,kw30}_*`.
+
+| | HF14 | HF14 fix v2 | val | val per-sheet | Gemini30 | Gemini30 per-sheet |
+|---|---:|---:|---:|---:|---:|---:|
+| kq30 (best then) | 0.9156 | 0.9221 | 0.8976 | 0.9357 | 0.8680 | 0.8611 |
+| **(a) 0.5 kq30 + 0.5 kms30** | **0.9163** (+0.0007, p=0.89) | **0.9290** (+0.007, p=0.17) | 0.8988 (+0.0012, p=0.08) | 0.9364 | **0.8740** (+0.006, p=0.011; 61 / 16, sign p=2e-7) | 0.8705 |
+| (b) 0.5 kq30 + 0.5 kw30 | 0.9156 (0.0000) | 0.9225 (+0.0004) | 0.8994 (+0.0019, p=0.06) | 0.9361 | 0.8680 (+0.0000; 42 / 41) | 0.8613 |
+
+- (a) Gemini30 per sheet (kq30 / a / kms30): 26 0.470 / 0.478 / 0.490, 1 0.557 / **0.654** / 0.570, **17 0.891 / 0.853 / 0.697**,
+  0 0.771 / 0.812 / 0.861, 8 0.780 / 0.800 / 0.828, 7 0.805 / 0.836 / 0.855. The blend keeps most of kms's gains and most of kq's
+  sheet 17. HF14 12 0.895 / 0.887 / 0.847; fix v2 HF14 18 0.921 -> 0.941. Largest sheet drops: Gemini30 17 -0.038, 12 -0.013, HF14
+  18 -0.012 (plain), val 22 -0.005.
+- (b) Gemini30 26 0.470 -> 0.526 kept, but 1 0.557 -> 0.482 (-0.075) and 17 -0.047.
+- **Gate:** (a) passes all three (Gemini30 up; no significant HF14 / fix v2 / val drop -- val +0.0012 is up; no sheet down > 0.05).
+  (b) fails (1) (Gemini30 not up) and (3) (Gemini30 1). (c) (1/3 each of kq30 / kms30 / kw30) not run: it was conditional on both
+  (a) and (b) helping.
+- **Published (a) as `abshetty/floz-refunet-swint-xblend-kq30-kms30`** (private, round-trip 243 / 243); HF14 / val re-scored with
+  `--save-probs` (IoU identical), maps + metrics (51 + 72 + 195) on `abshetty/floz-diag` `xblend-kq30-kms30/`. It is the best in
+  `startup.md`. Arms `single18kms-{dr,nodr}` published too (round-trip 243 / 243), so the best decomposes into four Hub arms:
+  0.15 kq-dr + 0.35 kq-nodr + 0.15 kms-dr + 0.35 kms-nodr.
+
+### 2026-10-17 (GH200, CPU side) -- post-processing on the new best's Gemini30 maps
+
+`scripts/postproc_probe.py MAPS gemini30` (now reads the Gemini30 local pool with `eval_boxes/gemini30_v1.json`; baseline reproduces
+0.8740). The val-chosen "linear upsample of the probability + fill holes <= 4096 px": **Gemini30 0.8740 -> 0.8798 (+0.0058;
+questions 81 up / 3 down, worst -0.008; sheets 23 up / 1 down (21, -0.001) / 6 flat**; biggest 1 +0.028, 17 +0.020, 0 / 16 +0.010).
+Linear alone +0.0034 (23 sheets up, 0 down). drop0.01 + fill4096 is +0.0079 here but was -0.0022 on val, so not chosen.
+Gemini30 loss split (0.126): holes inside found regions 0.030, spill (unlabelled 0.029, other family 0.012), boundary 0.031,
+wrong regions 0.024. Raw predictions are fragmented: median 44 components (p90 133) vs 5 in the target -- the polygon stage
+matters more on Gemini than on the real sheets (12 / 17). Across the three sets "linear + fill" is +0.006 val / +0.002 HF14 /
++0.006 Gemini30 (worst single question -0.022, on HF14); it changes the evaluation protocol, so it is not adopted
+as the metric. It is the natural first step of the polygon output.

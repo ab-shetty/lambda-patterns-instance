@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline: (a) what the remaining real-sheet error is made of, (b) what simple mask post-processing buys.
 Reads saved --save-probs maps (uint8, inference res); reproduces the evaluator's targets via _prepare_sheet.
-usage: PYTHONPATH=. python3 scripts/postproc_probe.py MAPDIR SPLIT(hf14|val) [fix]   (MAPDIR = a --save-probs dir @4096)
+usage: PYTHONPATH=. python3 scripts/postproc_probe.py MAPDIR SPLIT(hf14|val|gemini30) [fix]   (MAPDIR = a --save-probs dir @4096)
 Writes per-question JSON to data/diag/postproc_<split>[_fix].json. First run 2026-10-17 (synth_progress.md)."""
 import json, sys
 from multiprocessing import Pool
@@ -139,13 +139,23 @@ def sheet_job(args):
 def main():
     mapdir, split = sys.argv[1], sys.argv[2]
     fix = len(sys.argv) > 3
-    recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
-    hb = hand_boxes()
     fixes = json.load(open("eval_labels/hf14_fixes_v2.json")) if fix else {}
-    idxs = HF14 if split == "hf14" else VAL
-    jobs = [(i, {k: recs[i][k] for k in ("image", "annotations") if k in recs[i]}, hb.get(str(i), {}),
-             fixes.get(str(i), []), mapdir) for i in idxs]
-    with Pool(14) as pool:
+    if split == "gemini30":     # the evaluator's --local-pool records and --boxes eval_boxes/gemini30_v1.json
+        pool_dir = Path("data/eval_pools/gemini30_s20261006")
+        recs = {}
+        for i, f in enumerate(sorted((pool_dir / "annotations").glob("*.json"))):
+            ann = json.loads(f.read_text())
+            recs[i] = {"image_path": str(pool_dir / "images" / ann["image"]["file_name"]),
+                       "annotations": ann["annotations"], "ref_exclude": ann.get("ref_exclude")}
+        hb = json.load(open("eval_boxes/gemini30_v1.json"))
+        idxs = sorted(recs)
+    else:
+        recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
+        hb = hand_boxes()
+        idxs = HF14 if split == "hf14" else VAL
+    jobs = [(i, {k: recs[i][k] for k in ("image", "image_path", "annotations", "ref_exclude") if k in recs[i]},
+             hb.get(str(i), {}), fixes.get(str(i), []), mapdir) for i in idxs]
+    with Pool(16) as pool:
         rows = [r for rs in pool.map(sheet_job, jobs) for r in rs]
     out = Path("data/diag") / f"postproc_{split}{'_fix' if fix else ''}.json"
     json.dump(rows, open(out, "w"))

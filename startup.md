@@ -35,7 +35,8 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| **`single18kq-blend30` (best, synthetic only, 2026-10-15)** | **0.9156** | 0.8976 | -- |
+| **`xblend-kq30-kms30` (best, synthetic only, no training: 0.5 kq30 + 0.5 kms30, 2026-10-17; fix v2 0.9290, Gemini30 0.8740)** | **0.9163** | 0.8988 | -- |
+| `single18kq-blend30` (previous best, 2026-10-15; fix v2 0.9221, Gemini30 0.8680) | 0.9156 | 0.8976 | -- |
 | `single18kq-blend50` (2026-10-15) | 0.9088 | 0.8973 | -- |
 | `single18kf-blend50` (HF14-best reference, 2026-10-15) | **0.9157** | 0.8971 | -- |
 | `single18kp-blend50` (GEN 2026-10-15 plan pairs; published, Gemini30 0.8605, 2026-10-15) | 0.8983 | 0.8964 | -- |
@@ -52,6 +53,15 @@ maps on `abshetty/floz-diag`) and make it the best only if, against the current 
 changed generator feature cannot touch (e.g. an elevation under a plan-only change) does not count, but say so. Earlier
 gates: val per-sheet + Gemini30 >= best (single18kp-blend50 passed it with HF14 -0.017, p=0.027); then Gemini30 up and
 neither val per-sheet nor HF14 down at all (single18kq-blend50 failed it on HF14 -0.007, p=0.35).
+
+`xblend-kq30-kms30` (`abshetty/floz-refunet-swint-xblend-kq30-kms30`, round-trip identical 243 / 243; best since 2026-10-17,
+passed the gate): float 0.5 / 0.5 weight average of `single18kq-blend30` and `single18kms-blend30` (the multi-resolution arm,
+`--image-max-size-max 3072`, batch 4; local only, failed the gate on its own). No training; all arms are one-epoch restarts of
+longswiss-swa37-41. HF14 0.9163, fix v2 0.9290, val 0.8988 (per-sheet 0.9364), Gemini30 0.8740. Paired vs single18kq-blend30:
+Gemini30 +0.006 (61 / 16 questions, p=0.011, sign p=2e-7), HF14 +0.0007 (p=0.89), fix v2 +0.007 (p=0.17), val +0.0012 (p=0.08),
+val per-sheet +0.0007; no sheet down > 0.05 (worst Gemini30 17 0.891 -> 0.853, 12 -0.013, HF14 18 -0.012). Gemini30 1 0.557 ->
+0.654, 0 0.771 -> 0.812. Maps (HF14 / val / Gemini30, 51 + 72 + 195) on `abshetty/floz-diag` `xblend-kq30-kms30/`;
+`synth_progress.md` (2026-10-17, "cross-run weight blends"). Rebuild: `scripts/hf_ckpt_to_pth.py` on the Hub repo.
 
 `single18kq-blend30` (`abshetty/floz-refunet-swint-single18kq-blend30`, round-trip verified; made the best by the user
 2026-10-15): 0.3 x `single18kq-dr` + 0.7 x `single18kq-nodr` (float weight blend of the two arms, both on the Hub; no training).

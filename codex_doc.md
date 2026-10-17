@@ -1,38 +1,45 @@
 # Handoff
 
-Last updated: 2026-10-15
+Last updated: 2026-10-17
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds every number, command and the publish gate;
 `synth_progress.md` holds every experiment. This file says only where to pick up and how to set a machine up. Older
 runbooks and "pick up here" sections (2026-09-17 .. 2026-10-14) were removed on 2026-10-15; they are all done, their results
 are in `synth_progress.md`, and the text is in git history (`git show 7bc6aa2:codex_doc.md`).
 
-## Pick up here (2026-10-15)
+## Pick up here (2026-10-17)
 
-**Best model:** `abshetty/floz-refunet-swint-single18kq-blend30` (synthetic only): HF14 0.9156, val per-sheet 0.9357, Gemini30
-0.8680 @4096, hand boxes. It is 0.3 x `-single18kq-dr` + 0.7 x `-single18kq-nodr` (both on the Hub): one-epoch restarts of
-`longswiss-swa37-41` on 18k fresh sheets at GEN 2026-10-15b, with / without `--domain-random`. `single18kf-blend50` (HF14 0.9157)
-is kept as the HF14 reference. Details and the gate: `startup.md`.
+**Best model:** `abshetty/floz-refunet-swint-xblend-kq30-kms30` (synthetic only, no training of its own): HF14 0.9163, HF14 fix v2
+0.9290, val per-sheet 0.9364, Gemini30 0.8740 @4096, hand boxes. It is the float 0.5 / 0.5 weight average of `single18kq-blend30`
+(0.3 x `-single18kq-dr` + 0.7 x `-single18kq-nodr`) and `single18kms-blend30` (same with `-single18kms-{dr,nodr}`, the
+multi-resolution arms); all arms are one-epoch restarts of `longswiss-swa37-41` and all are on the Hub. Details and the gate:
+`startup.md`. **Always score and gate HF14 with label fix v2 alongside plain HF14** (the user, 2026-10-17).
 
-**The standard experiment** is `TAG=<name> [GEN="..."] ./run_single_pass.sh` (~8 min pool, ~20 min per arm, ~3 min scoring on a
-GH200; ids 600000+, seed 6, so runs at different generator versions are paired sheet for sheet). It blends 50/50; the best blend
-is now DR 0.3 / no-DR 0.7, so score that ratio too (float `0.3 * dr + 0.7 * nodr` of the `model` tensors, eval only, ~3 min).
-Compare with `scripts/paired_compare.py` against `eval_baselines/single18kq-blend30_*`, apply the gate in `startup.md`, and
-publish (Hub + HF14 / val / Gemini30 `--save-probs` maps on `abshetty/floz-diag` `<tag>/<split>_4096/{metrics.json,probs/}`)
-only if it passes.
+**The standard experiment** is `TAG=<name> [GEN="..."] [POOL=...] [TRAINX="..."] [BATCH=n] ./run_single_pass.sh` (~8 min pool,
+~20 min per arm at batch 8, ~3 min scoring on a GH200; ids 600000+, seed 6, so runs at different generator versions are paired sheet
+for sheet). It blends 50/50 and scores without `--save-probs`; also build the 0.3 / 0.7 (DR / no-DR) blend, and -- the cheap win of
+2026-10-17 -- the 0.5 / 0.5 blend of that with the current best's components. Compare with `scripts/paired_compare.py` against
+`eval_baselines/xblend-kq30-kms30_*`, apply the gate, and publish (Hub + HF14 / val / Gemini30 `--save-probs` maps on
+`abshetty/floz-diag` `<tag>/<split>_4096/{metrics.json,probs/}`) only if it passes. Publish the arms too, so blends can be rebuilt.
 
-**Unfinished:** `single18kw` (wing colour pairs back on: `GEN="--plan-source data/reference/swiss_dwellings/layouts.pkl.gz
---near-pairs 0.6"`). Only its nodr arm exists (`abshetty/floz-refunet-swint-single18kw-nodr`, not scored). To finish: fetch it to
-`data/runs/ck_single18kw_nodr/epoch_0.pth`, `touch data/runs/ck_single18kw_nodr/.done`, run the script with that TAG / GEN (it
-rebuilds the pool, trains only dr, blends, scores), then score the 0.3 / 0.7 blend; compare with single18kq.
+**Cross-run weight blends are the current lever** (`synth_progress.md` 2026-10-17): kms30 and kw30 each failed the gate alone
+(Gemini30 17 collapses in both), but 0.5 kq30 + 0.5 kms30 passes with Gemini30 +0.006. 0.5 kq30 + 0.5 kw30 ties (Gemini30 +0.0000,
+sheet 1 -0.075). Untried: other weights (e.g. 0.6 / 0.4), kq30 + kms30 + kf / kp arms, soups of more one-epoch runs.
 
-**Open problems** (`synth_progress.md` 2026-10-14 / 15):
-- HF14 12 q1 (turned deck boards) 0.93 in kf, 0.83-0.84 since the plan direction pairs.
-- HF14 2 and Gemini30 8 (elevations) fell > 0.05 in every pool with the plan pairs (kp, kq) -- unexplained, since the pairs
-  touch only plans.
-- Gemini30 1 (pale board-and-batten) swings 0.30-0.65 between models; grey / flat-background / soften rescue it.
+**Post-processing / polygons:** the frontend receives polygons, not masks (the user, 2026-10-17). Linear upsample + fill holes <= 4096
+px is +0.006 val / +0.002 HF14 / +0.006 Gemini30 (23 sheets up, 1 down 0.001), not adopted (protocol change); speck drop + small-hole
+fill take predictions from ~12-44 components to ~4. Next: a polygon stage (speck drop, hole fill, contour trace, simplify) scored as
+the model output -- IoU of the rasterised polygons. `scripts/postproc_probe.py` (hf14 / val / gemini30).
+
+**User's submission target:** "0.95 on real" (protocol -- HF14 vs val, per question vs per sheet -- not pinned down yet).
+
+**Open problems** (`synth_progress.md` 2026-10-14 .. 17):
+- Gemini30 17 (hip-roof shingle plan, native 2400 px) collapses to blotchy half-confidence in both kms and kw (0.89 -> 0.68-0.70);
+  only kq gets it right. Fragile, not specific to multi-res.
+- Scale sensitivity: 2048 vs 4096 swings sheets +-0.17-0.29; multi-res training at [2048, 3072] did not shrink them (batch 8 OOMs
+  with the range; no grad accumulation / checkpointing in `train_refunet.py`).
+- HF14 12 q1 / q3 (turned deck boards) and HF14 2 / Gemini30 8 (elevations) move with the plan pairs; Gemini30 1 swings 0.30-0.69.
 - Gemini30 0: tile reference takes the sofas / chairs. HF14 18: the two roofs merge under label fix v2.
-- More no-DR weight raises Gemini30 every time; DR 0.3 also raised HF14 for kq. The ratio has only been tried at 0.3 / 0.5 / 0.7.
 
 ## Machine setup (fresh GH200, ~15 min)
 
