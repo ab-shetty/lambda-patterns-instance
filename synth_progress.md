@@ -2289,5 +2289,4 @@ the horizontal / vertical ink run through the pixel; integer px), at the resolut
 - **Correction to the line counterfactual above:** a 3x3 max filter removes ~1 px per side, which nearly erases Gemini's 2-3 px
   lines; the "thin" collapse (0.86 -> 0.53) is texture being deleted, not evidence that the model fails on thin lines. "thick"
   and "blur" move the lines further from training, yet blur still helped 3 of 4 sheets -- softening, not width, is what helps
-  there. The trim bleed (4-25 px at 4096) is ~2-12 px at 2048, i.e. 1-3 cells of the stride-4 mask head: consistent with a
-  model trained at 2048 resolving boundaries at its own scale.
+  there. The trim bleed (4-25 px at 4096) is ~2-12 px at 2048 -- a few pixels at the scale the model was trained at.
