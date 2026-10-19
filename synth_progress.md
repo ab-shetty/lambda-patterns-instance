@@ -2267,3 +2267,27 @@ maps (20: 0.886 vs 0.885). Scratchpad `lc/`.
   what scale was buying is line weight relative to the model's training distribution.
 - Not yet known: whether Gemini's lines at 4096 are thinner than synthetic lines at the 2048 training size (measure next), and
   whether inference blur holds on all of Gemini30 / HF14 / val. 12 hand-picked questions, one model: a direction, not a size.
+
+### 2026-10-19 (CPU) -- ink line width at model input: Gemini @4096 has ~2.5 px lines, training sheets 1-2 px -- the scale gap again
+
+Ink pixels inside labelled pattern regions (labels eroded 10 px; ink = > 60 grey levels darker than a 9x9 local max; width = min of
+the horizontal / vertical ink run through the pixel; integer px), at the resolution the model sees. Synthetic = the 60 GEN
+2026-10-15b elevations; real 28 = HF14 + val. Scratchpad `lw/lw.py`.
+
+| at model input | line width median (sheet p25-p75) | ink contrast | ink share of pattern area |
+|---|---:|---:|---:|
+| synthetic @2048 (training), mono | 1.0 (1-1) | 82 | 0.103 |
+| synthetic @2048 (training), colour | 2.0 (2-4) | 98 | 0.026 |
+| synthetic @2048 x0.85 (DR arm mean) | 1.0 (1-2.25) | 84 | 0.059 |
+| **Gemini30 @4096 (eval)** | **2.5 (2-3)** | 98 | 0.082 |
+| Gemini30 @2048 | 1.0 (1-2) | 98 | 0.085 |
+| real 28 @4096 (eval) | 2.0 (2-2.25) | 75 | 0.035 |
+
+- Relative to the pattern (ink share) Gemini's lines are not unusual (0.08, between synthetic mono and colour). In pixels, Gemini at
+  4096 draws its lines ~2.5x as wide as the training sheets at 2048; at 2048 it matches training. So the "line weight" effect is
+  the 2026-10-15 scale mismatch seen from another side, not a separate drawing-style gap.
+- **Correction to the line counterfactual above:** a 3x3 max filter removes ~1 px per side, which nearly erases Gemini's 2-3 px
+  lines; the "thin" collapse (0.86 -> 0.53) is texture being deleted, not evidence that the model fails on thin lines. "thick"
+  and "blur" move the lines further from training, yet blur still helped 3 of 4 sheets -- softening, not width, is what helps
+  there. The trim bleed (4-25 px at 4096) is ~2-12 px at 2048, i.e. 1-3 cells of the stride-4 mask head: consistent with a
+  model trained at 2048 resolving boundaries at its own scale.
