@@ -2290,3 +2290,20 @@ the horizontal / vertical ink run through the pixel; integer px), at the resolut
   lines; the "thin" collapse (0.86 -> 0.53) is texture being deleted, not evidence that the model fails on thin lines. "thick"
   and "blur" move the lines further from training, yet blur still helped 3 of 4 sheets -- softening, not width, is what helps
   there. The trim bleed (4-25 px at 4096) is ~2-12 px at 2048 -- a few pixels at the scale the model was trained at.
+
+### 2026-10-19 (CPU) -- `--hires-crop P`: train at the 4096 eval scale without 4096 memory (implemented, untested on GPU)
+
+`train_refunet.py --hires-crop P` (default 0): with probability P a training sample is the sheet at twice `--image-max-size`
+(long side 4096 at 2048 -- the scale every eval set is scored at), cropped to at most 2048 x 2048 around the reference box, the
+labels and the anchor clipped to the crop; references are still cut from the full-resolution sheet; DR shrink / jitter and the
+flips apply after the crop as before. Motivation: the scale gap (2026-10-15, 10-17 kms, 10-19 line width: Gemini @4096 shows
+~2.5 px lines where the 2048 training sheets show 1-2 px). The 50/50 mix keeps whole-sheet 2048 samples for context and for the
+Gemini sheets that prefer 2048.
+- Checked on the 60 GEN 2026-10-15b elevations: P = 0 gives byte-identical samples to the old code (12 / 12, DR on); P = 1:
+  long side <= 2048 on all 60, the reference box lies inside the crop and inside the target on every sample, crops look right.
+- **Not "the same pixels per sample":** whole elevation sheets at 2048 are wide (median 1.92 M px, max 3.93 M); crops are nearly
+  square (median 3.84 M, max 4.19 M). Peak memory should be about the same (+7% at the max, collate pads to the batch max), but
+  crop samples cost up to ~2x compute: at P = 0.5 expect ~1.5x time per arm (~30 min instead of ~20).
+- Screen: `TAG=single18khc POOL=data/synthetic/single18kq_s600000 TRAINX="--hires-crop 0.5" ./run_single_pass.sh` (kq pool, kq recipe,
+  batch 8), blend30; gate vs xblend-kq30-kms30; also 0.5 xblend + 0.5 khc30; also score khc30 @2048 to see whether the per-sheet
+  2048-vs-4096 swings shrink (kms did not).

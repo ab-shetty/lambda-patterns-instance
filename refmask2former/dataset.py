@@ -287,8 +287,14 @@ class InstanceSegDataset(Dataset):
                  realism_aug=False, domain_random=False, scale_matched_ref=False,
                  dr_scale_min=0.4, small_ref_prob=0.0,
                  repeat_reference_prob=0.0, refs_per_image=0, ref_min_side=0,
-                 legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0):
+                 legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0, hires_crop=0.0):
         self.records = records
+        # --hires-crop P (training only, 0 = off, byte-identical): with probability P a sample is the sheet at TWICE
+        # the training scale (long side 4096 at --image-max-size 2048, the scale every eval set is scored at), cropped
+        # to at most image_max_size x image_max_size around the reference box, labels clipped to the crop. The same
+        # pixels per sample as a whole sheet, so batch, LR and steps are unchanged. Gemini30 draws ~2.5 px lines at
+        # 4096 where the training sheets show 1-2 px at 2048 (2026-10-19, CPU).
+        self.hires_crop = hires_crop if augment else 0.0
         # --image-max-size-max (training only, 0 = off, byte-identical): each training sheet's long side is drawn
         # uniformly in [image_max_size, image_max_size_max] instead of fixed. Scored at 4096 while trained at 2048, the
         # model is scale-sensitive: Gemini30 sheets swing +-0.17 between 2048 and 4096 inputs (2026-10-15, CPU).
@@ -336,6 +342,22 @@ class InstanceSegDataset(Dataset):
         # ref_seed selects WHICH fixed reference; the eval harness sweeps it over
         # several values and averages for a robust, low-variance number.
         self.ref_seed = 0
+
+    def _hires_window(self, ref_box_mask, h0, w0, scale, side):
+        """--hires-crop: a native-pixel window that is at most side x side once resized by `scale` and contains the
+        reference box (centred on it if the box is larger than the window). None if there is no box."""
+        ys, xs = np.nonzero(ref_box_mask)
+        if len(xs) == 0:
+            return None
+        cn = int(side / scale)
+        out = []
+        for lo, hi, n in ((xs.min(), xs.max() + 1, w0), (ys.min(), ys.max() + 1, h0)):
+            c = min(n, cn)
+            a, b = max(0, hi - c), min(lo, n - c)
+            v = random.randint(a, b) if a <= b else min(max(0, (lo + hi - c) // 2), n - c)
+            out.append((v, v + c))
+        (x0, x1), (y0, y1) = out
+        return x0, y0, x1, y1
 
     def _ref_cands(self, cand, masks, long_side):
         """--ref-min-side N (default 32 since 2026-10-08): references come only from pieces that fit
@@ -474,7 +496,20 @@ class InstanceSegDataset(Dataset):
         if self.image_max_size_max > self.image_max_size:
             side = random.randint(self.image_max_size, self.image_max_size_max)
         scale = side / max(h0, w0)
-        nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
+        crop = None
+        if self.hires_crop > 0 and not multi and target_cat is not None and random.random() < self.hires_crop:
+            # --hires-crop: the sheet at 2x scale (long side 4096 for 2048 training, the scale it is scored at),
+            # cropped to at most side x side around the reference box. Same pixels per sample as a whole sheet.
+            scale = 2 * side / max(h0, w0)
+            crop = self._hires_window(ref_box_mask, h0, w0, scale, side)
+        if crop is not None:
+            nx0, ny0, nx1, ny1 = crop
+            image, ref_box_mask = image[ny0:ny1, nx0:nx1], ref_box_mask[ny0:ny1, nx0:nx1]
+            masks = [m[ny0:ny1, nx0:nx1] for m in masks]
+            h0c, w0c = ny1 - ny0, nx1 - nx0
+            nh, nw = max(1, round(h0c * scale)), max(1, round(w0c * scale))
+        else:
+            nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
         image_r = cv2.resize(image, (nw, nh), interpolation=cv2.INTER_LINEAR)
         if masks:
             masks_arr = np.stack([cv2.resize(m, (nw, nh), interpolation=cv2.INTER_NEAREST)
@@ -755,7 +790,7 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                    domain_random=False, repeat_reference_prob=0.0,
                    scale_matched_ref=False, dr_scale_min=0.4,
                    small_ref_prob=0.0, refs_per_image=0, ref_min_side=0,
-                   legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0):
+                   legacy_ref_jitter=False, ref_sample="family", image_max_size_max=0, hires_crop=0.0):
     n = len(records)
     idx = list(range(n))
     rng = random.Random(seed)
@@ -775,7 +810,8 @@ def build_datasets(records, image_max_size=1024, ref_size=224, train_split=0.9,
                                   ref_min_side=ref_min_side,
                                   legacy_ref_jitter=legacy_ref_jitter,
                                   ref_sample=ref_sample,
-                                  image_max_size_max=image_max_size_max)
+                                  image_max_size_max=image_max_size_max,
+                                  hires_crop=hires_crop)
     # Val stays clean (augment=False) so synth-val measures the data, not the aug.
     val_ds = InstanceSegDataset(records, val_idx, image_max_size, ref_size,
                                 augment=False, grayscale=grayscale,
