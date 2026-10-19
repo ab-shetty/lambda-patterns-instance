@@ -8,6 +8,7 @@ from refmask2former import load_parquet_records
 from refmask2former.dataset import render_instance_mask
 HF14 = [12, 16, 27, 7, 11, 25, 23, 1, 18, 2, 0, 3, 14, 24]
 VAL = [4, 5, 6, 8, 9, 10, 13, 15, 17, 19, 20, 21, 22, 26]
+WITH_BOX = [False]      # pmap.py sets True to also get the reference box (native x, y, w, h)
 MAPS = Path("data/floz-diag/xblend-kq30-kms30")
 
 def jobs(split):
@@ -44,7 +45,7 @@ def load(job):
         bits, n = sh["targets"][cat]
         tgt = np.unpackbits(bits, count=h0 * w0).reshape(h0, w0).astype(bool)
         p = np.load(Path(mapdir) / f"{idx:03d}_{ref_idx:03d}.npz")["prob"]
-        qs.append((ref_idx, cat, tgt, p))
+        qs.append((ref_idx, cat, tgt, p) if not WITH_BOX[0] else (ref_idx, cat, tgt, p, box))
     return idx, img, anyann, qs
 
 def ink_map(img, T=60):
@@ -55,3 +56,15 @@ def ink_map(img, T=60):
 def edge(m):
     m8 = m.astype(np.uint8)
     return (cv2.dilate(m8, np.ones((3, 3), np.uint8)) != cv2.erode(m8, np.ones((3, 3), np.uint8))) & m
+
+def ink_map_v2(img, k=7, min_len=12):
+    """Thin dark strokes only: black top-hat (closing - image, ellipse k) responds to lines narrower than k and not to the edges
+    of flat paint; threshold from the sheet's own stroke contrast (half its 99.5th percentile, clipped to 15..60) so faint-line
+    sheets register; ink components whose bounding box is shorter than min_len on both sides (fill grain, stucco dots) dropped."""
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    bh = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    T = float(np.clip(0.5 * np.percentile(bh, 99.5), 15, 60))
+    ink = bh > T
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    keep = np.zeros(n, bool); keep[1:] = np.maximum(st[1:, 2], st[1:, 3]) >= min_len
+    return keep[lab]

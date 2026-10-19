@@ -45,3 +45,4 @@ review_pairs/*/
 
 # Visual audits are regenerable; this branch keeps them under gitignored data/
 review_hf14/
+scripts/pp_probe/rows_*.json

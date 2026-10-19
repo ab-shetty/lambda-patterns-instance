@@ -12,8 +12,9 @@ import sys, json
 from multiprocessing import Pool
 import cv2, numpy as np
 sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0])
-from common import jobs, load, ink_map
+from common import jobs, load, ink_map, ink_map_v2
 T = 0.35
+INK = "v1"
 
 def fill_holes(b, max_area):
     inv = (~b).astype(np.uint8); n, lab, st, _ = cv2.connectedComponentsWithStats(inv, connectivity=4)
@@ -51,7 +52,7 @@ def sheet(job):
     idx, img, anyann, qs = load(job)
     h0, w0 = img.shape[:2]
     I = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
-    ink = ink_map(img)
+    ink = (ink_map_v2 if INK == "v2" else ink_map)(img)
     ncell, cells, cst, _ = cv2.connectedComponentsWithStats((~ink).astype(np.uint8), connectivity=4)
     big = cst[:, 4] > 0.02 * h0 * w0
     _, near = cv2.distanceTransformWithLabels(ink.astype(np.uint8) * 255 ^ 255, cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL) \
@@ -89,9 +90,11 @@ def sheet(job):
     return rows
 
 if __name__ == "__main__":
+    if sys.argv[1].startswith("--ink="):
+        INK = sys.argv.pop(1)[6:]
     for split in sys.argv[1:]:
         with Pool(2) as pool: rows = [r for rs in pool.map(sheet, jobs(split)) for r in rs]
-        json.dump(rows, open(f"{sys.argv[0].rsplit('/', 1)[0]}/rows_{split}.json", "w"))
+        json.dump(rows, open(f"{sys.argv[0].rsplit('/', 1)[0]}/rows_{split}_{INK}.json", "w"))
         b = np.array([r["base"] for r in rows])
         def ps(k):
             by = {}
