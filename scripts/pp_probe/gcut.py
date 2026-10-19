@@ -28,8 +28,20 @@ def gcut(img, M, P, b, it):
     out = M.copy(); out[y1:y2, x1:x2] = (mc == cv2.GC_FGD) | (mc == cv2.GC_PR_FGD)
     return out
 
+FEAT = [False]
+
+def feat_img(img):
+    """Texture image for GrabCut on line drawings: grey, hatch density (black-hat averaged over 15 px), local contrast."""
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    bh = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))).astype(np.float32)
+    dens = cv2.blur(bh, (15, 15)); gf = g.astype(np.float32)
+    sd = np.sqrt(np.maximum(cv2.blur(gf * gf, (15, 15)) - cv2.blur(gf, (15, 15)) ** 2, 0))
+    n = lambda a: np.clip(a / max(np.percentile(a, 99.5), 1e-6) * 255, 0, 255).astype(np.uint8)
+    return np.dstack([g, n(dens), n(sd)])
+
 def sheet(job):
     idx, img, anyann, qs = load(job); h0, w0 = img.shape[:2]; rows = []
+    if FEAT[0]: img = feat_img(img)
     for ref, cat, tgt, p in qs:
         s = p.shape[1] / w0
         P = cv2.resize(p.astype(np.float32) / 255, (w0, h0), interpolation=cv2.INTER_LINEAR)
@@ -40,9 +52,10 @@ def sheet(job):
     return rows
 
 if __name__ == "__main__":
+    if sys.argv[1] == "--feat": FEAT[0] = True; sys.argv.pop(1)
     split = sys.argv[1]
     with Pool(int(sys.argv[2]) if len(sys.argv) > 2 else 1) as pool: rows = [r for rs in pool.imap(sheet, jobs(split)) for r in rs]
-    json.dump(rows, open(f"data/diag/rows_gcut_{split}.json", "w"))
+    json.dump(rows, open(f"data/diag/rows_gcut{'feat' if FEAT[0] else ''}_{split}.json", "w"))
     b = np.array([r["ref"] for r in rows])
     for k in [k for k in rows[0] if k not in ("i", "q", "ref")]:
         a = np.array([r[k] for r in rows]); d = a - b
