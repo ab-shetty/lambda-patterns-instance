@@ -2375,3 +2375,13 @@ Scripts: scripts/pp_probe/{morph,gcut,inksplit,budget,combo,loso}.py; rows in da
 - **Pre-registered composition (opening k15 t0.7 -> watershed b6), one read** vs the evaluator mask:
   Gemini30 +0.0119 (default +0.0082), val +0.0050 (default +0.0061), HF14 -0.0030 (default +0.0021).
   Does not transfer; not adopted. The default (scripts/polygonize.py) stays.
+- **Learned band refinement (scripts/pp_probe/learnref.py, 2026-10-19).** Gradient-boosted trees (sklearn HGB) classify every
+  pixel within 4 native px of lin_fill's edge from 25 classical features (probability, its smoothing / gradient / Laplacian,
+  signed distance, grey, black-hat 7 / 15, ink v2, ink distance / density, and the local inside-vs-outside Lab colour and
+  black-hat texture contrast over 21 / 61 px windows = a per-pixel GrabCut). Trained on Gemini30 only.
+  Gemini30 5-fold sheet-grouped CV: **+0.0043** vs lin_fill (82 up / 32 down; 2 sheets down > 0.005); top features P, 61-px colour
+  contrast, grey, black-hat 15. One read (vs the evaluator mask): **val -0.0007** (default +0.0061), **HF14 -0.0039** (default
+  +0.0021). Same pattern as every Gemini-tuned rule: Gemini gains, real loses. Not adopted.
+- **Conclusion:** the limit is the training signal for the post-processor, not the method. Gemini30 boundaries do not behave like
+  the real 28's (despite the same half-line label convention), so anything fitted on Gemini transfers negatively. CascadePSP is
+  too slow on CPU (fast mode 348 s per question) and moved to the GPU paste with TTA.
