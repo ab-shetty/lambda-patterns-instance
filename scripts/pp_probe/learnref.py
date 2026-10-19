@@ -73,6 +73,10 @@ def prep(job):
         if not len(ys): continue
         y1, y2, x1, x2 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
         X.append(q_feats(F, P, lf, band, y1, y2, x1, x2)); Y.append(tgt[y1:y2, x1:x2][band[y1:y2, x1:x2]]); Q.append(np.full(len(ys), qi, np.int16))
+    if X and os.environ.get("MAXS"):
+        X, Y, Q = np.concatenate(X), np.concatenate(Y), np.concatenate(Q)
+        k = np.random.default_rng(idx).choice(len(Y), min(int(os.environ["MAXS"]), len(Y)), replace=False)
+        X, Y, Q = [X[k]], [Y[k]], [Q[k]]
     if X:
         np.savez(OUT / f"{idx:03d}_{SPLIT[0]}.npz", X=np.concatenate(X), Y=np.concatenate(Y), Q=np.concatenate(Q))
     return meta
@@ -80,7 +84,7 @@ def prep(job):
 
 def apply_sheet(job):
     import joblib
-    clf = joblib.load(OUT / "clf_gemini30.joblib")
+    clf = joblib.load(OUT / os.environ.get("CLF", "clf_gemini30.joblib"))
     idx, img, anyann, qs = load(job); h0, w0 = img.shape[:2]; F = sheet_feats(img); rows = []
     for ref, cat, tgt, p in qs:
         s = p.shape[1] / w0; ha = 4096 / s / s
@@ -178,10 +182,16 @@ if __name__ == "__main__":
     elif cmd == "apply":
         split = sys.argv[2]
         with Pool(int(sys.argv[3]) if len(sys.argv) > 3 else 2) as pool: rows = [r for rs in pool.imap(apply_sheet, jobs(split)) for r in rs]
-        json.dump(rows, open(f"data/diag/rows_learnref_{split}.json", "w"))
+        json.dump(rows, open(f"data/diag/rows_learnref_{split}{os.environ.get('TAG', '')}.json", "w"))
         by = {}
         for r in rows: by.setdefault(r["i"], []).append(r)
         for k in ("base", "ref", "learn"):
             d = np.array([r[k] - r["base"] for r in rows]); sd = np.array([np.mean([r[k] - r["base"] for r in v]) for v in by.values()])
             print(f"{split} {k:5s} q-mean {np.mean([r[k] for r in rows]):.4f} ({d.mean():+.4f} vs evaluator; per-sheet {sd.mean():+.4f}; "
                   f"sheets down >0.005 {(sd < -.005).sum()}, worst sheet {sd.min():+.3f})")
+    elif cmd == "fit":   # fit.py OUTNAME SPLIT [SPLIT ...]: train on every stored band sample of those splits
+        import joblib
+        data = {}
+        for sp in sys.argv[3:]:
+            for i, v in load_split(sp)[1].items(): data[(sp, i)] = v
+        joblib.dump(fit(data, sorted(data)), OUT / sys.argv[2]); print("fit", sys.argv[2], len(data), "sheets")
