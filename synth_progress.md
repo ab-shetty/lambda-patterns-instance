@@ -2307,3 +2307,36 @@ Gemini sheets that prefer 2048.
 - Screen: `TAG=single18khc POOL=data/synthetic/single18kq_s600000 TRAINX="--hires-crop 0.5" ./run_single_pass.sh` (kq pool, kq recipe,
   batch 8), blend30; gate vs xblend-kq30-kms30; also 0.5 xblend + 0.5 khc30; also score khc30 @2048 to see whether the per-sheet
   2048-vs-4096 swings shrink (kms did not).
+
+### 2026-10-19 (CPU) -- mask -> polygon post-processing: linear + hole fill + polygon is +0.002..0.008 everywhere; cell snapping +0.017 on Gemini30 only
+
+The frontend gets polygons, so every method is scored as the rasterised polygon output (IoU vs labels), on the best model's
+(xblend-kq30-kms30) @4096 maps; chosen on val, read once on HF14 / fix v2 / Gemini30. Scripts `scripts/pp_probe/`
+(common / align / stroke / methods; run `python3 scripts/pp_probe/methods.py val`), production function `scripts/polygonize.py`.
+
+**Do labels follow the drawn lines?** Yes. Ink = > 60 grey levels below a 9x9 local max. Label-edge pixels within 2 px of ink:
+val 0.93, HF14 0.94, Gemini30 0.99 (prediction edges 0.95 / 0.91 / 0.86). About half the boundary-band errors are the stroke
+pixels themselves (val 0.57, HF14 0.50, Gemini30 0.59), and labels split the boundary stroke down the middle: share of stroke
+pixels (within 3 px of the label edge) inside the label, median val 0.54, HF14 0.59, Gemini30 0.49 -- predictions 0.60 / 0.58 /
+**0.73** (Gemini30's trim bleed again).
+
+| IoU (mean over questions), delta vs the evaluator's nearest-upsampled mask | val (tune) | HF14 | HF14 fix v2 | Gemini30 |
+|---|---:|---:|---:|---:|
+| base (evaluator) | 0.8988 | 0.9163 | 0.9290 | 0.8740 |
+| linear upsample, threshold 0.35 | +0.0049 | +0.0015 | +0.0015 | +0.0034 |
+| + fill holes <= 4096 inference px | +0.0058 | +0.0021 | +0.0019 | +0.0059 |
+| **+ polygons (drop < 0.2%, contours with holes, Douglas-Peucker 1 px)** | **+0.0061** | **+0.0021** | **+0.0021** | **+0.0082** |
+| guided filter on the image, r = 4 native px (r = 8 / 16 lose on val) | +0.0041 | +0.0018 | +0.0020 | -0.0020 |
+| cell voting (cells = non-ink components, < 2% of the sheet; mean prob > 0.5; ink follows its nearest cell pixel) | +0.0036 | -0.0031 | -0.0020 | +0.0123 |
+| hybrid: cell decision within 4 px of the filled linear mask's edge, filled linear elsewhere | +0.0037 | +0.0010 | +0.0018 | +0.0152 |
+| hybrid 8 px + polygons | +0.0024 | +0.0001 | +0.0011 | **+0.0166** |
+
+- **Default polygon output: linear + fill + polygons** (`scripts/polygonize.py`): up on every set, questions up / down val 26 / 1,
+  HF14 15 / 3, Gemini30 107 / 2, worst single question -0.023 (HF14). Median 180 (HF14) - 440 (Gemini30) vertices per question.
+- **Cell snapping is a Gemini30 tool for now:** hybrid +0.009-0.011 over linear + fill on Gemini30 (148 / 9 questions) but -0.002
+  val, -0.001 HF14 vs linear + fill. Its losers are sheets where the ink map is wrong: Gemini30 1 (fill grain), 17 (shingle roof),
+  val 17 (markup paint), HF14 18 q8, HF14 14 (faint lines). A noise-robust ink map (median-filtered before thresholding, adaptive
+  threshold for faint lines) is the next thing to try before it can be a default.
+- The ceiling is lower than the 0.05-0.06 "boundary + under-filled" budget suggested: labels already split strokes at the line
+  centre and prediction edges already sit on ink 86-95% of the time; what remains in the band is mostly which side of a stroke
+  pixels fall on (worth ~1-2 px of edge).
