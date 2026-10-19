@@ -2340,3 +2340,9 @@ pixels (within 3 px of the label edge) inside the label, median val 0.54, HF14 0
 - The ceiling is lower than the 0.05-0.06 "boundary + under-filled" budget suggested: labels already split strokes at the line
   centre and prediction edges already sit on ink 86-95% of the time; what remains in the band is mostly which side of a stroke
   pixels fall on (worth ~1-2 px of edge).
+- **Sturdier ink map (v2) does not rescue cell snapping** (`--ink=v2`: black-hat k = 7, per-sheet threshold = half the 99.5th
+  percentile clipped to 15-60, ink pieces < 12 px dropped; designed from the failure cases, not tuned). Hybrid 4 px vs linear +
+  fill: val -0.0026 (v1 -0.0021; val 17 now -0.013 per sheet: v2 misses its faint lavender board lines, so cells merge), HF14
+  +0.0002 (v1 -0.0011), Gemini30 +0.0095 (v1 +0.0093; Gemini30 1 still -0.04 -- its board lines are found by both; the loss is
+  elsewhere). Hybrid 8 px gets worse with v2 on val (-0.013). Line snapping stays a Gemini30-only tool; not pursued further
+  without a tuning set that is not val / HF14.
