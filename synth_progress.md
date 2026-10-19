@@ -2385,3 +2385,16 @@ Scripts: scripts/pp_probe/{morph,gcut,inksplit,budget,combo,loso}.py; rows in da
 - **Conclusion:** the limit is the training signal for the post-processor, not the method. Gemini30 boundaries do not behave like
   the real 28's (despite the same half-line label convention), so anything fitted on Gemini transfers negatively. CascadePSP is
   too slow on CPU (fast mode 348 s per question) and moved to the GPU paste with TTA.
+- **Cross-fit on the real sheets (user's call, 2026-10-19):** the same learned band refinement trained on one real split, scored
+  on the other (sampled 150k band pixels per sheet; threshold 0.5, band 4 px fixed in advance). vs the default (lin_fill+poly),
+  Wilcoxon per question:
+  | train -> test | per question | per sheet |
+  |---|---|---|
+  | val -> HF14 | +0.0032 (22 up / 8 down, p=0.018) | +0.0031 (worst -0.005) |
+  | val -> HF14 fix v2 | +0.0024 (p=0.056) | +0.0029 |
+  | HF14 -> val | **-0.0032** (10 / 31, p=0.003) | +0.0019 (worst -0.013) |
+  | val+Gemini -> HF14 | +0.0009 (p=0.17) | +0.0010 |
+  | val+Gemini -> HF14 fix v2 | +0.0023 (p=0.07) | +0.0015 |
+  | HF14+Gemini -> val | -0.0009 (p=0.56) | +0.0028 |
+  Real boundaries are learnable a little (val -> HF14 holds out), but the gain is ~+0.003 and does not hold in the other direction
+  per question; adding Gemini dilutes it. Far from the +0.02 goal; not adopted.
