@@ -2360,3 +2360,18 @@ pieces whose peak P < m. **Tuned on Gemini30 only** (leave-one-sheet-out CV); HF
   (0.7 on 30 / 30).
 - **Read once:** box-relative 0.5: val -0.0004, HF14 -0.0055 (2 up / 13 down), fix v2 -0.0043. Prune 0.7: val +0.0002, HF14
   -0.0003, fix v2 -0.0001. Neither is adopted. The threshold 0.35 and `scripts/polygonize.py` (linear + fill + polygons) stay.
+
+## Prediction-informed classical post-processing (2026-10-19, goal: +0.03 Gemini30, +0.02 val / HF14; tuned on Gemini30 only)
+Scripts: scripts/pp_probe/{morph,gcut,inksplit,budget,combo,loso}.py; rows in data/diag/. All deltas are per-question mean IoU.
+- **Oracle ceilings over the default (lin_fill+poly)**: label-perfect pixels within 2 px of the predicted edge = Gemini +0.028,
+  val +0.035, HF14 +0.025 (4 px: +0.041 / +0.049 / +0.035); perfect removal of false components = +0.019 / +0.028 / +0.004.
+  So +0.02 on HF14 needs ~70% of a perfect 2-px boundary fix.
+- **Gemini30 (vs default, LOSO)**: orthogonal regularisation +0.0004; snapping axis edges onto drawn lines -0.005 (wrong-line
+  snaps, worst -0.25); gated closing 0 / negative; rectangle fit 0; gated opening (k15, p<0.7) +0.0026; marker watershed over
+  stroke darkness (6 px band) +0.0055; ink split +0.0009; GrabCut seeded by the prediction b8 -0.003 / b20 -0.040 / b40 -0.078
+  (+0.10..+0.30 on the 4 worst sheets, large losses elsewhere; no label-free uncertainty measure predicts which, |rho| <= 0.07);
+  GrabCut on a texture image worse. False components (meanP median 0.64 vs 0.98 for true ones) cannot be dropped without
+  dropping as much true area.
+- **Pre-registered composition (opening k15 t0.7 -> watershed b6), one read** vs the evaluator mask:
+  Gemini30 +0.0119 (default +0.0082), val +0.0050 (default +0.0061), HF14 -0.0030 (default +0.0021).
+  Does not transfer; not adopted. The default (scripts/polygonize.py) stays.
