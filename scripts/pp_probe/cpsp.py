@@ -10,7 +10,7 @@ from methods import fill_holes, polygons, iou
 import segmentation_refinement as refine
 T = 0.35
 torch.set_num_threads(int(os.environ.get("THREADS", "4")))
-R = refine.Refiner(device="cpu")
+R = refine.Refiner(device="cuda" if torch.cuda.is_available() else "cpu")   # CPU: ~6 min per question even in fast mode -- run on the GPU
 
 def sheet(job):
     idx, img, anyann, qs = load(job); h0, w0 = img.shape[:2]; rgb = img[:, :, ::-1].copy(); rows = []
@@ -38,7 +38,7 @@ def sheet(job):
     return rows
 
 if __name__ == "__main__":
-    split = sys.argv[1]; only = [int(x) for x in sys.argv[2].split(",")] if len(sys.argv) > 2 else None
+    split = sys.argv[1]; only = [int(x) for x in sys.argv[2].split(",")] if len(sys.argv) > 2 and sys.argv[2] != "all" else None
     rows = [r for j in jobs(split) if only is None or j[0] in only for r in sheet(j)]
     json.dump(rows, open(f"data/diag/rows_cpsp_{split}.json", "w"))
     b = np.array([r["ref"] for r in rows])
