@@ -2346,3 +2346,17 @@ pixels (within 3 px of the label edge) inside the label, median val 0.54, HF14 0
   +0.0002 (v1 -0.0011), Gemini30 +0.0095 (v1 +0.0093; Gemini30 1 still -0.04 -- its board lines are found by both; the loss is
   elsewhere). Hybrid 8 px gets worse with v2 on val (-0.013). Line snapping stays a Gemini30-only tool; not pursued further
   without a tuning set that is not val / HF14.
+
+### 2026-10-19 (CPU) -- probability-map rules: tuned on Gemini30 only, none transfers; the polygonize.py default stands
+
+`scripts/pp_probe/pmap.py` (per question, all on the linear-upsampled P, then fill holes <= 4096 inference px, vs P > 0.35):
+global thresholds 0.15-0.6, Otsu, box-relative (P > a x median P in the reference box), hysteresis (lo 0.1-0.25, core 0.5),
+Gaussian smoothing 1.5-6 px, half-height of the local max (31 px), Laplacian sign (boundary at the curvature change), pruning
+pieces whose peak P < m. **Tuned on Gemini30 only** (leave-one-sheet-out CV); HF14 / val read once for the pre-registered picks.
+- Gemini30 (raw, vs 0.35): every rule that adds pixels loses (thr 0.15 -0.011, hysteresis lo 0.1 -0.015, smoothing sigma 6
+  -0.020, Laplacian -0.005); rules that remove pixels win a little (thr 0.5 +0.0023, box-relative 0.5 +0.0050, prune 0.7 +0.0013).
+  The model over-includes on Gemini30; the "under-filled" bucket is not reachable by lowering the bar.
+- LOSO CV on Gemini30: global threshold +0.0002 (picks 0.5 on 28 / 30 folds), box-relative +0.0027 (0.5 on 24 / 30), prune +0.0013
+  (0.7 on 30 / 30).
+- **Read once:** box-relative 0.5: val -0.0004, HF14 -0.0055 (2 up / 13 down), fix v2 -0.0043. Prune 0.7: val +0.0002, HF14
+  -0.0003, fix v2 -0.0001. Neither is adopted. The threshold 0.35 and `scripts/polygonize.py` (linear + fill + polygons) stay.
