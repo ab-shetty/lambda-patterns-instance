@@ -2244,3 +2244,26 @@ union with `merge_manifest.json` (version 2026-10-15b; run with `ALLOW_STALE_POO
   letter of all three -- Gemini30 +0.001, no significant drop (HF14 -0.004, p=0.37), no sheet > 0.05 (Gemini30 per sheet 26 0.478 ->
   0.525, 1 0.654 -> 0.627, 17 0.853 -> 0.853, 19 0.495 -> 0.507) -- but the Gemini30 gain is a coin flip (31 / 32) and it costs plain
   HF14 0.004. **Not published / not made the best: held for the user's call.**
+
+### 2026-10-19 (CPU) -- Gemini line counterfactual: the model is very sensitive to ink line weight; heavier / softer lines bleed less
+
+Best model (xblend-kq30-kms30) @4096 on Gemini30 20 / 10 / 28 / 16, the 3 questions with the most 0-25 px unlabelled FP on each
+(12 questions; hand boxes), the whole sheet image transformed, labels unchanged: thin = 3x3 max filter (ink -1 px per side),
+thick = 3x3 min filter (+1 px per side), blur = Gaussian sigma 1.2, sharp = unsharp mask (2x - blur 1.5). Raw reproduces the GPU
+maps (20: 0.886 vs 0.885). Scratchpad `lc/`.
+
+| 12 q | IoU | 4-25 px FP | of <= 25 px: on white | > 25 px FP | sheets 20 / 10 / 28 / 16 |
+|---|---:|---:|---:|---:|---|
+| raw | 0.855 | 0.044 | 0.036 | 0.025 | 0.886 / 0.801 / 0.855 / 0.879 |
+| thin | **0.532** | 0.063 | 0.055 | 0.216 | 0.496 / 0.242 / 0.734 / 0.656 |
+| sharp | 0.737 | 0.050 | 0.036 | 0.032 | 0.856 / 0.514 / 0.784 / 0.794 |
+| thick | 0.832 | **0.028** | **0.016** | 0.028 | 0.885 / 0.679 / 0.846 / 0.916 |
+| blur | **0.869** | 0.039 | 0.027 | **0.009** | 0.864 / 0.852 / 0.857 / 0.903 |
+
+- **Line weight is a large, unmodelled sensitivity.** Removing ~1 px of ink per side collapses these questions (0.86 -> 0.53;
+  sheet 10 0.80 -> 0.24), and crisper lines cost 0.12. Heavier ink cuts the trim bleed by ~40% (white-trim FP -55%) but breaks
+  sheet 10; a slight blur helps 3 of 4 sheets (+0.014 overall, far FP 0.025 -> 0.009).
+- Fits the 2026-10-15 scale result (Gemini sheets that gain at 2048 -- lines relatively heavier -- and the oracle 0.899): part of
+  what scale was buying is line weight relative to the model's training distribution.
+- Not yet known: whether Gemini's lines at 4096 are thinner than synthetic lines at the 2048 training size (measure next), and
+  whether inference blur holds on all of Gemini30 / HF14 / val. 12 hand-picked questions, one model: a direction, not a size.
