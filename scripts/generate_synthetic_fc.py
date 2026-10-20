@@ -158,7 +158,8 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-20c"      # 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b)
+GEN_VERSION = "2026-10-20d"      # 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b);
+                                 # 20d: --pattern-drift 0.3 (0 = 20c)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -997,6 +998,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
     WALL_SPLITS[0] = float(flags.pop("wall_splits", 0.3))
     PANEL_SIDING[0] = float(flags.pop("panel_siding", 0.12))
+    G.PATTERN_DRIFT = float(flags.pop("pattern_drift", 0.3))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -1160,6 +1162,9 @@ def main():
                          "when free); 0 = the 2026-10-20a pools")
     ap.add_argument("--panel-siding", type=float, default=0.12,
                     help="probability a wall family is drawn as fibre-cement panels with reveal joints; 0 = the 2026-10-20b pools")
+    ap.add_argument("--pattern-drift", type=float, default=0.3,
+                    help="probability a family's drawn texture gets a smooth 0.6-1.8 px displacement (spacing wanders, lines "
+                         "bow, as Gemini draws); 0 = the 2026-10-20c pools")
     ap.add_argument("--spec", default=None,
                     help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
                          "--n is ignored, one sheet per spec")
@@ -1218,6 +1223,7 @@ def main():
     flags["wall_splits"] = args.wall_splits
     WALL_SPLITS[0] = args.wall_splits
     flags["panel_siding"] = args.panel_siding
+    flags["pattern_drift"] = args.pattern_drift
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

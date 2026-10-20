@@ -2642,3 +2642,10 @@ metrics `data/evaluations/facsimile/twins_4096.json`):
   A wall family is redrawn as panels 2-4 ft wide x 4-10 ft tall, aligned or staggered (35%), decided from the family's own
   style seed; params keep "sp" (= panel width) for code that adjusts wall spacing (the roof-lines path raised KeyError
   without it). Probe: 199 / 200, 32 sheets changed vs the 20b probe. Off under --spec.
+- **Generator: pattern drift, default on** (`--pattern-drift 0.3`, GEN 2026-10-20d; 0 = 20c, checked byte-identical on 199
+  probe sheets). The user: Gemini does not hold a pattern perfectly uniform the way a firm's Revit export does (consistent with
+  the twin test: Gemini30 1 / 26 fail on how Gemini draws the materials). Per family, from its own seed, the drawn texture gets a
+  smooth displacement (control point every ~400 px, 0.6-1.8 px): spacing wanders, long lines bow gently; labels untouched (mask
+  applied after), flat / solid fills skipped. 107 / 199 probe sheets have at least one drifted family.
+- **Screen needed:** GEN 2026-10-20a-d change every new pool (cross gables 19% of houses, wall splits ~17%, panel siding 12% of
+  wall families, drift 30% of families). Gate them as one arm before more generator work (GPU paste in chat).

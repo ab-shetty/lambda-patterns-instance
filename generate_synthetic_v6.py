@@ -262,6 +262,7 @@ RES_DEGRADE = 0.0
 PAPER = 0.0
 PALE_INK = 0.0
 REVIT_VIEWS = None
+PATTERN_DRIFT = 0.0     # set by generate_synthetic_fc --pattern-drift (2026-10-20d); 0 = earlier pools
 # Material mix typical of US residential elevations (siding and stucco walls,
 # asphalt roofs), in place of v6's near-uniform draw where brick, stone, block
 # and shingle take ~half the walls. Weights are a prior, not fitted to val.
@@ -890,6 +891,19 @@ def draw_fill(canvas, poly_px, style, S, W, H):
         g_s, g_dir = p["grad"]
         ramp = np.linspace(-1.0, 1.0, h, dtype=np.float32)[:, None, None] * g_dir
         layer[:] = np.clip(layer.astype(np.float32) * (1.0 - g_s * 0.5 * (ramp + 1.0)), 0, 255).astype(np.uint8)
+    if PATTERN_DRIFT > 0 and k not in ("flat", "solid"):
+        # --pattern-drift (generate_synthetic_fc, 2026-10-20d): Gemini (unlike a firm's Revit export) does not hold a pattern
+        # perfectly uniform -- spacing wanders and long lines bow. A smooth low-frequency displacement of the drawn texture,
+        # per family from its own seed; labels are untouched (the polygon mask is applied after).
+        dr = random.Random(sd * 151 + 7)
+        if dr.random() < PATTERN_DRIFT:
+            amp = dr.uniform(0.6, 1.8)
+            nr = np.random.default_rng(dr.randrange(1 << 30))
+            gy, gx = max(2, h // 400 + 2), max(2, w // 400 + 2)
+            fx = cv2.resize(nr.standard_normal((gy, gx)).astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
+            fy = cv2.resize(nr.standard_normal((gy, gx)).astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
+            xx, yy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+            layer = cv2.remap(layer, xx + amp * fx, yy + amp * fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
     m = poly_mask(affinity.translate(poly_px, -x0, -y0), w, h)
     blend_mask(canvas[y0:y1, x0:x1], layer, m)
 
