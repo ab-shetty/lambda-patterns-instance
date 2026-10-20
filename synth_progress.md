@@ -2678,3 +2678,8 @@ some colours (purple gable accent on 162). Default pools byte-identical (8/8 vs 
 The describer's own facade_aspect correlates only 0.54 with the measured ink aspect on one-view sheets (it underestimates
 long ranches and overestimates narrow infill, 166: said 2.25, drawn ~0.9). 10 of 107 still lack v3 boxes (502s) and use
 v2. Text accuracy is out of scope (user, 2026-10-20). Default pools byte-identical (8/8).
+| v10 | describer v3 complete (108 of 111 elevations have boxes) | 0.157 | **0.21** | 0.44 | 7 / 108 |
+
+Montage (seed 11) `data/diag/fac_r5_v10/montage.jpg`: 041, 061, 101, 104, 160 now read as the same building. Still off:
+apartment ground floors get townhouse garage doors (172), "existing / proposed" sheets of one view come out squashed (186),
+Gemini's single wide "front + adjacent side" view is split into two views (097).
