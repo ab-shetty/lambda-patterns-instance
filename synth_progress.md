@@ -2451,3 +2451,21 @@ takes ~69 GB); 8 scoring jobs at once OOM too -- 4 at a time is safe.
   height vs interior cells) lost on its own motivating cases (Gemini30 16 q05 -0.05..-0.11) and was dropped.
 - `--hires-crop` screen (GPU, single18khc): khc30 Gemini30 -0.016 (p<0.01), HF14 -0.007; 0.5 best + 0.5 khc30 Gemini30 -0.004;
   khc30 @2048 far worse. Fails; the best stays.
+
+### 2026-10-20 (GH200, CPU side) -- edit-cost proxy for the polygon output (`scripts/editcost.py`)
+
+The user corrects wrong polygons in the frontend (deletes, traces missed sections, moves vertices), so polygons are also scored by
+the fixes they need: delete = polygon < 10% on the target; cut = on the target but > 10% of its area and > 0.05% of the sheet
+outside the target dilated 4 px (attached spill); add = target piece (>= 0.2% of the target) recalled < 25%; vertices. Best model
+(xblend-kq30-kms30) @4096 maps, `polygonize.py` default (IoU reproduces: val 0.9049, HF14 0.9183, Gemini30 0.8821). Rows
+`data/diag/rows_editcost_{val,hf14,gemini30}.json`.
+
+| per question | verts median, eps 1 / 2 / 4 | IoU eps 1 / 2 / 4 | delete | cut | add | q needing any fix |
+|---|---|---|---:|---:|---:|---:|
+| HF14 | 178 / 111 / 66 | 0.9183 / 0.9177 / 0.9157 | 0.33 | 0.00 | 0.12 | 0.31 |
+| val | 238 / 133 / 78 | 0.9049 / 0.9056 / 0.9039 | 0.50 | 0.03 | 0.17 | 0.43 |
+| Gemini30 | 436 / 251 / 161 | 0.8821 / 0.8816 / 0.8806 | 1.30 | 0.15 | 0.04 | 0.46 |
+
+- Douglas-Peucker eps 2 halves the vertices at the same IoU (-0.0006..+0.0007); eps 4 cuts them ~3x for -0.001..-0.003. eps stays 1
+  in `polygonize.py` until the user decides (vertices are what users edit).
+- The dominant fix is deleting wrong polygons; attached spill (cuts) is rare on real sheets. Missed sections come second on real.
