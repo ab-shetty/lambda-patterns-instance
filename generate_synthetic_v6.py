@@ -841,6 +841,23 @@ def draw_fill(canvas, poly_px, style, S, W, H):
     elif k == "plywood":
         _hlines(layer, x0, y0, S, 4.0, c, lw)
         _vlines(layer, x0, y0, S, 8.0, c, lw)
+    elif k == "panel":
+        # fibre-cement panels with reveal joints (generate_synthetic_fc --panel-siding): a reveal every ph ft up, every
+        # pw ft across, the verticals offset half a panel on alternate rows when staggered
+        _hlines(layer, x0, y0, S, p["ph"], c, lw)
+        if not p.get("stagger"):
+            _vlines(layer, x0, y0, S, p["pw"], c, lw)
+        else:
+            sy, sx = p["ph"] * S, p["pw"] * S
+            for r in range(math.floor(y0 / sy) - 1, math.ceil((y0 + h) / sy) + 1):
+                ya, yb = r * sy - y0, (r + 1) * sy - y0
+                if yb < -2 or ya > h + 2:
+                    continue
+                off = (r % 2) * sx / 2
+                for kx in range(math.floor((x0 - off) / sx) - 1, math.ceil((x0 + w - off) / sx) + 1):
+                    x = kx * sx + off - x0
+                    if -2 <= x <= w + 2:
+                        cv_line(layer, (x, ya), (x, yb), c, lw)
     elif k == "hatch":
         _dlines(layer, x0, y0, S, p["sp"], p["angle"], c, lw)
     elif k == "cross":

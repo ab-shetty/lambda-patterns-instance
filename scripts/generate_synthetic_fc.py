@@ -121,6 +121,32 @@ def _wall_splits(make_house):
 if not getattr(G.make_house, "_split", False):
     G.make_house = _wall_splits(G.make_house)
 
+# --panel-siding P (default 0.12 since 2026-10-20c): a wall family (main / accent / accent2) is drawn as fibre-cement panels
+# with reveal joints instead of its drawn kind -- panels 2-4 ft wide, 4-10 ft tall, aligned (65%) or staggered half a panel --
+# decided per family from its own style seed. Gemini round 5: fibre-cement panels with reveal grids on ~13-17 of 111
+# elevations, and nothing in WALL_KINDS draws a two-way rectangular grid at panel scale. P = 0 = earlier pools.
+PANEL_SIDING = [0.12]
+WALL_ROLES = ("main", "accent", "accent2")
+
+
+def _panel_siding(make_style):
+    def wrapped(rng, kind, appearance, seed, S, label_name, roof=False, base_override=None):
+        st = make_style(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
+        if PANEL_SIDING[0] <= 0 or roof or label_name not in WALL_ROLES:
+            return st
+        pr = random.Random(seed * 211 + 97)
+        if pr.random() >= PANEL_SIDING[0]:
+            return st
+        st.kind = "panel"
+        pw = pr.choice([2.0, 3.0, 4.0, 4.0])
+        # "sp" kept (= panel width) for code that adjusts a wall's spacing (roof-lines, pairs); drawing uses pw / ph
+        st.params = {"pw": pw, "ph": pr.choice([4.0, 6.0, 8.0, 9.0, 10.0]), "stagger": pr.random() < 0.35, "sp": pw}
+        st.callout = pr.choice(["FIBRE-CEMENT PANEL", "FIBER CEMENT PANEL SIDING", "PANEL SIDING W/ REVEALS",
+                                "FIBRE-CEMENT PANEL (A)"])
+        return st
+    wrapped._panel = True
+    return wrapped
+
 
 def house_for(image_id, seed, mw):
     rng = random.Random(seed * 1_000_003 + image_id)
@@ -132,7 +158,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-20b"      # 20a: --cross-gables 0.4 default (0 = 2026-10-17b pools); 20b: --wall-splits 0.3 (0 = 20a)
+GEN_VERSION = "2026-10-20c"      # 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -970,12 +996,15 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
     CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
     WALL_SPLITS[0] = float(flags.pop("wall_splits", 0.3))
+    PANEL_SIDING[0] = float(flags.pop("panel_siding", 0.12))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
     if revit:
         import revit_render
         revit_render.install(G, sys.modules[__name__], plans=revit_plans)
+    if not getattr(G.make_style, "_panel", False):
+        G.make_style = _panel_siding(G.make_style)
     if SPEC_BY_ID and not getattr(G.make_style, "_spec", False):
         G.make_style = _spec_make_style(G.make_style)
         G.make_style._spec = True
@@ -1129,6 +1158,8 @@ def main():
     ap.add_argument("--wall-splits", type=float, default=0.3,
                     help="probability the main front / rear wall gets a vertical band in a second material (accent2, "
                          "when free); 0 = the 2026-10-20a pools")
+    ap.add_argument("--panel-siding", type=float, default=0.12,
+                    help="probability a wall family is drawn as fibre-cement panels with reveal joints; 0 = the 2026-10-20b pools")
     ap.add_argument("--spec", default=None,
                     help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
                          "--n is ignored, one sheet per spec")
@@ -1186,6 +1217,7 @@ def main():
     CROSS_GABLES[0] = args.cross_gables       # the main process draws houses too (house_for, --spec search)
     flags["wall_splits"] = args.wall_splits
     WALL_SPLITS[0] = args.wall_splits
+    flags["panel_siding"] = args.panel_siding
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)
@@ -1200,6 +1232,7 @@ def main():
                   "(they restyle families the spec fixes)", flush=True)
         flags["distinct_looks"] = False
         flags["masonry_base"] = 0.0
+        flags["panel_siding"] = 0.0             # a spec names its materials
         flags.pop("roof_lines", None)
         flags.pop("faint_lines", None)
         G.TRIM_CUT = flags["trim_cut"]         # the only _init global make_house / make_appearance read

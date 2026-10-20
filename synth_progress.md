@@ -2637,3 +2637,8 @@ metrics `data/evaluations/facsimile/twins_4096.json`):
   trim board at each edge, mirrored on the rear) as the accent2 family when accent2 is free. Probe: 34 / 200 houses, 30 sheets
   changed, 169 byte-identical to the 20a probe; labels checked. Note (the user): Gemini does not hold a pattern perfectly
   uniform the way a firm's Revit export does -- a within-family drift option is next after the panel material.
+- **Generator: fibre-cement panel siding, default on** (`--panel-siding 0.12`, GEN 2026-10-20c; 0 = 20b; new draw_fill kind
+  "panel" in `generate_synthetic_v6.py`). From the gap tally (fibre-cement panels with reveal grids ~13-17 of 111 elevations).
+  A wall family is redrawn as panels 2-4 ft wide x 4-10 ft tall, aligned or staggered (35%), decided from the family's own
+  style seed; params keep "sp" (= panel width) for code that adjusts wall spacing (the roof-lines path raised KeyError
+  without it). Probe: 199 / 200, 32 sheets changed vs the 20b probe. Off under --spec.
