@@ -1,0 +1,5 @@
+{
+  "checkpoint_epoch": null,
+  "n_reference_selections": 195,
+  "mean_iou": 0.8708077824136115
+}
