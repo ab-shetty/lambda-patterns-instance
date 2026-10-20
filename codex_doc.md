@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-10-17
+Last updated: 2026-10-20
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds every number, command and the publish gate;
 `synth_progress.md` holds every experiment. This file says only where to pick up and how to set a machine up. Older
@@ -33,16 +33,12 @@ the model output -- IoU of the rasterised polygons. `scripts/postproc_probe.py` 
 
 **User's submission target:** "0.95 on real" (protocol -- HF14 vs val, per question vs per sheet -- not pinned down yet).
 
-**Next GPU session (planned 2026-10-17, end of day):** today's single-run changes (kms, kw, kg, s36k) all failed alone while
-the same Gemini30 sheets swung 0.2-0.3 between runs (17: kq 0.89 vs 0.68-0.86; 26 +0.11 with gable pairs and also +0.11 from 36k
-sheets without them) -- we have never measured seed noise, so per-sheet moves cannot be told from luck.
-1. Add `--save-every N` to `train_refunet.py`; retrain the kq nodr arm on `single18kq_s600000` (rebuild: GEN 2026-10-17b defaults =
-   2026-10-15b) saving every 100 steps; score the swing sheets (Gemini30 1 6 17 26, HF14 14, val 9 13) per checkpoint. Flat
-   oscillation -> average late checkpoints (SWA within the epoch); jumps -> data attribution (batch composition from the seeded
-   order, or TracIn against val / Gemini30 -- never HF14).
-2. A kq seed replicate (`SEED=8`, same pool) for the per-sheet noise floor; then make the gate's sheet rule "beyond noise".
-3. Eval-only: a uniform soup of all Hub arms (kq, kms, kw, kg, s36k; one-epoch restarts of the same init).
-Held for the user: 0.5 xblend-kq30-kms30 + 0.5 s36k30 passes the gate's letter at noise level (Gemini30 +0.001, HF14 -0.004).
+**Seed noise (2026-10-20, `synth_progress.md`):** the same seed reproduces (per-sheet sd <= 0.012), but seed 8 vs seed 7 on the kq
+no-DR arm moves HF14 / Gemini30 by ~0.016 and 5 / 30 Gemini30 sheets by > 0.05 -- the gate's sheet rule fires on seed noise, and
+every single-pass run so far used seed 7. Late-checkpoint averaging within a run does not help; a 0.5 / 0.5 two-seed blend beats
+both seeds on every set. Soups of the Hub arms and adding the seed-8 arm to the best fail the gate. `--save-every N` records step
+checkpoints and the batch order. **Judge changes at two seeds (blend vs blend)**; revise the sheet rule to "beyond seed noise".
+Next: `--hires-crop 0.5` at seeds 7 and 8 (running 2026-10-20).
 
 **Open problems** (`synth_progress.md` 2026-10-14 .. 17):
 - Gemini30 17 (hip-roof shingle plan, native 2400 px) collapses to blotchy half-confidence in both kms and kw (0.89 -> 0.68-0.70);

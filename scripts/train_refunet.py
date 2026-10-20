@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader, RandomSampler, Sampler, WeightedRandomSampler
 from tqdm import tqdm
 
 from refmask2former import build_datasets, collate_fn, load_local_records, load_parquet_records
@@ -177,6 +177,10 @@ def parse_args():
     p.add_argument("--reset-optimizer", action="store_true",
                    help="On continuation, load model weights and epoch only, then "
                         "start a fresh optimizer and cosine schedule.")
+    p.add_argument("--save-every", type=int, default=0,
+                   help="also save model weights every N optimizer steps (step_XXXXX.pth, no optimizer "
+                        "state) and the sheet order seen (order.json: per step, the image files of its batch); "
+                        "same RNG draws as without it")
     p.add_argument("--seed", type=int, default=31)
     p.add_argument("--real-indices", default=HOLDOUT)
     return p.parse_args()
@@ -234,6 +238,21 @@ def ranking_loss(image_embedding, reference_embedding, batch, device, margin):
     return torch.stack(losses).mean()
 
 
+class _RecordingSampler(Sampler):
+    """Delegates to `inner` and appends every index it yields to `seen` (--save-every)."""
+
+    def __init__(self, inner, seen):
+        self.inner, self.seen = inner, seen
+
+    def __iter__(self):
+        for index in self.inner:
+            self.seen.append(int(index))
+            yield index
+
+    def __len__(self):
+        return len(self.inner)
+
+
 def mask_loss(logits, targets, valid, bce_weight, dice_weight):
     bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     bce = (bce * valid).sum() / valid.sum().clamp(min=1)
@@ -279,6 +298,12 @@ def main():
                       else json.loads(records[j]["annotations"])) for j in train_ds.indices]
         sampler = WeightedRandomSampler([max(c, 1) for c in counts], num_samples=len(counts),
                                         replacement=True, generator=generator)
+    seen = []
+    if args.save_every > 0:
+        # Record the order without changing it: the same RandomSampler DataLoader would build
+        # (shuffle=True), on the same generator, iterated in the main process.
+        inner = sampler if sampler is not None else RandomSampler(train_ds, generator=generator)
+        sampler = _RecordingSampler(inner, seen)
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=sampler is None, sampler=sampler,
         drop_last=True, num_workers=args.num_workers, pin_memory=device.type == "cuda",
@@ -361,6 +386,13 @@ def main():
     best_monitor, stale = float('-inf'), 0
     print(f"Device: {device}; records={len(records)} train={len(train_ds)} "
           f"val={len(val_ds)} params={sum(p.numel() for p in model.parameters()):,}")
+    step = 0
+
+    def save_step():
+        if args.save_every > 0 and step % args.save_every == 0:
+            torch.save({"model": base_model.state_dict(), "epoch": None, "actual_epoch": None,
+                        "step": step, "args": vars(args)}, checkpoint_dir / f"step_{step:05d}.pth")
+
     for local_epoch in range(args.epochs):
         actual_epoch = start_epoch + local_epoch
         started = time.time(); base_model.train(); running = []
@@ -389,7 +421,7 @@ def main():
                                                 args.bce_weight, args.dice_weight)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
-                optimizer.step(); scheduler.step()
+                optimizer.step(); scheduler.step(); step += 1; save_step()
                 running.append(loss.detach())
                 if len(running) % 20 == 0:
                     progress.set_postfix(loss=f"{float(loss):.3f}",
@@ -421,7 +453,7 @@ def main():
                     loss = loss + args.rank_weight * rank
             loss.backward()
             torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
-            optimizer.step(); scheduler.step()
+            optimizer.step(); scheduler.step(); step += 1; save_step()
             # Keep the running loss on the GPU. float(loss) forces a device sync,
             # and three of them per iteration serialises CPU and GPU -- which is
             # invisible in eager but becomes the bottleneck once the step itself
@@ -456,6 +488,15 @@ def main():
                  "real_mean_iou": real_iou,
                  "optimizer": optimizer.state_dict(),
                  "scheduler": scheduler.state_dict()}
+        if args.save_every > 0:
+            # `seen` runs ahead of training (workers prefetch); the first len(train_loader) batches
+            # of each epoch are the ones trained on (drop_last).
+            files = [Path(records[train_ds.indices[i]]["image_path"]).name for i in seen]
+            n = len(train_loader) * args.batch_size
+            (checkpoint_dir / f"order_epoch_{actual_epoch}.json").write_text(json.dumps(
+                {"batch_size": args.batch_size, "steps": [files[i:i + args.batch_size]
+                                                          for i in range(0, n, args.batch_size)]}) + "\n")
+            seen.clear()
         torch.save(state, checkpoint_dir / f"epoch_{actual_epoch}.pth")
         torch.save(state, checkpoint_dir / "last.pth")
         if real_iou > best_real:

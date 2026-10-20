@@ -2398,3 +2398,39 @@ Scripts: scripts/pp_probe/{morph,gcut,inksplit,budget,combo,loso}.py; rows in da
   | HF14+Gemini -> val | -0.0009 (p=0.56) | +0.0028 |
   Real boundaries are learnable a little (val -> HF14 holds out), but the gain is ~+0.003 and does not hold in the other direction
   per question; adding Gemini dilutes it. Far from the +0.02 goal; not adopted.
+
+### 2026-10-20 (GH200) -- within-run checkpoints and a seed replicate: the swings are seed noise; late-checkpoint averaging does not help; Hub soups fail
+
+`train_refunet.py --save-every N` (new): model weights every N optimizer steps (`step_XXXXX.pth`) and `order_epoch_E.json` (per step,
+the image files in its batch). It wraps the same `RandomSampler` on the same generator, so the order and the worker seeds are
+unchanged (checked on a toy loader: identical indices and base seeds). kq no-DR arm retrained on the rebuilt `single18kq_s600000`
+(17,906 sheets, as before), kq recipe, `--save-every 100` (22 checkpoints + epoch_0), at seed 7 (= the Hub arm's seed) and seed 8.
+Every checkpoint scored @4096, hand boxes, on HF14 / fix v2 / val / Gemini30. Scoring beside batch-8 training OOMs (training
+takes ~69 GB); 8 scoring jobs at once OOM too -- 4 at a time is safe.
+
+**Same seed reproduces; a different seed does not** (end of epoch, set mean, per-sheet sd of the difference, sheets moving > 0.05):
+
+| | HF14 | fix v2 | val | Gemini30 | sheets > 0.05 |
+|---|---:|---:|---:|---:|---|
+| Hub kq-nodr (seed 7, 2026-10-15) | 0.9147 | 0.9214 | 0.8954 | 0.8677 | |
+| rerun seed 7 | 0.9146 | 0.9209 | 0.8924 | 0.8714 | 0 / 58 (per-sheet sd 0.003-0.012) |
+| seed 8 | 0.8986 | 0.9154 | 0.8914 | 0.8556 | HF14 12 -0.09, 27 -0.06; Gemini30 17 -0.15, 11 -0.11, 26 +0.11, +2 (per-sheet sd 0.028 / 0.046) |
+
+- GPU nondeterminism is negligible; **the seed alone moves HF14 and Gemini30 by ~0.016 and 5 / 30 Gemini30 sheets by > 0.05**. The
+  gate's "no sheet down > 0.05" rule fires on seed noise for Gemini30 1 / 11 / 17 / 26 and HF14 12 / 27. "Only kq gets Gemini30 17
+  right" (2026-10-17) is largely seed 7: kq at seed 8 gives 0.663. Every single-pass run so far used seed 7.
+- **Within a run** the sheets oscillate: Gemini30 1 0.14-0.82 (seed 7) / 0.35-0.85 (seed 8) across checkpoints, 17 0.50-0.89; set
+  means wobble 0.01-0.02 (seed 7 step 1700: every set -0.05 at once). Step-to-step sheet changes have lag-1 autocorrelation -0.29
+  to -0.43 (white noise around a level = -0.5): mostly a wobble that reverses, not lasting jumps.
+- **Late-checkpoint averaging does not help** (uniform over steps 1200-end / 1700-end vs the run's epoch_0): seed 7 HF14 -0.008 /
+  -0.008, Gemini30 -0.006 / -0.004; seed 8 HF14 -0.001 / -0.002, Gemini30 +0.013 / +0.008; val within +-0.003. It does not shrink
+  the seed gap (per-sheet sd 0.023-0.058). The late checkpoints sit around one point; the seed decides the point.
+- **Averaging across seeds does:** 0.5 seed 7 + 0.5 seed 8 (no-DR only) beats both seeds on every set -- HF14 0.9151, fix v2 0.9267,
+  val 0.8933, Gemini30 0.8719 (vs best single 0.9146 / 0.9209 / 0.8924 / 0.8714); no sheet > 0.01 below both seeds. It is below the
+  best (a 4-arm blend; val -0.0055, p=0.0005; Gemini30 1 -0.16).
+- **Adding the seed-8 arm to the best** (0.15 kq-dr + 0.175 kq-nodr s7 + 0.175 kq-nodr s8 + 0.15 kms-dr + 0.35 kms-nodr; the
+  rebuild without s8 reproduces 0.9163): HF14 -0.0002, fix v2 +0.0014, val -0.0005 (p=0.04), Gemini30 -0.0028 (p=0.008). Fails.
+- **Soups of the Hub arms (kq, kms, kw, kg, s36k), eval only:** 0.3 / 0.7 per run: HF14 +0.0040 (p=0.05), fix v2 +0.0019, val
+  +0.0006, Gemini30 -0.0017 (sheet 1 -0.10); uniform over all 10 arms: Gemini30 -0.0063 (p=0.014). Both fail the gate.
+- **Attribution:** with the wobble reversing step to step, per-window credit would mostly track noise; not pursued. `order_epoch_0.json`
+  for both seeds is in `data/runs/ck_kqtrace_s{7,8}_nodr/`.
