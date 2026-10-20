@@ -2594,3 +2594,7 @@ Scored as polygons (`editcost.py`, eps 1) vs the unrefined polygon rows; rows `d
 (-0.0440, p=0.002); TTA x8 @4096: 0.9421 (+0.0110, p=0.16), -0.14; **TTA x8 + 0.7 / 0.3 multi-scale: 0.9429 (+0.0117, p=0.07),
 -0.16 fixes / q** (plain HF14 for the same: +0.0064, p=0.31). Same picture as plain HF14: 0.7 / 0.3 never hurts; TTA's HF14 gain is
 large but rests on a few questions.
+- **Sliver revert (pre-registered: a refined piece overlapping the coarse mask < 50% of its area goes back to P)**, rows
+  `data/diag/bpr_b4_ns/`: val +0.0016 (unchanged), HF14 +0.0046 (p=0.002; extra deletes +0.12 -> +0.06 / q), fix v2 +0.0033
+  (p=0.04; +0.08 -> +0.02). Gemini30 not re-run (VM shutdown). Refiner + 2048 / bpr_b4 maps on `abshetty/floz-diag`
+  (`bpr/refiner_2026-10-20.pth`, `xblend-kq30-kms30/{split}_2048`, `xblend-kq30-kms30/bpr_b4/`).
