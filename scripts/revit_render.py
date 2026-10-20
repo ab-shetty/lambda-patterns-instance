@@ -680,6 +680,15 @@ def compose_revit(image_id, seed, mode_weights):
     hp = random.Random(fam_seed * 241 + 113)              # --heavy-pieces: own stream
     heavy_on = hp.random() < getattr(FC, "HEAVY_PIECES", [0.0])[0]
     app["outline_lw"] = lw_thin
+    # --gemini-look P (generate_synthetic_fc, 2026-10-20e): sheets drawn the way Gemini draws an elevation -- legible text
+    # (1.6-2.4x), lighter heavy outlines (x0.45-0.7), material callouts with leaders on most families, an overall-width
+    # dimension string. Own stream, applied after this sheet's draws: P = 0 = earlier pools.
+    glr = random.Random(fam_seed * 389 + 211)
+    glook = getattr(FC, "GEMINI_LOOK", [0.0])[0] > 0 and glr.random() < FC.GEMINI_LOOK[0]
+    if glook:
+        app["text_px"] *= glr.uniform(1.6, 2.4)
+        kh = glr.uniform(0.45, 0.7)
+        lw_heavy, lw_ground = max(1.5, lw_heavy * kh), max(2.0, lw_ground * kh)
     for st in styles.values():
         st.lw = max(0.8, lw_thin * r.uniform(0.6, 0.9))
     sun = (r.choice([1, -1]) * r.uniform(0.6, 1.2), r.uniform(0.9, 1.7))
@@ -746,6 +755,8 @@ def compose_revit(image_id, seed, mode_weights):
         if shadows_on:
             sh = wall_shadows(v, faces, e["vf"], sun)
             recess = r.uniform(0.25, 0.5)
+            if glook:                       # Gemini draws windows nearly flat: a thin recess shadow, not a dark L-band
+                recess *= 0.33
             rs = []
             for o in e["openings"]:
                 p = o["poly"]
@@ -862,13 +873,16 @@ def compose_revit(image_id, seed, mode_weights):
                 tq.add((c[0] + 0.55 * S, c[1] + 0.15 * S), G.ft_label(abs(z)) if z >= 0 else "-" + G.ft_label(-z),
                        sz * 0.8, ink, anchor="la")
         # material tags
-        if r.random() < 0.45:
-            for fam in ("main", "roof", "accent"):
+        if r.random() < 0.45 or glook:
+            fams = ("main", "roof", "accent") if not glook else ("main", "roof", "accent", "accent2", "foundation", "chimney")
+            for fam in fams:
                 cand = [p for (f, p, _, _) in e["surfaces"] if f == fam and p.area > 8]
-                if cand and fam in styles and r.random() < 0.6:
+                if cand and fam in styles and (r.random() < 0.6 or (glook and glr.random() < 0.85)):
                     pt = max(cand, key=lambda q: q.area).representative_point()
                     side = 1 if pt.x > (x0 + x1) / 2 else -1
                     G.draw_leader(canvas, tq, V, (pt.x, pt.y), styles[fam].callout, app, S, side)
+        if glook and glr.random() < 0.6:               # overall width, as Gemini dimensions its elevations
+            G.draw_dim_string(canvas, tq, V, [x0, x1], 1.6, app, S, above=False)
         # view title: number, bold name, rule, scale
         ty = V.px(x0, 0)[1] + r.uniform(2.8, 4.2) * S
         tx = V.px(x0 - left_room + 1.0, 0)[0]

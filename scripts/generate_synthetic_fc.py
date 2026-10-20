@@ -126,6 +126,7 @@ if not getattr(G.make_house, "_split", False):
 # decided per family from its own style seed. Gemini round 5: fibre-cement panels with reveal grids on ~13-17 of 111
 # elevations, and nothing in WALL_KINDS draws a two-way rectangular grid at panel scale. P = 0 = earlier pools.
 PANEL_SIDING = [0.12]
+GEMINI_LOOK = [0.0]     # --gemini-look P (2026-10-20e): see revit_render.compose_revit
 WALL_ROLES = ("main", "accent", "accent2")
 
 
@@ -999,6 +1000,8 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     WALL_SPLITS[0] = float(flags.pop("wall_splits", 0.3))
     PANEL_SIDING[0] = float(flags.pop("panel_siding", 0.12))
     G.PATTERN_DRIFT = float(flags.pop("pattern_drift", 0.3))
+    GEMINI_LOOK[0] = float(flags.pop("gemini_look", 0.0))
+    G.TIGHT_PAD = tuple(flags.pop("tight_pad", (0.015, 0.05)))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -1165,6 +1168,11 @@ def main():
     ap.add_argument("--pattern-drift", type=float, default=0.3,
                     help="probability a family's drawn texture gets a smooth 0.6-1.8 px displacement (spacing wanders, lines "
                          "bow, as Gemini draws); 0 = the 2026-10-20c pools")
+    ap.add_argument("--gemini-look", type=float, default=0.0,
+                    help="probability an elevation sheet is annotated the way Gemini draws one (bigger text, lighter heavy "
+                         "outlines, material callouts, overall dimension); 0 = off")
+    ap.add_argument("--tight-pad", default="0.015,0.05",
+                    help="--tight-crop padding range, fraction of the drawing (Gemini runs to the edge: ~0,0.012)")
     ap.add_argument("--spec", default=None,
                     help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
                          "--n is ignored, one sheet per spec")
@@ -1224,6 +1232,8 @@ def main():
     WALL_SPLITS[0] = args.wall_splits
     flags["panel_siding"] = args.panel_siding
     flags["pattern_drift"] = args.pattern_drift
+    flags["gemini_look"] = args.gemini_look
+    flags["tight_pad"] = tuple(float(v) for v in args.tight_pad.split(","))
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

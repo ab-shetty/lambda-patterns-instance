@@ -262,6 +262,7 @@ RES_DEGRADE = 0.0
 PAPER = 0.0
 PALE_INK = 0.0
 REVIT_VIEWS = None
+TIGHT_PAD = (0.015, 0.05)   # --tight-pad (generate_synthetic_fc, 2026-10-20e): crop padding, fraction of the drawing
 PATTERN_DRIFT = 0.0     # set by generate_synthetic_fc --pattern-drift (2026-10-20d); 0 = earlier pools
 # Material mix typical of US residential elevations (siding and stucco walls,
 # asphalt roofs), in place of v6's near-uniform draw where brick, stone, block
@@ -2942,7 +2943,7 @@ def tight_crop(canvas, ann, rng):
         return canvas, ann
     H, W = canvas.shape[:2]
     y0, y1, x0, x1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
-    pad = int(rng.uniform(0.015, 0.05) * max(x1 - x0, y1 - y0))
+    pad = int(rng.uniform(*TIGHT_PAD) * max(x1 - x0, y1 - y0))
     x0, y0, x1, y1 = max(0, x0 - pad), max(0, y0 - pad), min(W, x1 + pad), min(H, y1 + pad)
     canvas = np.ascontiguousarray(canvas[y0:y1, x0:x1])
     clip = Polygon([(0, 0), (x1 - x0, 0), (x1 - x0, y1 - y0), (0, y1 - y0)])
