@@ -2451,3 +2451,11 @@ takes ~69 GB); 8 scoring jobs at once OOM too -- 4 at a time is safe.
   height vs interior cells) lost on its own motivating cases (Gemini30 16 q05 -0.05..-0.11) and was dropped.
 - `--hires-crop` screen (GPU, single18khc): khc30 Gemini30 -0.016 (p<0.01), HF14 -0.007; 0.5 best + 0.5 khc30 Gemini30 -0.004;
   khc30 @2048 far worse. Fails; the best stays.
+- **Guarded voting + clutter fill** (`scripts/pp_probe/guard.py`, 2026-10-20). Val 17's collapse was the brick plinth: the light
+  mortar network forms "cells" that run out of the region (8.7k px added outside the label), plus thick coloured trims read as ink.
+  Guards: additions need the interior colour, only ink within 2 px of a cell follows it, no addition beyond 8 px of the mask.
+  Clutter fill: pieces a closing would add, kept if >= rho of their outer ring is in the mask and their colour matches.
+  Gemini30: guarded voting **+0.0055** (LOSO +0.0062; 87 up / 28 down), every clutter-fill variant **-0.005..-0.012** (LOSO picks
+  none). One read of the pick (vg_c6): **val -0.0062** (p=0.64; val 17 still -0.023; val no longer clean for this rule),
+  **HF14 +0.0004** (p=0.19), fix v2 +0.0005. Clutter fill, not picked, for the record: HF14 +0.0013..+0.0026, val +0.0001..-0.0109.
+  Neither adopted. Five post-processing families now show the same split: Gemini30 gains, the real sheets do not.
