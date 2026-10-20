@@ -2434,3 +2434,20 @@ takes ~69 GB); 8 scoring jobs at once OOM too -- 4 at a time is safe.
   +0.0006, Gemini30 -0.0017 (sheet 1 -0.10); uniform over all 10 arms: Gemini30 -0.0063 (p=0.014). Both fail the gate.
 - **Attribution:** with the wobble reversing step to step, per-window credit would mostly track noise; not pursued. `order_epoch_0.json`
   for both seeds is in `data/runs/ck_kqtrace_s{7,8}_nodr/`.
+
+### 2026-10-20 (CPU) -- working backwards from single errors: error taxonomy, reference-adaptive cell voting
+- **Looked at the errors** (HF14 12 q00 0.946, val 13 q05/q08, Gemini30 16 q05/q13, HF14 14 q00, HF14 12 q01, HF14 18 q03): blank
+  bands past the last hatch line / trim strips / sills taken in; the last board row before the outline left out; hatch under
+  text, symbols, dashed arcs left out (blotchy holes); whole same-texture bands missed (HF14 14 q00, val 13 q05).
+- **Taxonomy of error pieces** (`scripts/pp_probe/taxonomy.py`, gain if every piece of a class were fixed): FN under clutter
+  HF14 +0.037 / val +0.021 / Gemini +0.014; FP textured (other family) Gemini +0.072 / val +0.039 / HF14 +0.013; thin slivers
+  +0.011..0.019; "blank" FP ~0 under the crude density measure.
+- **Why cell voting failed before:** ink thresholds (fixed 60, or ink v2's per-sheet clip) miss faint anti-aliased hatch lines
+  (black-hat 34-85 on HF14 12), so hatch strips merge into giant cells that fall back to the pixel decision. Fix: threshold from
+  the reference box's own stroke contrast (`ref_threshold`: 0.5 x p95 black-hat in the box, clip 10..60).
+- **Reference-adaptive cell voting** (`scripts/pp_probe/cellsim.py`, cells <= cap px in iff mean probability > t): picked on
+  Gemini30 (vote_t0.4_c0.01: +0.0044 full, LOSO +0.0017), read once: **val -0.0202** (all from val 17, 23 questions at -0.155..-0.160;
+  without it -0.0012), **HF14 +0.0020** (p=0.26), fix v2 +0.0020. Not adopted. The edge-cell similarity rule (colour + row
+  height vs interior cells) lost on its own motivating cases (Gemini30 16 q05 -0.05..-0.11) and was dropped.
+- `--hires-crop` screen (GPU, single18khc): khc30 Gemini30 -0.016 (p<0.01), HF14 -0.007; 0.5 best + 0.5 khc30 Gemini30 -0.004;
+  khc30 @2048 far worse. Fails; the best stays.
