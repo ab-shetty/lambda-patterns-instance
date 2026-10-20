@@ -1,0 +1,156 @@
+== blend50 hf14
+== paired over 51 fixed selections: blend50 - best
+   paired mean difference -0.0035   se 0.0033   t(50) = -1.06   p = 0.2925
+   blend50 better on 8, worse on 13, tied (|d|<0.01) on 30   sign-test p = 0.3833
+
+   per image (blend50 - best), worst first:
+     image                     25  n= 4  mean -0.0245   share of total   55.4%
+     image                     27  n= 5  mean -0.0238   share of total   67.2%
+     image                      2  n= 3  mean -0.0106   share of total   18.0%
+     image                      0  n= 2  mean -0.0105   share of total   11.9%
+     image                     11  n= 1  mean -0.0087   share of total    4.9%
+     image                     18  n=10  mean -0.0076   share of total   42.9%
+     image                      1  n= 1  mean +0.0006   share of total   -0.3%
+== blend50 hf14fix2
+== paired over 51 fixed selections: blend50 - best
+   paired mean difference -0.0008   se 0.0034   t(50) = -0.25   p = 0.8058
+   blend50 better on 9, worse on 12, tied (|d|<0.01) on 30   sign-test p = 0.6636
+
+   per image (blend50 - best), worst first:
+     image                     25  n= 4  mean -0.0245   share of total  226.7%
+     image                     27  n= 5  mean -0.0238   share of total  274.9%
+     image                      2  n= 3  mean -0.0106   share of total   73.6%
+     image                      0  n= 2  mean -0.0105   share of total   48.6%
+     image                     11  n= 1  mean -0.0087   share of total   20.1%
+     image                      1  n= 1  mean +0.0006   share of total   -1.4%
+     image                      3  n= 5  mean +0.0008   share of total   -9.7%
+== blend50 val
+== paired over 72 fixed selections: blend50 - best
+   paired mean difference -0.0011   se 0.0017   t(71) = -0.62   p = 0.5345
+   blend50 better on 5, worse on 12, tied (|d|<0.01) on 55   sign-test p = 0.1435
+
+   per image (blend50 - best), worst first:
+     image                     15  n= 3  mean -0.0216   share of total   83.3%
+     image                     17  n=23  mean -0.0052   share of total  152.5%
+     image                     26  n= 1  mean -0.0031   share of total    4.0%
+     image                     22  n= 1  mean -0.0015   share of total    1.9%
+     image                     19  n= 9  mean -0.0007   share of total    7.9%
+     image                     21  n= 1  mean +0.0001   share of total   -0.1%
+     image                      8  n= 2  mean +0.0003   share of total   -0.8%
+== blend50 gemini30
+== paired over 195 fixed selections: blend50 - best
+   paired mean difference -0.0157   se 0.0071   t(194) = -2.20   p = 0.02879
+   blend50 better on 23, worse on 65, tied (|d|<0.01) on 107   sign-test p = 8.501e-06
+
+   per image (blend50 - best), worst first:
+     image                     17  n=13  mean -0.1940   share of total   82.1%
+     image                     10  n= 7  mean -0.0789   share of total   18.0%
+     image                      4  n= 6  mean -0.0584   share of total   11.4%
+     image                     19  n= 4  mean -0.0459   share of total    6.0%
+     image                     26  n= 8  mean -0.0297   share of total    7.7%
+     image                     11  n= 4  mean -0.0190   share of total    2.5%
+     image                     12  n= 3  mean -0.0128   share of total    1.2%
+== blend30 hf14
+== paired over 51 fixed selections: blend30 - best
+   paired mean difference -0.0068   se 0.0041   t(50) = -1.67   p = 0.1005
+   blend30 better on 5, worse on 15, tied (|d|<0.01) on 31   sign-test p = 0.04139
+
+   per image (blend30 - best), worst first:
+     image                     27  n= 5  mean -0.0331   share of total   47.8%
+     image                     25  n= 4  mean -0.0188   share of total   21.8%
+     image                     14  n= 8  mean -0.0173   share of total   40.0%
+     image                     11  n= 1  mean -0.0109   share of total    3.1%
+     image                     18  n=10  mean -0.0086   share of total   24.8%
+     image                      0  n= 2  mean -0.0079   share of total    4.6%
+     image                      7  n= 1  mean -0.0021   share of total    0.6%
+== blend30 hf14fix2
+== paired over 51 fixed selections: blend30 - best
+   paired mean difference -0.0042   se 0.0042   t(50) = -0.98   p = 0.3309
+   blend30 better on 6, worse on 14, tied (|d|<0.01) on 31   sign-test p = 0.1153
+
+   per image (blend30 - best), worst first:
+     image                     27  n= 5  mean -0.0331   share of total   77.9%
+     image                     14  n= 8  mean -0.0194   share of total   73.0%
+     image                     25  n= 4  mean -0.0188   share of total   35.5%
+     image                     11  n= 1  mean -0.0109   share of total    5.1%
+     image                      0  n= 2  mean -0.0079   share of total    7.5%
+     image                      7  n= 1  mean -0.0021   share of total    1.0%
+     image                      1  n= 1  mean +0.0010   share of total   -0.5%
+== blend30 val
+== paired over 72 fixed selections: blend30 - best
+   paired mean difference -0.0008   se 0.0017   t(71) = -0.45   p = 0.6534
+   blend30 better on 6, worse on 13, tied (|d|<0.01) on 53   sign-test p = 0.1671
+
+   per image (blend30 - best), worst first:
+     image                     15  n= 3  mean -0.0245   share of total  131.5%
+     image                     17  n=23  mean -0.0044   share of total  182.8%
+     image                     26  n= 1  mean -0.0023   share of total    4.1%
+     image                     22  n= 1  mean -0.0013   share of total    2.3%
+     image                     21  n= 1  mean -0.0005   share of total    1.0%
+     image                     20  n= 1  mean -0.0003   share of total    0.6%
+     image                      4  n= 3  mean +0.0000   share of total   -0.1%
+== blend30 gemini30
+== paired over 195 fixed selections: blend30 - best
+   paired mean difference -0.0157   se 0.0072   t(194) = -2.18   p = 0.03029
+   blend30 better on 26, worse on 70, tied (|d|<0.01) on 99   sign-test p = 8.05e-06
+
+   per image (blend30 - best), worst first:
+     image                     17  n=13  mean -0.1949   share of total   82.9%
+     image                     10  n= 7  mean -0.0743   share of total   17.0%
+     image                      4  n= 6  mean -0.0462   share of total    9.1%
+     image                     19  n= 4  mean -0.0389   share of total    5.1%
+     image                     26  n= 8  mean -0.0294   share of total    7.7%
+     image                      6  n= 6  mean -0.0190   share of total    3.7%
+     image                      7  n=11  mean -0.0183   share of total    6.6%
+== xblend-khc30 hf14
+== paired over 51 fixed selections: xblend-khc30 - best
+   paired mean difference +0.0001   se 0.0019   t(50) = +0.04   p = 0.9676
+   xblend-khc30 better on 6, worse on 8, tied (|d|<0.01) on 37   sign-test p = 0.7905
+
+   per image (xblend-khc30 - best), worst first:
+     image                     27  n= 5  mean -0.0103   share of total -1337.5%
+     image                     25  n= 4  mean -0.0046   share of total -477.4%
+     image                     11  n= 1  mean -0.0040   share of total -103.9%
+     image                     18  n=10  mean -0.0033   share of total -863.9%
+     image                      2  n= 3  mean -0.0024   share of total -190.8%
+     image                      0  n= 2  mean -0.0000   share of total   -0.7%
+     image                     16  n= 2  mean +0.0003   share of total   16.6%
+== xblend-khc30 hf14fix2
+== paired over 51 fixed selections: xblend-khc30 - best
+   paired mean difference +0.0010   se 0.0019   t(50) = +0.53   p = 0.597
+   xblend-khc30 better on 7, worse on 8, tied (|d|<0.01) on 36   sign-test p = 1
+
+   per image (xblend-khc30 - best), worst first:
+     image                     27  n= 5  mean -0.0103   share of total -100.7%
+     image                     25  n= 4  mean -0.0046   share of total  -35.9%
+     image                     11  n= 1  mean -0.0040   share of total   -7.8%
+     image                      2  n= 3  mean -0.0024   share of total  -14.4%
+     image                      0  n= 2  mean -0.0000   share of total   -0.1%
+     image                     16  n= 2  mean +0.0003   share of total    1.2%
+     image                      1  n= 1  mean +0.0006   share of total    1.2%
+== xblend-khc30 val
+== paired over 72 fixed selections: xblend-khc30 - best
+   paired mean difference +0.0008   se 0.0008   t(71) = +0.97   p = 0.333
+   xblend-khc30 better on 5, worse on 3, tied (|d|<0.01) on 64   sign-test p = 0.7266
+
+   per image (xblend-khc30 - best), worst first:
+     image                     15  n= 3  mean -0.0085   share of total  -45.0%
+     image                     22  n= 1  mean -0.0012   share of total   -2.1%
+     image                     17  n=23  mean -0.0005   share of total  -19.4%
+     image                     26  n= 1  mean -0.0003   share of total   -0.5%
+     image                      8  n= 2  mean +0.0003   share of total    0.9%
+     image                     21  n= 1  mean +0.0007   share of total    1.3%
+     image                     20  n= 1  mean +0.0007   share of total    1.3%
+== xblend-khc30 gemini30
+== paired over 195 fixed selections: xblend-khc30 - best
+   paired mean difference -0.0037   se 0.0043   t(194) = -0.85   p = 0.3973
+   xblend-khc30 better on 24, worse on 28, tied (|d|<0.01) on 143   sign-test p = 0.6778
+
+   per image (xblend-khc30 - best), worst first:
+     image                     17  n=13  mean -0.0931   share of total  169.8%
+     image                     26  n= 8  mean -0.0347   share of total   39.0%
+     image                     10  n= 7  mean -0.0228   share of total   22.4%
+     image                      4  n= 6  mean -0.0151   share of total   12.7%
+     image                      7  n=11  mean -0.0077   share of total   11.9%
+     image                     12  n= 3  mean -0.0060   share of total    2.5%
+     image                     19  n= 4  mean -0.0049   share of total    2.7%
