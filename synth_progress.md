@@ -2649,3 +2649,21 @@ metrics `data/evaluations/facsimile/twins_4096.json`):
   applied after), flat / solid fills skipped. 107 / 199 probe sheets have at least one drifted family.
 - **Screen needed:** GEN 2026-10-20a-d change every new pool (cross gables 19% of houses, wall splits ~17%, panel siding 12% of
   wall families, drift 30% of families). Gate them as one arm before more generator work (GPU paste in chat).
+
+## 2026-10-20 — facsimile fidelity: v1 → v6 (round-5 elevations, 107 described sheets)
+
+Goal: a new Gemini sheet + its description → a near-same `--spec` render. Per-pair score (scripts/facsimile_eval.py
+score): Swin-T cosine twin↔original, retrieval rank of the original among all originals.
+
+| run | change | own cos (median) | top-1 | top-5 | median rank |
+|---|---|---|---|---|---|
+| v1 | spec search (mode, shaded, house keys) | 0.111 | 0.12 | 0.37 | 10 / 110 |
+| v2 | + described view_list forced, ridge side/front matched, closest facade aspect of 25 full matches | 0.142 | 0.16 | 0.41 | 10 / 90 (17 renders crashed) |
+| v4 | + cross-gable count forced; xgable no longer counted as a wing; `panel` spec walls fixed (KeyError 'ph'); neutral palette for undescribed colours; a partial match never changes mode | 0.146 | 0.19 | 0.41 | 8 / 106 |
+| v5 | + view layout (row / grid / column) from the original's ink-box aspect | 0.133 | 0.14 | 0.38 | 10 / 106 |
+| v6 | + main block's stories (1-4) and roof type forced, not searched | **0.164** | 0.18 | 0.41 | **7 / 107** |
+
+Fully met specs 43 → 75 of 107; remaining unmet: accent2 17, ridge 9, units 6. The Swin score is noisy (v5's
+layout fix is visibly right and scored lower). Montage: `scripts/facsimile_montage.py ORIG POOL OUT.jpg`.
+Still off: footprint proportions (192's apartment too long), Gemini's mixed gable + flat-box massing, recessed balconies,
+some colours (purple gable accent on 162). Default pools byte-identical (8/8 vs c045613^).

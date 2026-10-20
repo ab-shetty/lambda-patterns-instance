@@ -53,21 +53,57 @@ _CUR = [None]
 # fused solid; it is block kind "xgable" (own walls, own gable triangle: a gable accent lands in it). Own RNG stream seeded
 # from the house itself, so every caller (massing, elevations, plans) sees the same house; P = 0 = earlier pools.
 CROSS_GABLES = [0.4]
+# --spec: image id -> house keys forced on the drawn house instead of searched for -- the main block's stories and roof
+# (3+ storeys come only with townhouse rows, flat roofs on 8% of houses: a search rarely meets them with the other keys)
+# and the cross-gable count (on an eligible house, 0 = none). Own seed from the house; empty = no change.
+HOUSE_FORCE = {}
+FORCED_KEYS = ("stories", "roof", "cross_gables")
+
+
+def _force_of(spec):
+    h = spec.get("house", {})
+    f = {}
+    if isinstance(h.get("stories"), int) and 1 <= h["stories"] <= 4:
+        f["stories"] = h["stories"]
+    if h.get("roof") in ("gable", "hip", "flat", "shed"):
+        f["roof"] = h["roof"]
+    if h.get("cross_gables") is not None:
+        f["cross_gables"] = min(int(h["cross_gables"]), 2)
+    return f
+
+
+def _apply_force(house, f):
+    m = house["blocks"][0]
+    fr = random.Random(int(house["fh"] * 1e9) * 5 + 3)
+    if "stories" in f:
+        m.stories = f["stories"]
+    if "roof" in f and f["roof"] != m.roof:
+        m.roof = f["roof"]
+        m.pitch = {"gable": fr.uniform(0.3, 0.6), "hip": fr.uniform(0.25, 0.5), "shed": fr.uniform(0.15, 0.35),
+                   "flat": 0.0}[m.roof]
+        if m.roof == "flat":
+            house["dormers"] = False
 
 
 def _cross_gables(make_house):
     def wrapped(rng):
         house = make_house(rng)
+        f = HOUSE_FORCE.get(_CUR[0]) if HOUSE_FORCE else None
+        if f:
+            _apply_force(house, f)
         if CROSS_GABLES[0] <= 0:
             return house
         m = house["blocks"][0]
         cr = random.Random(int(house["fh"] * 1e9) * 7 + int(m.w * 1e9) * 3 + 11)
-        if cr.random() >= CROSS_GABLES[0] or house.get("units") or m.ridge != "x" or m.roof not in ("gable", "hip") \
+        force = f.get("cross_gables") if f else None
+        if force == 0:
+            return house
+        if (cr.random() >= CROSS_GABLES[0] and force is None) or house.get("units") or m.ridge != "x" or m.roof not in ("gable", "hip") \
                 or m.w < 24:
             return house
         main_rise = m.pitch * m.d / 2
         steep = cr.random() < 0.4
-        if cr.random() < 0.65:
+        if (cr.random() < 0.65 if force is None else force == 1):
             cw = cr.uniform(0.22, 0.4) * m.w
             centres = [m.x0 + cr.uniform(0.25, 0.75) * m.w]
         else:
@@ -138,18 +174,24 @@ def _panel_siding(make_style):
         pr = random.Random(seed * 211 + 97)
         if pr.random() >= PANEL_SIDING[0]:
             return st
-        st.kind = "panel"
-        pw = pr.choice([2.0, 3.0, 4.0, 4.0])
-        # "sp" kept (= panel width) for code that adjusts a wall's spacing (roof-lines, pairs); drawing uses pw / ph
-        st.params = {"pw": pw, "ph": pr.choice([4.0, 6.0, 8.0, 9.0, 10.0]), "stagger": pr.random() < 0.35, "sp": pw}
-        st.callout = pr.choice(["FIBRE-CEMENT PANEL", "FIBER CEMENT PANEL SIDING", "PANEL SIDING W/ REVEALS",
-                                "FIBRE-CEMENT PANEL (A)"])
-        return st
+        return _to_panel(st, pr)
     wrapped._panel = True
     return wrapped
 
 
+def _to_panel(st, pr):
+    """A wall style redrawn as fibre-cement panels (pw x ph ft, reveals aligned or staggered)."""
+    st.kind = "panel"
+    pw = pr.choice([2.0, 3.0, 4.0, 4.0])
+    # "sp" kept (= panel width) for code that adjusts a wall's spacing (roof-lines, pairs); drawing uses pw / ph
+    st.params = {"pw": pw, "ph": pr.choice([4.0, 6.0, 8.0, 9.0, 10.0]), "stagger": pr.random() < 0.35, "sp": pw}
+    st.callout = pr.choice(["FIBRE-CEMENT PANEL", "FIBER CEMENT PANEL SIDING", "PANEL SIDING W/ REVEALS",
+                            "FIBRE-CEMENT PANEL (A)"])
+    return st
+
+
 def house_for(image_id, seed, mw):
+    _CUR[0] = image_id                         # --spec forcing (HOUSE_FORCE) is keyed by the id
     rng = random.Random(seed * 1_000_003 + image_id)
     rng.choices(list(mw.keys()), weights=list(mw.values()))
     G.make_appearance(rng)
@@ -902,6 +944,7 @@ SPEC_BY_ID = {}
 
 
 def _prefix_draws(image_id, seed, mw):
+    _CUR[0] = image_id
     rng = random.Random(seed * 1_000_003 + image_id)
     mode = rng.choices(list(mw.keys()), weights=list(mw.values()))[0]
     G.make_appearance(rng)
@@ -917,7 +960,7 @@ def _house_value(house, key):
     if key == "roof":
         return blocks[0].roof
     if key == "wing":
-        return any(b.kind not in ("main", "ell") for b in blocks[1:])
+        return any(b.kind not in ("main", "ell", "xgable") for b in blocks[1:])
     if key == "ell":
         return any(b.kind == "ell" for b in blocks)
     if key == "ridge":                      # "side": eaves face the front view (ridge along x); "front": gable end faces it
@@ -945,8 +988,11 @@ def find_spec_id(spec, seed, mw, start, search):
         want.append(("shaded", bool(spec["shaded"])))
     want += [("house." + k, v) for k, v in spec.get("house", {}).items()]
     target = spec.get("facade_aspect")
+    force = _force_of(spec)
     best, full = (-1, None, None), []
     for iid in range(start, start + search):
+        if force:
+            HOUSE_FORCE[iid] = force
         mode, house, shaded = _prefix_draws(iid, seed, mw)
         got = {"mode": mode, "shaded": shaded}
         unmet = [k for k, v in want
@@ -957,7 +1003,7 @@ def find_spec_id(spec, seed, mw, start, search):
             full.append((abs(math.log(facade_aspect(house) / float(target))), iid))
             if len(full) >= 25:                 # the closest facade proportions among the first 25 full matches
                 break
-        elif len(want) - len(unmet) > best[0]:
+        elif len(want) - len(unmet) > best[0] and "mode" not in unmet:     # a partial match never changes the mode
             best = (len(want) - len(unmet), iid, unmet)
     if full:
         return min(full)[1], []
@@ -982,32 +1028,45 @@ def _spec_make_style(orig):
         if not o:
             return orig(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
         kind = o.get("kind", kind)
+        neutral = G.NEUTRAL_PALETTE
         if "base" in o and appearance["colour"]:
             base_override = tuple(int(v) for v in o["base"])
-        if kind in ("stipple", "flat") and not roof:
-            # "stucco" comes out stipple or flat at random: draw from a side stream until it is the asked one
-            # (the sheet's main stream is consumed once, as before)
-            st = orig(rng, "stucco", appearance, seed, S, label_name, roof=roof, base_override=base_override)
-            for t in range(40):
-                if st.kind == kind:
-                    break
-                st = orig(random.Random(seed * 7919 + t), "stucco", appearance, seed, S, label_name, roof=roof,
-                          base_override=base_override)
-        else:
-            st = orig(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
-        k = st.kind
-        st.__class__ = _LockedStyle
-        st._kind, st._locked = k, False
-        st.params.update(o.get("params", {}))
-        st._locked = "kind" in o
-        return st
+            G.NEUTRAL_PALETTE = False           # (it replaces any base) the described colour wins
+        try:
+            return _spec_style(orig, o, rng, kind, appearance, seed, S, label_name, roof, base_override)
+        finally:
+            G.NEUTRAL_PALETTE = neutral
     return make_style
+
+
+def _spec_style(orig, o, rng, kind, appearance, seed, S, label_name, roof, base_override):
+    if kind in ("stipple", "flat") and not roof:
+        # "stucco" comes out stipple or flat at random: draw from a side stream until it is the asked one
+        # (the sheet's main stream is consumed once, as before)
+        st = orig(rng, "stucco", appearance, seed, S, label_name, roof=roof, base_override=base_override)
+        for t in range(40):
+            if st.kind == kind:
+                break
+            st = orig(random.Random(seed * 7919 + t), "stucco", appearance, seed, S, label_name, roof=roof,
+                      base_override=base_override)
+    elif kind == "panel" and not roof:      # not a make_style kind: a lap wall turned into panels (as --panel-siding)
+        st = _to_panel(orig(rng, "lap", appearance, seed, S, label_name, roof=roof, base_override=base_override),
+                       random.Random(seed * 211 + 97))
+    else:
+        st = orig(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
+    k = st.kind
+    st.__class__ = _LockedStyle
+    st._kind, st._locked = k, False
+    st.params.update(o.get("params", {}))
+    st._locked = "kind" in o
+    return st
 
 
 def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=False, spec_by_id=None):
     SHAPED[0] = shaped
     if spec_by_id:
         SPEC_BY_ID.update(spec_by_id)
+        HOUSE_FORCE.update({i: _force_of(s) for i, s in spec_by_id.items() if _force_of(s)})
     flags = dict(flags)
     OPENINGS_PER_FACE[0] = bool(flags.pop("openings_per_face", 1))
     CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
@@ -1275,6 +1334,7 @@ def main():
         flags["distinct_looks"] = False
         flags["masonry_base"] = 0.0
         flags["panel_siding"] = 0.0             # a spec names its materials
+        flags["neutral_palette"] = True         # Gemini's muted colours for families the spec gives no colour
         flags.pop("roof_lines", None)
         flags.pop("faint_lines", None)
         G.TRIM_CUT = flags["trim_cut"]         # the only _init global make_house / make_appearance read
@@ -1286,6 +1346,8 @@ def main():
             spec_by_id[iid] = sp
             report.append({"name": sp.get("name"), "image_id": iid, "unmet": unmet})
             nxt = iid + 1                      # ids stay unique and increasing
+            for k in [k for k in HOUSE_FORCE if k < nxt and k != iid and k not in spec_by_id]:
+                del HOUSE_FORCE[k]
             print(f"spec {sp.get('name')}: id {iid}" + (f"  UNMET {unmet}" if unmet else ""), flush=True)
         with open(os.path.join(args.out, "spec_matches.json"), "w") as fo:
             json.dump(report, fo, indent=1)

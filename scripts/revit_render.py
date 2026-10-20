@@ -666,6 +666,14 @@ def compose_revit(image_id, seed, mode_weights):
         cols = len(elevs)
     else:
         cols = 2
+    sp_aspect = getattr(FC, "SPEC_BY_ID", {}).get(FC._CUR[0], {}).get("sheet_aspect")
+    if sp_aspect:                              # --spec: the column count whose sheet proportions are closest to the original's
+        def _aspect(c):
+            cwk = [max(cells[i][0] for i in range(len(cells)) if i % c == k) for k in range(c)]
+            rhk = [max(cells[i][1] for i in range(len(cells)) if i // c == k) for k in range(math.ceil(len(cells) / c))]
+            return (sum(cwk) + gap * (c - 1)) / (sum(rhk) + gap * (len(rhk) - 1))
+        cols = min((c for c in (1, 2, 4) if c <= len(elevs) and len(elevs) % c == 0),
+                   key=lambda c: abs(math.log(_aspect(c) / sp_aspect)))
     rows = math.ceil(len(elevs) / cols)
     cw = [max(cells[i][0] for i in range(len(cells)) if i % cols == c) for c in range(cols)]
     rh = [max(cells[i][1] for i in range(len(cells)) if i // cols == rr) for rr in range(rows)]

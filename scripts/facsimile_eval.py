@@ -2,7 +2,7 @@
 """Per-image facsimiles of Gemini sheets, and how faithful they are (2026-10-20; the user's aim: hand over a new Gemini
 image with its description, get a near-same synthetic version from the generator).
 
-  specs  DESCRIBED.jsonl OUT.json   described images (describe_gemini_specs.py) -> --spec list for generate_synthetic_fc.py
+  specs  DESCRIBED.jsonl OUT.json [IMAGE_DIR]   described images (describe_gemini_specs.py) -> --spec list for generate_synthetic_fc.py
                                     (elevations; keys the generator does not know are dropped and listed as gaps)
   score  ORIG_DIR TWIN_POOL OUT_DIR one score per pair: cosine similarity of Swin-T features (thumbnail + texture crops,
                                     gemini_match.embed) between the twin and its original, and retrieval -- the rank of the
@@ -22,7 +22,7 @@ WALL = {"lap", "vertical", "bb", "shingle", "brick", "stone", "stipple", "flat",
 ROOF = {"asphalt", "seam", "tile_roof", "shingle", "flat_roof"}
 
 
-def to_specs(described, out):
+def to_specs(described, out, image_dir=None):
     specs = []
     for r in map(json.loads, open(described)):
         if "error" in r or r.get("mode") != "elevation":
@@ -34,6 +34,14 @@ def to_specs(described, out):
         if vl:
             s["view_list"] = vl[:4]
             s["views"] = 1 if len(vl) == 1 else 2 if len(vl) == 2 else 4
+        if image_dir and Path(image_dir, r["name"] + ".png").exists():
+            # the drawing's ink box, not the canvas (Gemini's canvases share one wide aspect whatever the layout):
+            # picks the twin's view layout (row / grid / column)
+            g = cv2.cvtColor(cv2.imread(str(Path(image_dir, r["name"] + ".png"))), cv2.COLOR_BGR2GRAY)
+            ys, xs = np.nonzero(g < np.percentile(g, 95) - 30)
+            if len(xs):
+                s["sheet_aspect"] = round((np.percentile(xs, 99.5) - np.percentile(xs, 0.5)) /
+                                          max(1, np.percentile(ys, 99.5) - np.percentile(ys, 0.5)), 3)
         fa = (r.get("house") or {}).get("facade_aspect")
         if isinstance(fa, (int, float)) and 0.3 < fa < 15:
             s["facade_aspect"] = float(fa)
@@ -96,6 +104,6 @@ def score(orig_dir, pool, out_dir):
 
 if __name__ == "__main__":
     if sys.argv[1] == "specs":
-        to_specs(sys.argv[2], sys.argv[3])
+        to_specs(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     else:
         score(sys.argv[2], sys.argv[3], sys.argv[4])
