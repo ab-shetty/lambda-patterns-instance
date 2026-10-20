@@ -44,7 +44,9 @@ for the 40% of `bpr_s900000` lost to OOM, real-like patch augmentation, a P-only
 `scripts/editcost.py` (fix counts / vertices), `train_refunet.py --save-every`, `--bce-other-weight`, `--bce-per-question`.
 On the Hub (`abshetty/floz-diag`): `bpr/refiner_2026-10-20.pth`, `xblend-kq30-kms30/{split}_2048` (2048 maps),
 `xblend-kq30-kms30/bpr_b4/`, `xblend-kq30-kms30/tta/`. Parked: TracIn, self-training with automatic boxes (more Gemini images),
-Gemini facsimiles (`--spec`, CPU task).
+Gemini facsimiles (`--spec`, CPU task). **Twin test done (2026-10-20, `synth_progress.md`): Gemini30 1 / 26 recover on their twins (0.65 -> 0.98,
+0.48 -> 0.82) = appearance failures; no question fails on both; twins 16 / 20 fail on their own -- inspect those twin images.**
+Multi-scale + BPR stack: val +0.0023, fix v2 +0.0031, Gemini30 +0.0089, no added fixes (held for the user too).
 
 **Seed noise (2026-10-20, `synth_progress.md`):** the same seed reproduces (per-sheet sd <= 0.012), but seed 8 vs seed 7 on the kq
 no-DR arm moves HF14 / Gemini30 by ~0.016 and 5 / 30 Gemini30 sheets by > 0.05 -- the gate's sheet rule fires on seed noise, and
