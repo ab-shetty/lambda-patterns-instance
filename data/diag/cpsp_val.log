@@ -1,0 +1,19 @@
+/usr/lib/python3/dist-packages/requests/__init__.py:87: RequestsDependencyWarning: urllib3 (2.8.0) or chardet (4.0.0) doesn't match a supported version!
+  warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
+4 {'cpsp': -0.0289, 'cpsp_band8': -0.0138, 'cpsp_fast': -0.0316}
+5 {'cpsp': -0.0663, 'cpsp_band8': -0.0218, 'cpsp_fast': -0.0726}
+6 {'cpsp': -0.0664, 'cpsp_band8': -0.0373, 'cpsp_fast': -0.0674}
+8 {'cpsp': 0.0041, 'cpsp_band8': 0.0053, 'cpsp_fast': 0.0015}
+9 {'cpsp': -0.0603, 'cpsp_band8': -0.0238, 'cpsp_fast': -0.0599}
+10 {'cpsp': -0.0703, 'cpsp_band8': -0.0271, 'cpsp_fast': -0.0706}
+13 {'cpsp': -0.0306, 'cpsp_band8': -0.0079, 'cpsp_fast': -0.0387}
+15 {'cpsp': 0.0039, 'cpsp_band8': 0.0026, 'cpsp_fast': 0.0006}
+17 {'cpsp': -0.0656, 'cpsp_band8': -0.0411, 'cpsp_fast': -0.0657}
+19 {'cpsp': -0.0476, 'cpsp_band8': -0.0301, 'cpsp_fast': -0.0467}
+20 {'cpsp': -0.013, 'cpsp_band8': -0.0114, 'cpsp_fast': -0.0093}
+21 {'cpsp': -0.0096, 'cpsp_band8': -0.0099, 'cpsp_fast': -0.0125}
+22 {'cpsp': 0.008, 'cpsp_band8': 0.005, 'cpsp_fast': 0.012}
+26 {'cpsp': -0.002, 'cpsp_band8': -0.002, 'cpsp_fast': -0.0011}
+val cpsp       0.8561 (-0.0487 vs default; up 4 / down 61; worst -0.120)
+val cpsp_fast  0.8546 (-0.0503 vs default; up 2 / down 61; worst -0.129)
+val cpsp_band8 0.8796 (-0.0253 vs default; up 5 / down 58; worst -0.083)
