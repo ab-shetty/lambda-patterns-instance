@@ -2492,3 +2492,20 @@ outside the target dilated 4 px (attached spill); add = target piece (>= 0.2% of
   On the real sheets wrong polygons are rare and look like correct secondary pieces; the deleted correct ones include large,
   confident polygons (HF14 2 q00: 503k px, mean probability 0.81). Automatic deletion is not adopted. Its score could still serve
   the frontend as a per-polygon confidence to flag pieces for one-click review.
+
+### 2026-10-20 (GH200) -- loss variants at two seeds: per-question BCE and family-aware BCE are null; BCE + Dice stays
+
+`train_refunet.py --bce-per-question` (BCE averaged per question, then over the batch, as Dice and the metric weight questions)
+and `--bce-other-weight W` (BCE weight W on the pixels of the plan's OTHER labelled families -- the look-alike negatives behind
+the wrong polygons users delete; `collate_fn(other_plane=True)`, checked on 40 samples). Defaults reproduce the old loss exactly.
+kq no-DR recipe on `single18kq_s600000`, seeds 7 and 8, 0.5 / 0.5 two-seed blend vs the baseline two-seed blend
+(`kqtrace_s78_nodr`: HF14 0.9151, fix v2 0.9267, val 0.8933, Gemini30 0.8719); metrics `data/evaluations/loss_{pq,pqo3}_s{7,8,78}`.
+
+| blend vs base blend | HF14 | fix v2 | val | Gemini30 |
+|---|---:|---:|---:|---:|
+| pq | -0.0062 (p=0.03) | -0.0032 | -0.0001 | +0.0003 |
+| pqo3 (pq + other-family weight 3) | -0.0068 (p=0.05) | -0.0033 | -0.0004 | -0.0032 |
+
+- The other-family weight adds -0.001 or less to pq on every set; only per-sheet move > 0.03: Gemini30 17 -0.07 (inside its seed
+  swing). As expected with the training loss near zero (~0.03), the loss shape barely reaches the real-sheet errors. Not adopted;
+  1 x BCE (pooled) + 2 x per-question Dice stays.
