@@ -69,6 +69,10 @@ def _force_of(spec):
         f["roof"] = h["roof"]
     if h.get("cross_gables") is not None:
         f["cross_gables"] = min(int(h["cross_gables"]), 2)
+    if spec.get("facade_aspect"):
+        f["aspect"] = float(spec["facade_aspect"])
+    if spec.get("bay") is not None:
+        f["bay"] = bool(spec["bay"])
     return f
 
 
@@ -83,6 +87,11 @@ def _apply_force(house, f):
                    "flat": 0.0}[m.roof]
         if m.roof == "flat":
             house["dormers"] = False
+    if "aspect" in f and not house.get("units"):
+        # front-view width / height: stretch the plan along x (every block, so attachments stay attached), x0.35-2.2
+        k = max(0.35, min(2.2, f["aspect"] / facade_aspect(house)))
+        for b in house["blocks"]:
+            b.x0, b.w = b.x0 * k, b.w * k
 
 
 def _cross_gables(make_house):
@@ -285,7 +294,7 @@ def _poly_block(b, pts, sloped, parent, **kw):
     return nb
 
 
-def shape_blocks(blocks, house, r):
+def shape_blocks(blocks, house, r, bay=None):
     """--shaped: turn the main block into an L (notch), a U (rear courtyard) or a chamfered
     polygon, and add a 45-degree bay. Pieces keep `parent` (the v6 block they came from)
     so elevation zoning still uses the right Block."""
@@ -347,12 +356,18 @@ def shape_blocks(blocks, house, r):
                 return (dy < 1e-6) if ridge_x else (dx < 1e-6)       # eave edges run parallel to the ridge
             pieces = [_poly_block(main, pts, sl, 0)]
     # 45-degree bay on the front or rear wall of the largest piece
-    if r.random() < 0.25 and main["roof"] != "flat":
+    # (bay: --spec forces it on the front wall (True) or off (False); the stream is consumed as before either way)
+    draw = r.random()
+    if (draw < 0.25 if bay is None else bay) and main["roof"] != "flat":
         P = max(pieces, key=lambda b: b["w"] * b["d"])
         px0, px1 = P["x0"], P["x0"] + P["w"]
         wy = r.choice([P["y0"], P["y0"] + P["d"]])
+        if bay:
+            wy = P["y0"]
         out = -1 if wy == P["y0"] else 1
         bw, bd = r.uniform(7, 12), r.uniform(2.5, 4)
+        if bay:                                 # a described bay: wide enough that its front face takes a window
+            bw, bd = 10 + 0.8 * (bw - 7), min(bd, 3.0)
         bd = min(bd, (bw - 2.0) / 2)                                # keep the trapezoid's outer face >= 2 ft
         if px1 - px0 > bw + 6:
             a = r.uniform(px0 + 2, px1 - 2 - bw)
@@ -381,7 +396,8 @@ def massing_spec(image_id, seed, house):
             blocks[-1]["xgable"] = True
     if SHAPED[0]:
         # own rng stream: the rest of the spec (chimney) is unchanged by the flag
-        blocks = shape_blocks(blocks, house, random.Random(seed * 1_000_003 + image_id * 211 + 3))
+        blocks = shape_blocks(blocks, house, random.Random(seed * 1_000_003 + image_id * 211 + 3),
+                              bay=HOUSE_FORCE.get(image_id, {}).get("bay"))
     spec = {"id": image_id, "blocks": blocks}
     if house["chimney"]:
         m = blocks[0]

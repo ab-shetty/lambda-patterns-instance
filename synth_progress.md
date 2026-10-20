@@ -2667,3 +2667,14 @@ Fully met specs 43 → 75 of 107; remaining unmet: accent2 17, ridge 9, units 6.
 layout fix is visibly right and scored lower). Montage: `scripts/facsimile_montage.py ORIG POOL OUT.jpg`.
 Still off: footprint proportions (192's apartment too long), Gemini's mixed gable + flat-box massing, recessed balconies,
 some colours (purple gable accent on 162). Default pools byte-identical (8/8 vs c045613^).
+
+### v7-v9 (same 107 sheets)
+| run | change | own cos | top-1 | top-5 | median rank |
+|---|---|---|---|---|---|
+| v7 | facade aspect forced: plan stretched along x to the described width / height (x0.55-1.8) | 0.151 | 0.17 | 0.45 | 7 |
+| v8 | describer v3: per-view building boxes (0-1000) → facade aspect from the first box, top corrected on the ink (Gemini's boxes cut roof peaks; an ink-based width split hip roofs, so x is Gemini's); front bay forced from the `bay_or_bump_out` tag (wider, shallower, takes a window) | 0.154 | 0.16 | 0.44 | 8 |
+| v9 | stretch range x0.35-2.2 | 0.148 | **0.20** | 0.43 | **7** |
+
+The describer's own facade_aspect correlates only 0.54 with the measured ink aspect on one-view sheets (it underestimates
+long ranches and overestimates narrow infill, 166: said 2.25, drawn ~0.9). 10 of 107 still lack v3 boxes (502s) and use
+v2. Text accuracy is out of scope (user, 2026-10-20). Default pools byte-identical (8/8).

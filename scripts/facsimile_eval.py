@@ -22,6 +22,29 @@ WALL = {"lap", "vertical", "bb", "shingle", "brick", "stone", "stipple", "flat",
 ROOF = {"asphalt", "seam", "tile_roof", "shingle", "flat_roof"}
 
 
+def refine_box(g, box):
+    """Gemini's building box ([ymin, xmin, ymax, xmax] 0-1000) with its top corrected on the ink: from a third of the way
+    down, upward through the roof (middle 60% of the width) to the first blank band -- Gemini's boxes often cut off the
+    roof peak. x and the bottom are kept (an ink-based x split hip roofs and caught level markers). Pixel (x0, y0, x1, y1)."""
+    H, W = g.shape
+    y0, x0, y1, x1 = [int(round(v * (H if i % 2 == 0 else W) / 1000)) for i, v in enumerate(box)]
+    if y1 - y0 < 10 or x1 - x0 < 10:
+        return None
+    ink = g < min(200, np.percentile(g, 95) - 30)
+    nx0, nx1 = x0, x1
+    c0, c1 = nx0 + (nx1 - nx0) // 5, nx1 - (nx1 - nx0) // 5
+    top, gap, y = y0 + (y1 - y0) // 3, 0, y0 + (y1 - y0) // 3
+    while y > max(0, y0 - (y1 - y0) // 2):
+        y -= 1
+        if ink[y, c0:c1].any():
+            top, gap = y, 0
+        else:
+            gap += 1
+            if gap > max(4, 0.03 * (y1 - y0)):
+                break
+    return nx0, top, nx1, y1
+
+
 def to_specs(described, out, image_dir=None):
     specs = []
     for r in map(json.loads, open(described)):
@@ -30,6 +53,7 @@ def to_specs(described, out, image_dir=None):
         s = {"name": r["name"], "mode": "elevation", "shaded": bool(r.get("shaded")),
              "views": r.get("views") if r.get("views") in (1, 2, 4) else 1, "house": {}, "styles": {},
              "gaps": list(r.get("gaps", []))}
+        s["bay"] = "bay_or_bump_out" in (r.get("gap_tags") or [])     # forced (--spec), not searched
         vl = [v for v in (r.get("view_list") or []) if v in ("front", "rear", "left", "right")]
         if vl:
             s["view_list"] = vl[:4]
@@ -45,6 +69,16 @@ def to_specs(described, out, image_dir=None):
         fa = (r.get("house") or {}).get("facade_aspect")
         if isinstance(fa, (int, float)) and 0.3 < fa < 15:
             s["facade_aspect"] = float(fa)
+        vb = r.get("view_boxes") or []
+        if len(vb) == 4 and all(isinstance(v, (int, float)) for v in vb):
+            vb = [vb]                           # one view given as a bare box
+        if image_dir and vb and isinstance(vb[0], list) and len(vb[0]) == 4 and max(vb[0]) <= 1000 and Path(image_dir, r["name"] + ".png").exists():
+            # the first view's building box (pixels, refined on the ink): a better facade aspect than the describer's
+            # own estimate
+            g = cv2.cvtColor(cv2.imread(str(Path(image_dir, r["name"] + ".png"))), cv2.COLOR_BGR2GRAY)
+            bx = refine_box(g, vb[0])
+            if bx:
+                s["facade_aspect"] = round((bx[2] - bx[0]) / max(1, bx[3] - bx[1]), 3)
         for k, v in (r.get("house") or {}).items():
             if k == "facade_aspect":
                 continue

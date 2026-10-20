@@ -32,6 +32,9 @@ Answer with ONE JSON object and nothing else:
  "views": 1 | 2 | 4 (number of separate building views on the sheet; use the nearest),
  "view_list": the views shown, in order, from "front", "rear", "left", "right" (the street-facing one is "front";
            a sheet with ONE view of an unknown side is ["front"]),
+ "view_boxes": one box per view in view_list order, [ymin, xmin, ymax, xmax] normalised to 0-1000, tight around the
+           BUILDING only (grade line to the top of the roof, outer wall / eave edges); exclude text, titles, dimension
+           strings, level markers and leaders,
  "house": {{"stories": 1|2|3, "roof": "gable"|"hip"|"flat"|"shed",
            "ridge": "side" if the main ridge runs left-right in the first view (eaves face the viewer) or "front" if the
            main gable END faces the viewer,
