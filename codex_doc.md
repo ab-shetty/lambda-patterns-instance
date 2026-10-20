@@ -43,8 +43,9 @@ HF14 +0.0046 (p=0.002), fix v2 +0.0033 (p=0.04), val +0.0016, extra deletes +0.0
 for the 40% of `bpr_s900000` lost to OOM, real-like patch augmentation, a P-only control, stacking with (1). New tools:
 `scripts/editcost.py` (fix counts / vertices), `train_refunet.py --save-every`, `--bce-other-weight`, `--bce-per-question`.
 On the Hub (`abshetty/floz-diag`): `bpr/refiner_2026-10-20.pth`, `xblend-kq30-kms30/{split}_2048` (2048 maps),
-`xblend-kq30-kms30/bpr_b4/`, `xblend-kq30-kms30/tta/`. Parked: TracIn, self-training with automatic boxes (more Gemini images),
-Gemini facsimiles (`--spec`, CPU task). **Twin test done (2026-10-20, `synth_progress.md`): Gemini30 1 / 26 recover on their twins (0.65 -> 0.98,
+`xblend-kq30-kms30/bpr_b4/`, `xblend-kq30-kms30/tta/`, `checkpoints/kqtrace_s8_nodr_epoch0.pth` (the seed-8 kq no-DR arm, for
+two-seed blends) + `checkpoints/kqtrace_s{7,8}_nodr_order.json`. Parked: TracIn, self-training with automatic boxes (more Gemini
+images). **Twin test done (2026-10-20, `synth_progress.md`): Gemini30 1 / 26 recover on their twins (0.65 -> 0.98,
 0.48 -> 0.82) = appearance failures; no question fails on both; twins 16 / 20 fail on their own -- inspect those twin images.**
 Multi-scale + BPR stack: val +0.0023, fix v2 +0.0031, Gemini30 +0.0089, no added fixes (held for the user too).
 
@@ -53,7 +54,7 @@ no-DR arm moves HF14 / Gemini30 by ~0.016 and 5 / 30 Gemini30 sheets by > 0.05 -
 every single-pass run so far used seed 7. Late-checkpoint averaging within a run does not help; a 0.5 / 0.5 two-seed blend beats
 both seeds on every set. Soups of the Hub arms and adding the seed-8 arm to the best fail the gate. `--save-every N` records step
 checkpoints and the batch order. **Judge changes at two seeds (blend vs blend)**; revise the sheet rule to "beyond seed noise".
-Next: `--hires-crop 0.5` at seeds 7 and 8 (running 2026-10-20).
+`--hires-crop 0.5` was screened at seed 7 only (fails the gate: Gemini30 -0.016, inside seed noise); no seed-8 replicate.
 
 **Parked until the user has more Gemini images (2026-10-20): self-training with automatic boxes.** Tile each unlabelled sheet
 with candidate boxes; ask the best model each one; keep a box only if (a) it lies wholly inside its own answer at P > 0.9, (b) a
@@ -62,7 +63,8 @@ texture, (d) the box is not mostly text. Survivors + answers are training questi
 views (other scale / blur / line weight). First validate on val's labelled sheets: share of accepted boxes wholly inside one
 family and their answers' accuracy, plus a contact sheet for the user. HF14 / val decide, not Gemini30; Gemini30 never in the pool.
 
-**For a CPU session (2026-10-20): synthetic facsimiles of Gemini images.** Add `generate_synthetic_fc.py --spec file.json`
+**Synthetic facsimiles of Gemini images (2026-10-20) -- done: `--spec` twins too different (the user), label-shape twins
+(`scripts/facsimile_relabel.py`) built and twin-tested on the GPU (see Pick up here). Original plan, kept for reference:** Add `generate_synthetic_fc.py --spec file.json`
 that renders a given house + appearance (the dicts `G.make_house` / `G.make_appearance` now sample, `house_for` line 49)
 instead of drawing them; describe each Gemini image in that vocabulary (Claude Code views the image; at scale, Gemini Batch
 API writes the JSON), clamped to what the generator can draw. Uses: (1) labelled twins of Gemini content with exact masks and
