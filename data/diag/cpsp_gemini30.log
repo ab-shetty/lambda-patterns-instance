@@ -1,0 +1,40 @@
+/usr/lib/python3/dist-packages/requests/__init__.py:87: RequestsDependencyWarning: urllib3 (2.8.0) or chardet (4.0.0) doesn't match a supported version!
+  warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
+/home/ubuntu/.local/lib/python3.10/site-packages/urllib3/poolmanager.py:331: FutureWarning: The 'strict' parameter is no longer needed on Python 3+. This will raise an error in urllib3 v3.0.
+  warnings.warn(
+Model does not exist.
+Downloading model file into /home/ubuntu/.segmentation-refinement/model
+Download completed.
+0 {'cpsp': 0.05, 'cpsp_band8': 0.0302, 'cpsp_fast': 0.0399}
+1 {'cpsp': -0.1519, 'cpsp_band8': -0.0718, 'cpsp_fast': -0.144}
+2 {'cpsp': -0.082, 'cpsp_band8': -0.0327, 'cpsp_fast': -0.0892}
+3 {'cpsp': -0.0844, 'cpsp_band8': -0.0481, 'cpsp_fast': -0.0773}
+4 {'cpsp': -0.0127, 'cpsp_band8': -0.0068, 'cpsp_fast': -0.0142}
+5 {'cpsp': 0.0087, 'cpsp_band8': 0.0066, 'cpsp_fast': 0.0064}
+6 {'cpsp': -0.0126, 'cpsp_band8': -0.0063, 'cpsp_fast': -0.0124}
+7 {'cpsp': -0.0893, 'cpsp_band8': -0.0456, 'cpsp_fast': -0.0969}
+8 {'cpsp': -0.0674, 'cpsp_band8': -0.0184, 'cpsp_fast': -0.0746}
+9 {'cpsp': -0.0139, 'cpsp_band8': -0.0058, 'cpsp_fast': -0.0235}
+10 {'cpsp': -0.0228, 'cpsp_band8': -0.0153, 'cpsp_fast': -0.0246}
+11 {'cpsp': -0.0503, 'cpsp_band8': -0.0127, 'cpsp_fast': -0.0505}
+12 {'cpsp': -0.1405, 'cpsp_band8': -0.0817, 'cpsp_fast': -0.151}
+13 {'cpsp': -0.1181, 'cpsp_band8': -0.0607, 'cpsp_fast': -0.1395}
+14 {'cpsp': -0.0952, 'cpsp_band8': -0.0638, 'cpsp_fast': -0.0935}
+15 {'cpsp': -0.0079, 'cpsp_band8': -0.0046, 'cpsp_fast': -0.0116}
+16 {'cpsp': -0.2287, 'cpsp_band8': -0.1715, 'cpsp_fast': -0.2048}
+17 {'cpsp': -0.0191, 'cpsp_band8': -0.0011, 'cpsp_fast': -0.0174}
+18 {'cpsp': 0.0092, 'cpsp_band8': 0.0088, 'cpsp_fast': 0.0056}
+19 {'cpsp': 0.0338, 'cpsp_band8': 0.016, 'cpsp_fast': 0.0266}
+20 {'cpsp': -0.0389, 'cpsp_band8': -0.0301, 'cpsp_fast': -0.0416}
+21 {'cpsp': -0.0178, 'cpsp_band8': -0.012, 'cpsp_fast': -0.0139}
+22 {'cpsp': -0.0479, 'cpsp_band8': -0.029, 'cpsp_fast': -0.0774}
+23 {'cpsp': -0.0263, 'cpsp_band8': -0.0004, 'cpsp_fast': -0.0288}
+24 {'cpsp': 0.0005, 'cpsp_band8': 0.0059, 'cpsp_fast': 0.0016}
+25 {'cpsp': -0.0238, 'cpsp_band8': -0.0119, 'cpsp_fast': -0.0302}
+26 {'cpsp': -0.0064, 'cpsp_band8': 0.001, 'cpsp_fast': -0.0111}
+27 {'cpsp': -0.0372, 'cpsp_band8': -0.0121, 'cpsp_fast': -0.0372}
+28 {'cpsp': -0.0632, 'cpsp_band8': -0.0385, 'cpsp_fast': -0.0674}
+29 {'cpsp': -0.047, 'cpsp_band8': -0.0255, 'cpsp_fast': -0.0521}
+gemini30 cpsp       0.8187 (-0.0634 vs default; up 19 / down 161; worst -0.362)
+gemini30 cpsp_fast  0.8185 (-0.0636 vs default; up 17 / down 166; worst -0.307)
+gemini30 cpsp_band8 0.8442 (-0.0379 vs default; up 27 / down 139; worst -0.266)
