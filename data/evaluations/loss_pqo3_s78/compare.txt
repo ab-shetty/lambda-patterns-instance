@@ -1,0 +1,52 @@
+== pqo3 s78 vs base s78: hf14
+== paired over 51 fixed selections: pqo3 - base
+   paired mean difference -0.0068   se 0.0034   t(50) = -1.99   p = 0.0522
+   pqo3 better on 3, worse on 10, tied (|d|<0.01) on 38   sign-test p = 0.09229
+
+   per image (pqo3 - base), worst first:
+     image                     12  n= 4  mean -0.0172   share of total   19.9%
+     image                     14  n= 8  mean -0.0138   share of total   31.9%
+     image                     18  n=10  mean -0.0137   share of total   39.5%
+     image                      2  n= 3  mean -0.0124   share of total   10.7%
+     image                      7  n= 1  mean -0.0094   share of total    2.7%
+     image                     25  n= 4  mean -0.0030   share of total    3.5%
+     image                     11  n= 1  mean -0.0024   share of total    0.7%
+== pqo3 s78 vs base s78: hf14fix2
+== paired over 51 fixed selections: pqo3 - base
+   paired mean difference -0.0033   se 0.0021   t(50) = -1.58   p = 0.1215
+   pqo3 better on 4, worse on 10, tied (|d|<0.01) on 37   sign-test p = 0.1796
+
+   per image (pqo3 - base), worst first:
+     image                     12  n= 4  mean -0.0172   share of total   41.2%
+     image                     14  n= 8  mean -0.0153   share of total   73.1%
+     image                      2  n= 3  mean -0.0124   share of total   22.3%
+     image                      7  n= 1  mean -0.0094   share of total    5.6%
+     image                     25  n= 4  mean -0.0030   share of total    7.3%
+     image                     11  n= 1  mean -0.0024   share of total    1.4%
+     image                      3  n= 5  mean -0.0017   share of total    5.1%
+== pqo3 s78 vs base s78: val
+== paired over 72 fixed selections: pqo3 - base
+   paired mean difference -0.0004   se 0.0009   t(71) = -0.42   p = 0.6751
+   pqo3 better on 1, worse on 4, tied (|d|<0.01) on 67   sign-test p = 0.375
+
+   per image (pqo3 - base), worst first:
+     image                      6  n= 3  mean -0.0104   share of total  116.1%
+     image                     13  n=10  mean -0.0067   share of total  250.4%
+     image                     20  n= 1  mean -0.0033   share of total   12.4%
+     image                     21  n= 1  mean -0.0018   share of total    6.5%
+     image                      9  n= 6  mean -0.0015   share of total   32.9%
+     image                      8  n= 2  mean -0.0012   share of total    9.2%
+     image                     15  n= 3  mean +0.0002   share of total   -2.8%
+== pqo3 s78 vs base s78: gemini30
+== paired over 195 fixed selections: pqo3 - base
+   paired mean difference -0.0032   se 0.0029   t(194) = -1.11   p = 0.2684
+   pqo3 better on 28, worse on 33, tied (|d|<0.01) on 134   sign-test p = 0.6089
+
+   per image (pqo3 - base), worst first:
+     image                     17  n=13  mean -0.0692   share of total  143.5%
+     image                      3  n= 5  mean -0.0246   share of total   19.6%
+     image                     19  n= 4  mean -0.0209   share of total   13.3%
+     image                     11  n= 4  mean -0.0116   share of total    7.4%
+     image                     24  n= 2  mean -0.0111   share of total    3.5%
+     image                      1  n= 3  mean -0.0090   share of total    4.3%
+     image                      6  n= 6  mean -0.0072   share of total    6.9%
