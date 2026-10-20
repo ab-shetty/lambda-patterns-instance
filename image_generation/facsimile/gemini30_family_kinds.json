@@ -1,0 +1,12 @@
+{
+ "1":  {"shaded": true,  "kinds": {"pattern1": "bb"}},
+ "7":  {"shaded": true,  "kinds": {"pattern1": "brick", "pattern2": "stipple", "pattern3": "asphalt"}},
+ "8":  {"shaded": false, "kinds": {"pattern1": "shingle", "pattern2": "stipple", "pattern3": "bb"}},
+ "9":  {"shaded": true,  "kinds": {"pattern1": "shingle", "pattern2": "lap"}},
+ "14": {"shaded": true,  "kinds": {"pattern1": "bb"}},
+ "16": {"shaded": true,  "kinds": {"pattern1": "lap", "pattern2": "lap", "pattern3": "lap"}},
+ "20": {"shaded": false, "kinds": {"pattern1": "stone", "pattern2": "seam", "pattern3": "seam", "pattern4": "vertical"}},
+ "22": {"shaded": false, "kinds": {"pattern1": "lap"}},
+ "25": {"shaded": true,  "kinds": {"pattern1": "brick", "pattern2": "shingle", "pattern3": "stipple"}},
+ "26": {"shaded": true,  "kinds": {"pattern1": "lap", "pattern2": "lap", "pattern3": "lap"}}
+}
