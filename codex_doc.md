@@ -47,6 +47,15 @@ texture, (d) the box is not mostly text. Survivors + answers are training questi
 views (other scale / blur / line weight). First validate on val's labelled sheets: share of accepted boxes wholly inside one
 family and their answers' accuracy, plus a contact sheet for the user. HF14 / val decide, not Gemini30; Gemini30 never in the pool.
 
+**For a CPU session (2026-10-20): synthetic facsimiles of Gemini images.** Add `generate_synthetic_fc.py --spec file.json`
+that renders a given house + appearance (the dicts `G.make_house` / `G.make_appearance` now sample, `house_for` line 49)
+instead of drawing them; describe each Gemini image in that vocabulary (Claude Code views the image; at scale, Gemini Batch
+API writes the JSON), clamped to what the generator can draw. Uses: (1) labelled twins of Gemini content with exact masks and
+`ref_exclude` (controlled boxes); (2) a gap list of what specs cannot express (e.g. corner boards); (3) the **twin test** on
+Gemini30 -- good on the twin but bad on the original = appearance failure (line weight / scale / style), bad on both =
+content / layout -- splits Gemini30's loss by cause. Twins of Gemini30 sheets are diagnostic only, never in a training pool.
+Copies content, not appearance. Pilot: 10 user Gemini images + 10 Gemini30 twins, then score the twins (GPU, minutes).
+
 **Open problems** (`synth_progress.md` 2026-10-14 .. 17):
 - Gemini30 17 (hip-roof shingle plan, native 2400 px) collapses to blotchy half-confidence in both kms and kw (0.89 -> 0.68-0.70);
   only kq gets it right. Fragile, not specific to multi-res.
