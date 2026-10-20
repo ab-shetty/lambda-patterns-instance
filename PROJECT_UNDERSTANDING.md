@@ -14,7 +14,8 @@ class-agnostic instance detection.
 In the product, an end user viewing an architectural plan draws a box on one
 section of a repeating pattern, then selects the part of the plan to search,
 and the frontend draws polygons over every section with that pattern inside
-that search area.
+that search area. Each training and evaluation image stands for one such
+search area, so whole-image scoring matches the product.
 
 ## Meaning of pattern labels
 
