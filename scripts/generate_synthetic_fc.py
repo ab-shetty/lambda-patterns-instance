@@ -89,6 +89,38 @@ def _cross_gables(make_house):
 if not getattr(G.make_house, "_cross", False):
     G.make_house = _cross_gables(G.make_house)
 
+# --wall-splits P (default 0.3 since 2026-10-20b): a vertical band of the main block's front / rear wall in a second material
+# from grade to eave -- an end bay (50%) or an interior entry bay, 20-45% of the wall wide, a trim board at each edge,
+# mirrored on the rear view -- as the "accent2" family (only when accent2 is free). Gemini round 5: a material change
+# mid-wall / vertical split on 16 of 111 elevations; the generator only zoned materials in horizontal bands. Own RNG seeded
+# from the house; P = 0 = earlier pools.
+WALL_SPLITS = [0.3]
+
+
+def _wall_splits(make_house):
+    def wrapped(rng):
+        house = make_house(rng)
+        if WALL_SPLITS[0] <= 0:
+            return house
+        m = house["blocks"][0]
+        sr = random.Random(int(house["fh"] * 1e9) * 13 + int(m.d * 1e9) * 5 + 23)
+        if sr.random() >= WALL_SPLITS[0] or house.get("accent2") or m.w < 20:
+            return house
+        frac = sr.uniform(0.2, 0.45)
+        if sr.random() < 0.5:
+            fa, fb = (0.0, frac) if sr.random() < 0.5 else (1.0 - frac, 1.0)
+        else:
+            fa = sr.uniform(0.1, 0.9 - frac)
+            fb = fa + frac
+        house["accent2"], house["split"] = "split", (fa, fb)
+        return house
+    wrapped._split = True
+    return wrapped
+
+
+if not getattr(G.make_house, "_split", False):
+    G.make_house = _wall_splits(G.make_house)
+
 
 def house_for(image_id, seed, mw):
     rng = random.Random(seed * 1_000_003 + image_id)
@@ -100,7 +132,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-20a"      # 2026-10-20a: --cross-gables 0.4 default (0 = 2026-10-17b pools)
+GEN_VERSION = "2026-10-20b"      # 20a: --cross-gables 0.4 default (0 = 2026-10-17b pools); 20b: --wall-splits 0.3 (0 = 20a)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -615,6 +647,16 @@ def build_elevation_fc(house, view, rng):
                 return G.rect(u0 - 1, -fh, u1 + 1, -200)
             if placement == "block" and B.kind != "main":
                 return G.rect(u0 - 1, 1, u1 + 1, -200)
+            if placement == "split" and B.kind == "main" and view in ("front", "rear") and house.get("split"):
+                fa, fb = house["split"]
+                if view == "rear":
+                    fa, fb = 1.0 - fb, 1.0 - fa
+                wb = u1 - u0
+                sa, sb = u0 + fa * wb, u0 + fb * wb
+                for e in (sa, sb):
+                    if u0 + 0.3 < e < u1 - 0.3:
+                        belt_polys.append(G.rect(e - 0.2, 0.0, e + 0.2, y_top))
+                return G.rect(sa - (1 if fa <= 0 else 0), 1, sb + (1 if fb >= 1 else 0), -200)
             return None
 
         accent_zone = zone_for(acc) if acc else None
@@ -927,6 +969,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
     GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
     CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
+    WALL_SPLITS[0] = float(flags.pop("wall_splits", 0.3))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -1083,6 +1126,9 @@ def main():
     ap.add_argument("--cross-gables", type=float, default=0.4,
                     help="probability a side-gable / hip house gets one or two front cross gables (CROSS_GABLES); "
                          "0 = the 2026-10-17b pools")
+    ap.add_argument("--wall-splits", type=float, default=0.3,
+                    help="probability the main front / rear wall gets a vertical band in a second material (accent2, "
+                         "when free); 0 = the 2026-10-20a pools")
     ap.add_argument("--spec", default=None,
                     help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
                          "--n is ignored, one sheet per spec")
@@ -1138,6 +1184,8 @@ def main():
     flags["gable_pairs"] = args.gable_pairs
     flags["cross_gables"] = args.cross_gables
     CROSS_GABLES[0] = args.cross_gables       # the main process draws houses too (house_for, --spec search)
+    flags["wall_splits"] = args.wall_splits
+    WALL_SPLITS[0] = args.wall_splits
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)

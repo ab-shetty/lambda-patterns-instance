@@ -2631,3 +2631,9 @@ metrics `data/evaluations/facsimile/twins_4096.json`):
 | **multi-scale + BPR** | **+0.0023** (p=0.02) / 0.00 | +0.0028 (p=0.23) / +0.02 | +0.0031 (p=0.18) / -0.02 | **+0.0089** (p<0.001) / **-0.28** |
 
 (IoU delta / fixes per question.) The stack is up on every set with no added fixes; its HF14 gain is below BPR alone.
+- **Generator: vertical wall splits, default on** (`--wall-splits 0.3`, GEN 2026-10-20b; 0 = 20a). From the gap tally (material
+  change mid-wall / vertical split on 16 of 111 elevations; the generator zoned materials only in horizontal bands). The main
+  block's front / rear wall gets a grade-to-eave band in a second material (end bay 50% or interior entry bay, 20-45% wide,
+  trim board at each edge, mirrored on the rear) as the accent2 family when accent2 is free. Probe: 34 / 200 houses, 30 sheets
+  changed, 169 byte-identical to the 20a probe; labels checked. Note (the user): Gemini does not hold a pattern perfectly
+  uniform the way a firm's Revit export does -- a within-family drift option is next after the panel material.
