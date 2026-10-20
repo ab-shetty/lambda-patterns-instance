@@ -2545,3 +2545,52 @@ each variant, paired per question vs the 4096 polygon rows. Rows `data/diag/ms_{
   change mid-wall / vertical splits 16, three or more stacked bands 10 (the generator zones one accent + accent2);
   apartment / multi-storey blocks 14 (balconies 12); fibre-cement panels with reveal grids ~13-17, diagonal / herringbone
   siding; bays / bump-outs 29 (only 45-degree bays exist); split levels 9; detached garages / site context ~10.
+
+### 2026-10-20 (CPU) -- BPR precheck: synthetic labels split boundary strokes like the real labels
+
+Before a boundary-patch refiner (BPR, CVPR 2021) is trained on synthetic sheets: do synthetic labels place the edge where the
+real ones do? Same measure as 2026-10-19 (`stroke.py`: ink pixels within 3 px of the target edge, share inside the label),
+`scripts/pp_probe/synth_stroke.py`, 200 kq-pool sheets, one target per family, native resolution.
+
+| share of boundary-stroke ink inside the label | median (p25-p75) |
+|---|---|
+| synthetic (482 family targets) | 0.58 (0.52-0.63); elevations 0.56-0.59, plans 0.52-0.61, roof plans 0.62-0.63 |
+| real val / HF14 (2026-10-19) | 0.54 / 0.59 |
+| Gemini30 (2026-10-19) | 0.49 |
+
+- Synthetic matches real (between val and HF14 on every sheet type); Gemini30 is the outlier, consistent with Gemini-fitted
+  refiners transferring badly. Predictions on real already match on average (0.60 / 0.58), so the boundary error is per-question
+  variance, not an offset -- what a patch refiner addresses. BPR is not blocked by the label convention.
+- Training masks for BPR need realistic errors: the model is near-exact on its own training sheets, so use its 4096 predictions on
+  fresh synthetic sheets and / or corrupted ground truth (dilate / erode / blur / offset).
+
+### 2026-10-20 (GH200) -- boundary-patch refiner trained on synthetic only (`scripts/bpr/bpr.py`): small, real-positive, adds deletes on HF14
+
+After BPR (CVPR 2021), map -> map at the inference resolution (long side 4096): 64 x 64 patches on the coarse edge (P > 0.35),
+input sheet RGB + P + (P > 0.35), small U-Net (32-256 ch), Hann-weighted overlap, P replaced only within `--band` px of the
+coarse edge. Data: fresh pool `bpr_s900000` (ids 900000+, 1,487 sheets, current GEN), best model (xblend-kq30-kms30) @4096 maps
+with automatic boxes (7,934 questions -- two of four shards OOMed beside a smoke test, ~60% of sheets); patches on the edges of
+P (48 / q), of the target (12) and of corrupted targets (16: dilate / erode +-3, shift +-2, blur); 537k train / 65k val by sheet.
+6 epochs OneCycle 2e-3, BCE + Dice, ~6 min on the GH200; synthetic val patch IoU 0.897 coarse -> 0.934 (epoch 4) / 0.929
+(epoch 5, the saved one). Band chosen on val (best IoU, ties to the smaller; pre-registered), HF14 / fix v2 / Gemini30 read once.
+Scored as polygons (`editcost.py`, eps 1) vs the unrefined polygon rows; rows `data/diag/bpr_b{4,8,16}/`.
+
+| | val b4 / b8 / b16 | HF14 (b4) | HF14 fix v2 (b4) | Gemini30 (b4) |
+|---|---|---|---|---|
+| IoU vs base | +0.0016 (p=0.10) / -0.0019 / -0.0045 | **+0.0044** (p=0.004; 16 / 6 q) | +0.0031 (p=0.06) | +0.0008 (p=0.47) |
+| fixes per q vs base | +0.03 / +0.05 / +0.05 | **+0.14** (deletes 0.33 -> 0.45) | +0.08 | -0.04 |
+| worst sheet | -0.006 (6) | -0.007 (24) | -0.007 (24) | -0.036 (10) |
+
+- First boundary method that moves both real sets up while trained without them (every Gemini-fitted refiner moved them down),
+  consistent with the stroke-convention precheck. But it takes only ~+0.002-0.004 of the +0.025-0.035 band headroom, wider bands
+  lose, and on HF14 it adds deletes (some polygons become slivers mostly off the target) -- not shippable as is.
+- Next if pursued: speck / sliver drop after refinement; all 1,487 sheets' maps (the OOMed shards); real-like augmentation
+  (line weight, blur, tone) on the patches; a P-only refiner control (does the image help?).
+
+### 2026-10-20 (CPU) -- HF14 fix v2 backfill for the multi-scale / TTA polygon variants (missed in the entries above)
+
+`editcost.py hf14fix2` on the same maps, paired vs the unrefined fix v2 polygons (0.9311); rows `data/diag/ms_*/rows_editcost_hf14fix2.json`.
+0.7 x 4096 + 0.3 x 2048: 0.9324 (+0.0013, p=0.49), fixes -0.04 / q; 1 : 1: 0.9225 (-0.0086, p=0.12), +0.24; 2048 alone: 0.8871
+(-0.0440, p=0.002); TTA x8 @4096: 0.9421 (+0.0110, p=0.16), -0.14; **TTA x8 + 0.7 / 0.3 multi-scale: 0.9429 (+0.0117, p=0.07),
+-0.16 fixes / q** (plain HF14 for the same: +0.0064, p=0.31). Same picture as plain HF14: 0.7 / 0.3 never hurts; TTA's HF14 gain is
+large but rests on a few questions.
