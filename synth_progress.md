@@ -2594,3 +2594,12 @@ Scored as polygons (`editcost.py`, eps 1) vs the unrefined polygon rows; rows `d
 (-0.0440, p=0.002); TTA x8 @4096: 0.9421 (+0.0110, p=0.16), -0.14; **TTA x8 + 0.7 / 0.3 multi-scale: 0.9429 (+0.0117, p=0.07),
 -0.16 fixes / q** (plain HF14 for the same: +0.0064, p=0.31). Same picture as plain HF14: 0.7 / 0.3 never hurts; TTA's HF14 gain is
 large but rests on a few questions.
+- **Generator: front cross gables, default on** (`generate_synthetic_fc.py --cross-gables 0.4`, GEN_VERSION 2026-10-20a; 0 =
+  2026-10-17b pools). From the round-5 gap tally (cross gables / steep Tudor 21, several front gables 19, hip + gable 20 of
+  111 elevations). A side-gable or hip main roof gets one (65%) or a symmetric pair (35%) of gabled bays projecting 1-7 ft
+  from the front wall, ridge perpendicular to the main ridge, reaching back to the main ridge so the roofs meet in the fused
+  solid; 40% steep (rise / run 0.9-1.4), ridge capped at main ridge + 2 ft. Block kind "xgable": own walls and gable
+  triangle, so a gable accent lands in it. Own RNG seeded from the house, so massing, elevations and plans agree.
+  Probe (200 ids, elevations + roof plans): 38 / 200 houses get cross gables; massing 199 / 200 (the same ids without:
+  198 / 200); the 162 other sheets byte-identical to `--cross-gables 0`. Chamfered (`--shaped`) footprints are skipped under
+  a cross gable (950005: slope-plane roof would not fuse). Labels checked on 950011 / 950023 / 950038.

@@ -46,6 +46,50 @@ _CUR = [None]
 # houses: reproduce compose()'s rng prefix so the FreeCAD model is the house
 # compose() will draw
 # ----------------------------------------------------------------------------
+# --cross-gables P (default 0.4 since 2026-10-20a): a front cross gable -- a gabled bay projecting from the front wall with
+# its ridge perpendicular to the main ridge (one 65%, a symmetric pair 35%; steep "Tudor" pitch 40%) -- on houses whose main
+# roof is a side-gable or hip. Gemini round 5: cross gables / steep Tudor on 21, several front gables on 19, hip + gable
+# mixes on 20 of 111 elevations, none drawable before. The bay reaches back to the main ridge so the two roofs meet in the
+# fused solid; it is block kind "xgable" (own walls, own gable triangle: a gable accent lands in it). Own RNG stream seeded
+# from the house itself, so every caller (massing, elevations, plans) sees the same house; P = 0 = earlier pools.
+CROSS_GABLES = [0.4]
+
+
+def _cross_gables(make_house):
+    def wrapped(rng):
+        house = make_house(rng)
+        if CROSS_GABLES[0] <= 0:
+            return house
+        m = house["blocks"][0]
+        cr = random.Random(int(house["fh"] * 1e9) * 7 + int(m.w * 1e9) * 3 + 11)
+        if cr.random() >= CROSS_GABLES[0] or house.get("units") or m.ridge != "x" or m.roof not in ("gable", "hip") \
+                or m.w < 24:
+            return house
+        main_rise = m.pitch * m.d / 2
+        steep = cr.random() < 0.4
+        if cr.random() < 0.65:
+            cw = cr.uniform(0.22, 0.4) * m.w
+            centres = [m.x0 + cr.uniform(0.25, 0.75) * m.w]
+        else:
+            cw = cr.uniform(0.18, 0.28) * m.w
+            off = cr.uniform(0.2, 0.3) * m.w
+            centres = [m.x0 + m.w / 2 - off, m.x0 + m.w / 2 + off]
+        p = cr.uniform(1.0, 7.0)
+        pitch = cr.uniform(0.9, 1.4) if steep else m.pitch * cr.uniform(1.0, 1.3)
+        pitch = min(pitch, (main_rise + 2.0) / (cw / 2))
+        for c in centres:
+            x0 = max(m.x0 + 0.5, min(c - cw / 2, m.x1 - 0.5 - cw))
+            house["blocks"].append(G.Block(x0, m.y0 - p, cw, p + m.d / 2, m.stories, "gable", "y", pitch, m.ov, "xgable"))
+        house["cross_gables"] = len(centres)
+        return house
+    wrapped._cross = True
+    return wrapped
+
+
+if not getattr(G.make_house, "_cross", False):
+    G.make_house = _cross_gables(G.make_house)
+
+
 def house_for(image_id, seed, mw):
     rng = random.Random(seed * 1_000_003 + image_id)
     rng.choices(list(mw.keys()), weights=list(mw.values()))
@@ -56,7 +100,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-17b"
+GEN_VERSION = "2026-10-20a"      # 2026-10-20a: --cross-gables 0.4 default (0 = 2026-10-17b pools)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
 # railing and deck posts, newel posts) are drawn as before but no longer cut out of the wall
@@ -173,7 +217,8 @@ def shape_blocks(blocks, house, r):
         if free(sbox(cx, y1 - cd, cx + cw, y1)):
             pieces = [_rect_block(main, x0, y0, x1, y1 - cd, 0), _rect_block(main, x0, y1 - cd, cx, y1, 0),
                       _rect_block(main, cx + cw, y1 - cd, x1, y1, 0)]
-    elif op < 0.65 and main["roof"] in ("hip", "gable", "flat"):  # chamfered corners
+    elif op < 0.65 and main["roof"] in ("hip", "gable", "flat") and not any(b.get("xgable") for b in rest):
+        # chamfered corners (not under a cross gable: the slope-plane roof will not fuse with the bay's, 950005)
         corners = [(x0, y0, 1, 1), (x1, y0, -1, 1), (x1, y1, -1, -1), (x0, y1, 1, -1)]
         cut = [c for c in corners if free(sbox(min(c[0], c[0] + 6 * c[2]), min(c[1], c[1] + 6 * c[3]),
                                                 max(c[0], c[0] + 6 * c[2]), max(c[1], c[1] + 6 * c[3])))]
@@ -230,6 +275,8 @@ def massing_spec(image_id, seed, house):
         pitch = b.pitch if b.roof == "flat" or b.pitch >= 0.1 else r.uniform(0.25, 0.45)
         blocks.append({"x0": b.x0, "y0": b.y0, "w": b.w, "d": b.d, "H": H, "roof": b.roof, "ridge": b.ridge,
                        "pitch": pitch, "ov": b.ov, "parapet": r.uniform(1.0, 2.5)})
+        if b.kind == "xgable":
+            blocks[-1]["xgable"] = True
     if SHAPED[0]:
         # own rng stream: the rest of the spec (chimney) is unchanged by the flag
         blocks = shape_blocks(blocks, house, random.Random(seed * 1_000_003 + image_id * 211 + 3))
@@ -879,6 +926,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     PAIR_TURNS[0] = bool(flags.pop("pair_turns", 1))
     HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
     GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
+    CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
     G._init(out, seed, mw, **flags)
     _FACES.update(faces)
     G.build_elevation = build_elevation_fc
@@ -1032,6 +1080,9 @@ def main():
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
                          "Off = byte-identical")
+    ap.add_argument("--cross-gables", type=float, default=0.4,
+                    help="probability a side-gable / hip house gets one or two front cross gables (CROSS_GABLES); "
+                         "0 = the 2026-10-17b pools")
     ap.add_argument("--spec", default=None,
                     help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
                          "--n is ignored, one sheet per spec")
@@ -1085,6 +1136,8 @@ def main():
     flags["pair_turns"] = args.pair_turns
     flags["heavy_pieces"] = args.heavy_pieces
     flags["gable_pairs"] = args.gable_pairs
+    flags["cross_gables"] = args.cross_gables
+    CROSS_GABLES[0] = args.cross_gables       # the main process draws houses too (house_for, --spec search)
     flags["plan_v2"] = args.plan_v2
     if args.plan_source:
         flags["plan_source"] = os.path.abspath(args.plan_source)
