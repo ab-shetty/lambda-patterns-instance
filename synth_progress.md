@@ -2603,3 +2603,31 @@ large but rests on a few questions.
   Probe (200 ids, elevations + roof plans): 38 / 200 houses get cross gables; massing 199 / 200 (the same ids without:
   198 / 200); the 162 other sheets byte-identical to `--cross-gables 0`. Chamfered (`--shaped`) footprints are skipped under
   a cross gable (950005: slope-plane roof would not fuse). Labels checked on 950011 / 950023 / 950038.
+
+- **Sliver revert (pre-registered: a refined piece overlapping the coarse mask < 50% of its area goes back to P)**, rows
+  `data/diag/bpr_b4_ns/`: val +0.0016 (unchanged), HF14 +0.0046 (p=0.002; extra deletes +0.12 -> +0.06 / q), fix v2 +0.0033
+  (p=0.04; +0.08 -> +0.02). Gemini30 not re-run (VM shutdown). Refiner + 2048 / bpr_b4 maps on `abshetty/floz-diag`
+  (`bpr/refiner_2026-10-20.pth`, `xblend-kq30-kms30/{split}_2048`, `xblend-kq30-kms30/bpr_b4/`).
+
+### 2026-10-20 (GH200, last half hour) -- twin test on the Gemini30 label-shape twins; BPR stacked on multi-scale
+
+**Twin test** (`facsimile_relabel.py` twins of Gemini30 1 7 8 9 14 16 20 22 25 26, best model @4096, the remapped
+`boxes.json`; 81 questions paired with the same questions on the originals, `eval_baselines/xblend-kq30-kms30_gemini30_4096.json`;
+metrics `data/evaluations/facsimile/twins_4096.json`):
+- Mean original 0.8534 -> twin 0.8074 (-0.046, p=0.09) -- but by sheet it splits: **Gemini30 1 0.654 -> 0.980 and 26 0.478 -> 0.821**
+  (the two swing sheets of the last week), 8 +0.095, 22 +0.107, 7 +0.040; 9 / 14 / 25 flat; **16 0.925 -> 0.717, 20 0.910 -> 0.573**.
+- Of the 8 original questions under 0.6, 3 reach >= 0.8 on the twin (appearance) and **none stay under 0.6 (content: 0)**. Sheets 1
+  and 26 fail because of how Gemini draws those materials, not because of their layout or grouping.
+- The twins add failures of their own (16, 20: 8 questions good on the original, < 0.6 on the twin) -- the repaint, not the
+  model's view of Gemini: likely two families repainted to look alike, or the inferred scale (labels' width / 45 ft) off on
+  those sheets. Check their twin images before reading 16 / 20 as anything.
+
+**BPR on the 0.7 / 0.3 multi-scale maps** (same refiner, band 4, sliver revert; vs unrefined 4096 polygons):
+
+| | val | HF14 | HF14 fix v2 | Gemini30 |
+|---|---|---|---|---|
+| multi-scale alone | +0.0015 (p<0.001) / -0.07 | -0.0001 / +0.02 | +0.0013 / -0.04 | +0.0067 (p<0.001) / -0.25 |
+| BPR alone (+ revert) | +0.0016 / +0.03 | +0.0046 (p=0.002) / +0.08 | +0.0033 (p=0.04) / +0.02 | +0.0015 / -0.11 |
+| **multi-scale + BPR** | **+0.0023** (p=0.02) / 0.00 | +0.0028 (p=0.23) / +0.02 | +0.0031 (p=0.18) / -0.02 | **+0.0089** (p<0.001) / **-0.28** |
+
+(IoU delta / fixes per question.) The stack is up on every set with no added fixes; its HF14 gain is below BPR alone.

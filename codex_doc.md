@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-10-20
+Last updated: 2026-10-20 (end of GH200 session)
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds every number, command and the publish gate;
 `synth_progress.md` holds every experiment. This file says only where to pick up and how to set a machine up. Older
@@ -32,6 +32,21 @@ fill take predictions from ~12-44 components to ~4. Next: a polygon stage (speck
 the model output -- IoU of the rasterised polygons. `scripts/postproc_probe.py` (hf14 / val / gemini30).
 
 **User's submission target:** "0.95 on real" (protocol -- HF14 vs val, per question vs per sheet -- not pinned down yet).
+
+**Pick up here (2026-10-20, end of GH200 session; details in `synth_progress.md` 2026-10-20 entries).** Best model unchanged
+(xblend-kq30-kms30). Today: seed noise ~0.016 (judge at two seeds, blend vs blend); late-checkpoint averaging, Hub soups,
+hires-crop, CascadePSP, per-question / family-aware BCE all null or negative. **Inference / post-processing candidates, held for
+the user's decision:** (1) 0.7 x 4096 + 0.3 x 2048 multi-scale (never hurts: val +0.0015, Gemini30 +0.0067, -0.25 fixes / q;
+~+25% compute); (2) + TTA x8 (fix v2 0.9429, +0.0117, p=0.07; 8x compute); (3) polygon eps 2 (half the vertices, same IoU);
+(4) BPR refiner (`scripts/bpr/bpr.py`, band 4) + sliver revert (refined pieces < 50% on the coarse mask go back to P):
+HF14 +0.0046 (p=0.002), fix v2 +0.0033 (p=0.04), val +0.0016, extra deletes +0.06 / +0.02 per q -- small; next for BPR: maps
+for the 40% of `bpr_s900000` lost to OOM, real-like patch augmentation, a P-only control, stacking with (1). New tools:
+`scripts/editcost.py` (fix counts / vertices), `train_refunet.py --save-every`, `--bce-other-weight`, `--bce-per-question`.
+On the Hub (`abshetty/floz-diag`): `bpr/refiner_2026-10-20.pth`, `xblend-kq30-kms30/{split}_2048` (2048 maps),
+`xblend-kq30-kms30/bpr_b4/`, `xblend-kq30-kms30/tta/`. Parked: TracIn, self-training with automatic boxes (more Gemini images),
+Gemini facsimiles (`--spec`, CPU task). **Twin test done (2026-10-20, `synth_progress.md`): Gemini30 1 / 26 recover on their twins (0.65 -> 0.98,
+0.48 -> 0.82) = appearance failures; no question fails on both; twins 16 / 20 fail on their own -- inspect those twin images.**
+Multi-scale + BPR stack: val +0.0023, fix v2 +0.0031, Gemini30 +0.0089, no added fixes (held for the user too).
 
 **Seed noise (2026-10-20, `synth_progress.md`):** the same seed reproduces (per-sheet sd <= 0.012), but seed 8 vs seed 7 on the kq
 no-DR arm moves HF14 / Gemini30 by ~0.016 and 5 / 30 Gemini30 sheets by > 0.05 -- the gate's sheet rule fires on seed noise, and
