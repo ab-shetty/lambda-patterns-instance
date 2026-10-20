@@ -2477,3 +2477,18 @@ outside the target dilated 4 px (attached spill); add = target piece (>= 0.2% of
 - Douglas-Peucker eps 2 halves the vertices at the same IoU (-0.0006..+0.0007); eps 4 cuts them ~3x for -0.001..-0.003. eps stays 1
   in `polygonize.py` until the user decides (vertices are what users edit).
 - The dominant fix is deleting wrong polygons; attached spill (cuts) is rare on real sheets. Missed sections come second on real.
+- **Deleting wrong polygons** (`scripts/pp_probe/delpoly.py`, 2026-10-20; the user's most common edit per `scripts/editcost.py`).
+  Per polygon (8-connected piece of the rasterised default output): probability stats, share of the answer, rank, distance to the
+  reference box and to the main polygon, Lab / black-hat / stroke-orientation distance to the reference box and the main polygon
+  (deployable: no other questions' maps). Wrong = < 10% on the target: Gemini30 294 / 1298 (23%), val 44 / 497, HF14 18 / 186
+  (~9%). HGB classifier, delete if P(wrong) > 0.5 (fixed), never the main polygon.
+  | train -> test | IoU change | deleted | precision |
+  |---|---|---|---|
+  | Gemini30 5-fold sheet CV (+ val + HF14 in train) | +0.003..+0.012 every fold (p <= 0.08) | 262 | 72-94% |
+  | Gemini30+val -> HF14 | -0.010 (p=0.49) | 38 | 45% (17 / 18 wrong found) |
+  | Gemini30+HF14 -> val | -0.005 (p=0.001) | 61 | 33% |
+  | val -> HF14 / HF14 -> val (real only) | -0.005 / -0.003 | 10 / 61 | 60% / 31% |
+  | Gemini30 + real weighted equally | -0.006 / -0.001 | 35 / 36 | 43% / 58% |
+  On the real sheets wrong polygons are rare and look like correct secondary pieces; the deleted correct ones include large,
+  confident polygons (HF14 2 q00: 503k px, mean probability 0.81). Automatic deletion is not adopted. Its score could still serve
+  the frontend as a per-polygon confidence to flag pieces for one-click review.
