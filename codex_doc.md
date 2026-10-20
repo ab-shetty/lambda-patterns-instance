@@ -40,6 +40,13 @@ both seeds on every set. Soups of the Hub arms and adding the seed-8 arm to the 
 checkpoints and the batch order. **Judge changes at two seeds (blend vs blend)**; revise the sheet rule to "beyond seed noise".
 Next: `--hires-crop 0.5` at seeds 7 and 8 (running 2026-10-20).
 
+**Parked until the user has more Gemini images (2026-10-20): self-training with automatic boxes.** Tile each unlabelled sheet
+with candidate boxes; ask the best model each one; keep a box only if (a) it lies wholly inside its own answer at P > 0.9, (b) a
+second box elsewhere in that answer returns the same answer (reference-swap consistency), (c) the answer is a sensible size with
+texture, (d) the box is not mostly text. Survivors + answers are training questions (uncertain pixels ignored), trained at hard
+views (other scale / blur / line weight). First validate on val's labelled sheets: share of accepted boxes wholly inside one
+family and their answers' accuracy, plus a contact sheet for the user. HF14 / val decide, not Gemini30; Gemini30 never in the pool.
+
 **Open problems** (`synth_progress.md` 2026-10-14 .. 17):
 - Gemini30 17 (hip-roof shingle plan, native 2400 px) collapses to blotchy half-confidence in both kms and kw (0.89 -> 0.68-0.70);
   only kq gets it right. Fragile, not specific to multi-res.
