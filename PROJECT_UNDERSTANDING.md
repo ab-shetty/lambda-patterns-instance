@@ -11,6 +11,11 @@
 The output is therefore **reference-conditioned region selection**, not
 class-agnostic instance detection.
 
+In the product, an end user viewing an architectural plan draws a box on one
+section of a repeating pattern, then selects the part of the plan to search,
+and the frontend draws polygons over every section with that pattern inside
+that search area.
+
 ## Meaning of pattern labels
 
 Labels such as `pattern1`, `pattern2`, etc. are grouping IDs local to a single
