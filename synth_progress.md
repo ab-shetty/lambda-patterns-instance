@@ -2509,3 +2509,19 @@ kq no-DR recipe on `single18kq_s600000`, seeds 7 and 8, 0.5 / 0.5 two-seed blend
 - The other-family weight adds -0.001 or less to pq on every set; only per-sheet move > 0.03: Gemini30 17 -0.07 (inside its seed
   swing). As expected with the training loss near zero (~0.03), the loss shape barely reaches the real-sheet errors. Not adopted;
   1 x BCE (pooled) + 2 x per-question Dice stays.
+
+### 2026-10-20 (GH200 + CPU) -- multi-scale inference (0.7 x 4096 + 0.3 x 2048) on the polygon output: no downside, fewer fixes
+
+Best model (xblend-kq30-kms30): 2048 maps with `--save-probs` (`data/ms_xblend/<split>_2048`, evaluator IoU HF14 0.8645, val
+0.8530, Gemini30 0.8709), linearly upsampled to the 4096 map and averaged; `scripts/editcost.py` (polygonize default, eps 1) on
+each variant, paired per question vs the 4096 polygon rows. Rows `data/diag/ms_{s2048,avg50,avg70}/`.
+
+| vs 4096 alone | HF14 IoU / fixes per q | val IoU / fixes per q | Gemini30 IoU / fixes per q (deletes) |
+|---|---|---|---|
+| **0.7 x 4096 + 0.3 x 2048** | -0.0001 (p=0.97) / +0.02 | **+0.0015** (p<0.001) / -0.07 | **+0.0067** (p<0.001) / **-0.25** (-0.21), p<0.001 |
+| 0.5 + 0.5 | -0.0116 (p=0.03) / +0.22 | -0.0000 / +0.22 (p=0.03) | +0.0082 (p=0.001) / -0.53 (-0.47) |
+| 2048 alone | -0.0501 / +0.41 | -0.0478 / +0.24 | -0.0121 / -0.52 (-0.80) |
+
+- 0.7 : 0.3 passes the gate's letter as an inference change (Gemini30 up; nothing down significantly; worst sheet -0.007 HF14 25)
+  and removes ~1 in 6 wrong polygons on Gemini30. The 2048 pass costs ~1/4 of the 4096 one (~+25% compute), so distilling it
+  into one model only matters if latency does. Adoption into the product / protocol is the user's call.
