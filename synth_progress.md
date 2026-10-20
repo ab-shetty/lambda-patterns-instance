@@ -2566,3 +2566,11 @@ Scored as polygons (`editcost.py`, eps 1) vs the unrefined polygon rows; rows `d
   lose, and on HF14 it adds deletes (some polygons become slivers mostly off the target) -- not shippable as is.
 - Next if pursued: speck / sliver drop after refinement; all 1,487 sheets' maps (the OOMed shards); real-like augmentation
   (line weight, blur, tone) on the patches; a P-only refiner control (does the image help?).
+
+### 2026-10-20 (CPU) -- HF14 fix v2 backfill for the multi-scale / TTA polygon variants (missed in the entries above)
+
+`editcost.py hf14fix2` on the same maps, paired vs the unrefined fix v2 polygons (0.9311); rows `data/diag/ms_*/rows_editcost_hf14fix2.json`.
+0.7 x 4096 + 0.3 x 2048: 0.9324 (+0.0013, p=0.49), fixes -0.04 / q; 1 : 1: 0.9225 (-0.0086, p=0.12), +0.24; 2048 alone: 0.8871
+(-0.0440, p=0.002); TTA x8 @4096: 0.9421 (+0.0110, p=0.16), -0.14; **TTA x8 + 0.7 / 0.3 multi-scale: 0.9429 (+0.0117, p=0.07),
+-0.16 fixes / q** (plain HF14 for the same: +0.0064, p=0.31). Same picture as plain HF14: 0.7 / 0.3 never hurts; TTA's HF14 gain is
+large but rests on a few questions.
