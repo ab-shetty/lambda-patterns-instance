@@ -2525,3 +2525,21 @@ each variant, paired per question vs the 4096 polygon rows. Rows `data/diag/ms_{
 - 0.7 : 0.3 passes the gate's letter as an inference change (Gemini30 up; nothing down significantly; worst sheet -0.007 HF14 25)
   and removes ~1 in 6 wrong polygons on Gemini30. The 2048 pass costs ~1/4 of the 4096 one (~+25% compute), so distilling it
   into one model only matters if latency does. Adoption into the product / protocol is the user's call.
+
+### 2026-10-20 (CPU) -- BPR precheck: synthetic labels split boundary strokes like the real labels
+
+Before a boundary-patch refiner (BPR, CVPR 2021) is trained on synthetic sheets: do synthetic labels place the edge where the
+real ones do? Same measure as 2026-10-19 (`stroke.py`: ink pixels within 3 px of the target edge, share inside the label),
+`scripts/pp_probe/synth_stroke.py`, 200 kq-pool sheets, one target per family, native resolution.
+
+| share of boundary-stroke ink inside the label | median (p25-p75) |
+|---|---|
+| synthetic (482 family targets) | 0.58 (0.52-0.63); elevations 0.56-0.59, plans 0.52-0.61, roof plans 0.62-0.63 |
+| real val / HF14 (2026-10-19) | 0.54 / 0.59 |
+| Gemini30 (2026-10-19) | 0.49 |
+
+- Synthetic matches real (between val and HF14 on every sheet type); Gemini30 is the outlier, consistent with Gemini-fitted
+  refiners transferring badly. Predictions on real already match on average (0.60 / 0.58), so the boundary error is per-question
+  variance, not an offset -- what a patch refiner addresses. BPR is not blocked by the label convention.
+- Training masks for BPR need realistic errors: the model is near-exact on its own training sheets, so use its 4096 predictions on
+  fresh synthetic sheets and / or corrupted ground truth (dilate / erode / blur / offset).
