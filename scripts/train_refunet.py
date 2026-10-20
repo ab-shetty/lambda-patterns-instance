@@ -101,6 +101,12 @@ def parse_args():
     p.add_argument("--mask-thresh", type=float, default=0.5)
     p.add_argument("--bce-weight", type=float, default=1.0)
     p.add_argument("--dice-weight", type=float, default=2.0)
+    p.add_argument("--bce-other-weight", type=float, default=1.0,
+                   help="BCE weight on pixels of the plan's OTHER labelled families (look-alike negatives); "
+                        "1 = plain BCE (default, unchanged)")
+    p.add_argument("--bce-per-question", action="store_true",
+                   help="average BCE over each question's valid pixels, then over the batch (as Dice and the "
+                        "metric weight questions), instead of over all pixels of the batch")
     p.add_argument("--domain-random", action="store_true")
     p.add_argument("--image-max-size-max", type=int, default=0,
                    help="multi-resolution training: each training sheet's long side drawn uniformly in "
@@ -253,9 +259,14 @@ class _RecordingSampler(Sampler):
         return len(self.inner)
 
 
-def mask_loss(logits, targets, valid, bce_weight, dice_weight):
+def mask_loss(logits, targets, valid, bce_weight, dice_weight, other=None, other_weight=1.0,
+              per_question=False):
     bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
-    bce = (bce * valid).sum() / valid.sum().clamp(min=1)
+    weight = valid if other is None else valid * (1 + (other_weight - 1) * other)
+    if per_question:
+        bce = ((bce * weight).flatten(1).sum(1) / weight.flatten(1).sum(1).clamp(min=1)).mean()
+    else:
+        bce = (bce * weight).sum() / weight.sum().clamp(min=1)
     probabilities = logits.sigmoid() * valid
     targets = targets * valid
     intersection = (probabilities * targets).flatten(1).sum(1)
@@ -283,8 +294,10 @@ def main():
         ref_min_side=args.ref_min_side, legacy_ref_jitter=args.legacy_ref_jitter,
         ref_sample=args.ref_sample, image_max_size_max=args.image_max_size_max,
         hires_crop=args.hires_crop)
+    if args.bce_other_weight != 1.0 and (args.refs_per_image > 0 or args.rank_weight > 0):
+        raise SystemExit("--bce-other-weight: one question per plan, no rank loss")
     collate = partial(collate_fn, size_divisible=args.pad_grid,
-                      union_only=args.rank_weight <= 0)
+                      union_only=args.rank_weight <= 0, other_plane=args.bce_other_weight != 1.0)
     loader_options = ({"persistent_workers": True,
                        "prefetch_factor": args.prefetch_factor}
                       if args.num_workers else {})
@@ -418,7 +431,8 @@ def main():
                                if args.roi_ref else None))
                     loss, bce, dice = mask_loss(logits[keep], targets[keep],
                                                 valid.repeat_interleave(k, 0)[keep],
-                                                args.bce_weight, args.dice_weight)
+                                                args.bce_weight, args.dice_weight,
+                                                per_question=args.bce_per_question)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
                 optimizer.step(); scheduler.step(); step += 1; save_step()
@@ -441,11 +455,15 @@ def main():
                                               ref_box=ref_boxes, return_aux=True)
                 else:
                     logits = model(images, references, ref_box=ref_boxes)
+                other = (batch["other"].to(device, non_blocking=True).float()
+                         if "other" in batch else None)
                 loss, bce, dice = mask_loss(logits, targets, valid,
-                                            args.bce_weight, args.dice_weight)
+                                            args.bce_weight, args.dice_weight, other,
+                                            args.bce_other_weight, args.bce_per_question)
                 if auxiliary is not None:
                     aux_loss, _, _ = mask_loss(auxiliary, targets, valid,
-                                               args.bce_weight, args.dice_weight)
+                                               args.bce_weight, args.dice_weight, other,
+                                               args.bce_other_weight, args.bce_per_question)
                     loss = loss + args.self_support_aux * aux_loss
                 if args.rank_weight > 0:
                     rank = ranking_loss(image_embedding, reference_embedding,

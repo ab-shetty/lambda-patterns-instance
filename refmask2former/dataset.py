@@ -667,7 +667,7 @@ class InstanceSegDataset(Dataset):
 # --------------------------------------------------------------------------- #
 # Collation (dynamic padding + pixel mask)
 # --------------------------------------------------------------------------- #
-def collate_fn(batch, size_divisible=32, union_only=False):
+def collate_fn(batch, size_divisible=32, union_only=False, other_plane=False):
     """Pad a batch to a common size.
 
     `union_only` folds the reference-conditioned union that `train_refunet.py`
@@ -677,7 +677,11 @@ def collate_fn(batch, size_divisible=32, union_only=False):
     sample crosses the worker boundary instead of G of them. The result is
     identical -- padding is zero, so unioning after padding and padding after
     unioning agree. Per-instance masks are still emitted when something needs
-    them (`ranking_loss` does, whenever --rank-weight > 0)."""
+    them (`ranking_loss` does, whenever --rank-weight > 0).
+
+    `other_plane` (with `union_only`, one question per plan): also emit "other", the pixels of the
+    plan's labelled instances that do NOT match the reference (other families), minus the target --
+    for `train_refunet.py --bce-other-weight`."""
     heights = [b["image"].shape[1] for b in batch]
     widths = [b["image"].shape[2] for b in batch]
 
@@ -690,6 +694,7 @@ def collate_fn(batch, size_divisible=32, union_only=False):
     images = torch.zeros(B, 3, maxH, maxW)
     ref_boxes = torch.zeros(B, 1, maxH, maxW)
     unions = torch.zeros(B, 1, maxH, maxW, dtype=torch.bool) if union_only else None
+    others = torch.zeros(B, 1, maxH, maxW, dtype=torch.bool) if union_only and other_plane else None
     pixel_mask = torch.zeros(B, maxH, maxW, dtype=torch.bool)
     if "ref_matches" in batch[0]:
         # --refs-per-image: K questions per plan, flattened plan-major to
@@ -731,6 +736,8 @@ def collate_fn(batch, size_divisible=32, union_only=False):
             positive = sample["ref_match"] > 0.5
             if g > 0 and bool(positive.any()):
                 unions[b, 0, :h, :w] = sample["masks"][positive].any(0)
+            if others is not None and g > 0 and bool((~positive).any()):
+                others[b, 0, :h, :w] = sample["masks"][~positive].any(0).bool() & ~unions[b, 0, :h, :w]
         else:
             padded = torch.zeros(g, maxH, maxW, dtype=torch.uint8)
             if g > 0:
@@ -742,6 +749,8 @@ def collate_fn(batch, size_divisible=32, union_only=False):
            "references": references, "targets": targets}
     if union_only:
         out["union"] = unions
+        if others is not None:
+            out["other"] = others
     return out
 
 
