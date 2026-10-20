@@ -2525,3 +2525,23 @@ each variant, paired per question vs the 4096 polygon rows. Rows `data/diag/ms_{
 - 0.7 : 0.3 passes the gate's letter as an inference change (Gemini30 up; nothing down significantly; worst sheet -0.007 HF14 25)
   and removes ~1 in 6 wrong polygons on Gemini30. The 2048 pass costs ~1/4 of the 4096 one (~+25% compute), so distilling it
   into one model only matters if latency does. Adoption into the product / protocol is the user's call.
+
+### 2026-10-20 (CPU) -- Gemini round 5 (200 images) and facsimiles
+- **Round 5:** `image_generation/prompts_r5.jsonl` = 200 v4 prompts (specs seeds 51 + 52), one `gemini-3-pro-image` 2K batch
+  through `scripts/generate_images_gemini.py --batch` (API key via the environment's network secret); 200 / 200 returned,
+  in `data/image_generation/gemini_r5/` (not in git, 544 MB). Unlabelled.
+- **`generate_synthetic_fc.py --spec`**: renders a given house + look (id search over the mode / shaded / house draws; styles
+  forced by role; `views`; stipple / flat stucco). Pilot on 10 Gemini30 elevations (`image_generation/facsimile/gemini30_pilot.json`):
+  8 / 10 meet every discrete key (townhouse rows cannot have flat roofs or a block accent), but the houses differ visibly
+  (rooflines, wings) -- the user: too different to be twins.
+- **Label-shape twins** (`scripts/facsimile_relabel.py`, `image_generation/facsimile/gemini30_family_kinds.json`): the Gemini30
+  sheet with each labelled family's inside repainted by the generator's `draw_fill` (family's own median colour, generator
+  spacing / line weight / line colour); geometry, labels and boxes identical. Visible difference: generator lines ~1 px grey at
+  the inferred scale vs ~3 px dark on Gemini -- the scale / line-weight gap. Scoring on the GPU (paste in chat).
+- **Gap tally** (`scripts/describe_gemini_specs.py`, gemini-2.5-pro describes each round-5 image in the spec vocabulary; 199
+  described: 111 elevations, 72 plans / other, 16 roof plans; `image_generation/facsimile/r5_described.jsonl`). Real gaps on
+  elevations (tags the generator already covers -- porches, dormers, flat roofs, L / U footprints -- discounted):
+  roof massing -- cross gables / steep Tudor 21, several front gables 19, hip + gable mixes 20; material layout -- material
+  change mid-wall / vertical splits 16, three or more stacked bands 10 (the generator zones one accent + accent2);
+  apartment / multi-storey blocks 14 (balconies 12); fibre-cement panels with reveal grids ~13-17, diagonal / herringbone
+  siding; bays / bump-outs 29 (only 45-degree bays exist); split levels 9; detached garages / site context ~10.
