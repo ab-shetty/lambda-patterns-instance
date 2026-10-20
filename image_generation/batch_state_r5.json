@@ -1,0 +1,8 @@
+{
+ "job": "batches/dqv676j2pq1off70skzcruwr9k0wm8z07y3t",
+ "input_file": "files/95l13ix281ci",
+ "requests": 200,
+ "model": "gemini-3-pro-image",
+ "image_size": "2K",
+ "submitted": "2026-10-20T04:39:23.612575+00:00"
+}
