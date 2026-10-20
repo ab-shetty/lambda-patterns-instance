@@ -882,6 +882,9 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
 # (codex_doc "synthetic facsimiles"). A spec is a JSON object:
 #   {"name": "gemini30_16", "mode": "elevation" | "roof_plan" | "freeform", "shaded": true (colour) | false (line-only),
 #    "views": 1 | 2 | 4 (elevation views on the sheet: one-hot view-count weights for that image),
+#    "view_list": ["front", "rear"] (which views, in order; forced after the sheet's draws), "facade_aspect": width / height
+#    of the front view (the closest of the first 25 fully matching ids), house "ridge": "side" | "front", "cross_gables",
+#    "split",
 #    "house": {"stories": 2, "roof": "gable", "units": null | 2..5, "wing": bool, "ell": bool, "porch": bool,
 #              "chimney": bool, "dormers": bool, "accent": null | "gable" | "wainscot" | "upper" | "block",
 #              "accent2": null | ..., "label_trim": bool},
@@ -917,7 +920,23 @@ def _house_value(house, key):
         return any(b.kind not in ("main", "ell") for b in blocks[1:])
     if key == "ell":
         return any(b.kind == "ell" for b in blocks)
+    if key == "ridge":                      # "side": eaves face the front view (ridge along x); "front": gable end faces it
+        return "side" if blocks[0].ridge == "x" else "front"
+    if key == "cross_gables":
+        return house.get("cross_gables", 0)
+    if key == "split":
+        return bool(house.get("split"))
     return house.get(key)
+
+
+def facade_aspect(house):
+    """Front view of the house: overall width / height from grade to the top of the main roof (estimate)."""
+    bl = house["blocks"]
+    width = max(b.x1 for b in bl) - min(b.x0 for b in bl)
+    m = bl[0]
+    rise = {"gable": m.pitch * (m.d if m.ridge == "x" else m.w) / 2, "hip": m.pitch * min(m.w, m.d) / 2,
+            "shed": m.pitch * m.d, "flat": 0.0}.get(m.roof, 0.0)
+    return width / max(1.0, m.stories * house["fh"] + house["plate"] + rise)
 
 
 def find_spec_id(spec, seed, mw, start, search):
@@ -925,16 +944,23 @@ def find_spec_id(spec, seed, mw, start, search):
     if "shaded" in spec:
         want.append(("shaded", bool(spec["shaded"])))
     want += [("house." + k, v) for k, v in spec.get("house", {}).items()]
-    best = (-1, None, None)
+    target = spec.get("facade_aspect")
+    best, full = (-1, None, None), []
     for iid in range(start, start + search):
         mode, house, shaded = _prefix_draws(iid, seed, mw)
         got = {"mode": mode, "shaded": shaded}
         unmet = [k for k, v in want
                  if (got[k] if not k.startswith("house.") else _house_value(house, k[6:])) != v]
         if not unmet:
-            return iid, []
-        if len(want) - len(unmet) > best[0]:
+            if not target:
+                return iid, []
+            full.append((abs(math.log(facade_aspect(house) / float(target))), iid))
+            if len(full) >= 25:                 # the closest facade proportions among the first 25 full matches
+                break
+        elif len(want) - len(unmet) > best[0]:
             best = (len(want) - len(unmet), iid, unmet)
+    if full:
+        return min(full)[1], []
     return best[1], best[2]
 
 

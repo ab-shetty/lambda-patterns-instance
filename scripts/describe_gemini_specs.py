@@ -30,14 +30,21 @@ Answer with ONE JSON object and nothing else:
 {{"mode": "elevation" | "roof_plan" | "freeform" (floor plans, sections and anything else),
  "shaded": true if surfaces are filled with colour, false if it is line-only,
  "views": 1 | 2 | 4 (number of separate building views on the sheet; use the nearest),
- "house": {{"stories": 1|2|3, "roof": "gable"|"hip"|"flat"|"shed", "units": null or 2..5 (identical side-by-side townhouse units),
+ "view_list": the views shown, in order, from "front", "rear", "left", "right" (the street-facing one is "front";
+           a sheet with ONE view of an unknown side is ["front"]),
+ "house": {{"stories": 1|2|3, "roof": "gable"|"hip"|"flat"|"shed",
+           "ridge": "side" if the main ridge runs left-right in the first view (eaves face the viewer) or "front" if the
+           main gable END faces the viewer,
+           "facade_aspect": overall building width / height from ground to the top of the roof, in the first view (a number),
+           "cross_gables": 0|1|2 (gabled bays projecting from the front wall with a ridge perpendicular to the main ridge),
+           "split": true if part of the main wall (an end or entry bay, full height) is a different material, "units": null or 2..5 (identical side-by-side townhouse units),
            "wing": true if an attached garage or side wing, "ell": true if a rear ell, "porch": bool, "chimney": bool,
            "dormers": bool, "accent": null|"gable"|"wainscot"|"upper"|"block" (where a second wall material sits:
            gable triangles, a base band, the upper storey, or a whole block/wing), "accent2": same values or null,
            "label_trim": true if trim boards are a prominent separate material}},
  "styles": {{role: {{"kind": k, "base": [r,g,b]}}}} for the roles that appear, roles from main (the main wall),
            accent, accent2, roof, foundation, chimney; wall kinds: lap, vertical, bb (board and batten), shingle,
-           brick, stone, stipple (textured stucco), flat (plain painted/stucco); roof kinds: asphalt, seam (standing seam
+           brick, stone, stipple (textured stucco), flat (plain painted/stucco), panel (fibre-cement panels with a reveal grid); roof kinds: asphalt, seam (standing seam
            metal), tile_roof, shingle, flat_roof; "base" only when shaded (the fill colour, 0-255 RGB),
  "gap_tags": every tag from this list that describes something in the drawing the vocabulary above CANNOT express:
            {json.dumps(GAP_TAGS)},

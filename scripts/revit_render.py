@@ -642,6 +642,9 @@ def compose_revit(image_id, seed, mode_weights):
     allv = ["front", "rear", "left", "right"]
     views = (["front"] if r.random() < 0.6 else [r.choice(allv)]) if nviews == 1 else \
         r.choice([["front", "rear"], ["left", "right"], ["front", "right"]]) if nviews == 2 else allv
+    spv = getattr(FC, "SPEC_BY_ID", {}).get(FC._CUR[0], {}).get("view_list")
+    if spv:                                    # --spec: the views the described sheet shows (after the draws above)
+        views = [v for v in spv if v in allv][:4] or views
     tstyle = r.choice(["building", "plain", "compass"])
     names = {"front": "FRONT", "rear": "REAR", "left": "LEFT", "right": "RIGHT"}
     comp = {"front": "SOUTH", "rear": "NORTH", "left": "WEST", "right": "EAST"}
