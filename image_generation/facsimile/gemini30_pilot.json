@@ -1,0 +1,365 @@
+[
+ {
+  "name": "gemini30_01",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "wing": false,
+   "ell": false,
+   "units": null,
+   "porch": false,
+   "chimney": false,
+   "accent": null
+  },
+  "styles": {
+   "main": {
+    "kind": "bb",
+    "base": [
+     134,
+     148,
+     163
+    ],
+    "params": {
+     "sp": 1.33
+    }
+   }
+  },
+  "gaps": [
+   "single view, roof drawn as outline only",
+   "smooth trim band across the floor line (unlabelled) not controllable"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_07",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "chimney": true,
+   "accent": "wainscot"
+  },
+  "styles": {
+   "main": {
+    "kind": "flat",
+    "base": [
+     196,
+     140,
+     134
+    ]
+   },
+   "accent": {
+    "kind": "brick",
+    "base": [
+     158,
+     82,
+     72
+    ]
+   },
+   "chimney": {
+    "kind": "brick",
+    "base": [
+     158,
+     82,
+     72
+    ]
+   },
+   "roof": {
+    "kind": "asphalt",
+    "base": [
+     200,
+     150,
+     145
+    ]
+   }
+  },
+  "gaps": [
+   "front + rear elevation on one sheet",
+   "steep cross-gable (Tudor) massing",
+   "brick also on the front gable bay"
+  ],
+  "views": 2
+ },
+ {
+  "name": "gemini30_08",
+  "mode": "elevation",
+  "shaded": false,
+  "house": {
+   "stories": 2,
+   "roof": "flat",
+   "units": 2,
+   "accent": "wainscot"
+  },
+  "styles": {
+   "main": {
+    "kind": "bb",
+    "params": {
+     "sp": 1.0
+    }
+   },
+   "accent": {
+    "kind": "shingle"
+   }
+  },
+  "gaps": [
+   "'painted field w/ stipple' third family between the shingle panels"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_09",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "units": null,
+   "accent": null
+  },
+  "styles": {
+   "main": {
+    "kind": "shingle",
+    "base": [
+     128,
+     148,
+     108
+    ]
+   },
+   "roof": {
+    "kind": "asphalt",
+    "base": [
+     168,
+     124,
+     98
+    ]
+   }
+  },
+  "gaps": [
+   "three storeys with a walk-out basement",
+   "twin front gables over a hip"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_14",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 1,
+   "roof": "gable",
+   "wing": true,
+   "porch": true,
+   "units": null,
+   "accent": null
+  },
+  "styles": {
+   "main": {
+    "kind": "bb",
+    "base": [
+     236,
+     226,
+     196
+    ],
+    "params": {
+     "sp": 1.0
+    }
+   },
+   "roof": {
+    "kind": "flat_roof",
+    "base": [
+     192,
+     172,
+     156
+    ]
+   }
+  },
+  "gaps": [
+   "roof drawn as a flat tan plane (no texture)"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_16",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 3,
+   "units": 4,
+   "roof": "hip",
+   "accent": "block"
+  },
+  "styles": {
+   "main": {
+    "kind": "lap",
+    "base": [
+     122,
+     128,
+     100
+    ]
+   },
+   "accent": {
+    "kind": "flat",
+    "base": [
+     200,
+     190,
+     175
+    ]
+   },
+   "roof": {
+    "kind": "asphalt",
+    "base": [
+     92,
+     94,
+     98
+    ]
+   }
+  },
+  "gaps": [
+   "apartment block with balconies",
+   "third family: brown lap panels",
+   "front + side elevation on one sheet"
+  ],
+  "views": 2
+ },
+ {
+  "name": "gemini30_20",
+  "mode": "elevation",
+  "shaded": false,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "chimney": true,
+   "accent": "wainscot"
+  },
+  "styles": {
+   "main": {
+    "kind": "stipple"
+   },
+   "accent": {
+    "kind": "stone"
+   },
+   "roof": {
+    "kind": "seam"
+   },
+   "chimney": {
+    "kind": "stone"
+   }
+  },
+  "gaps": [
+   "front-gable cottage massing with a shed dormer"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_22",
+  "mode": "elevation",
+  "shaded": false,
+  "house": {
+   "stories": 1,
+   "roof": "gable",
+   "wing": true,
+   "accent": "gable"
+  },
+  "styles": {
+   "main": {
+    "kind": "flat"
+   },
+   "accent": {
+    "kind": "lap",
+    "params": {
+     "sp": 0.42
+    }
+   }
+  },
+  "gaps": [
+   "only the gable-end lap boards are labelled; walls plain"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_25",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "accent": "upper",
+   "accent2": "wainscot"
+  },
+  "styles": {
+   "main": {
+    "kind": "brick",
+    "base": [
+     150,
+     72,
+     62
+    ]
+   },
+   "accent": {
+    "kind": "flat",
+    "base": [
+     216,
+     206,
+     192
+    ]
+   },
+   "accent2": {
+    "kind": "shingle",
+    "base": [
+     140,
+     130,
+     120
+    ]
+   }
+  },
+  "gaps": [
+   "three horizontal bands (stucco / brick / shingle): the brick band is the main wall here",
+   "detached garage drawn beside"
+  ],
+  "views": 1
+ },
+ {
+  "name": "gemini30_26",
+  "mode": "elevation",
+  "shaded": true,
+  "house": {
+   "stories": 2,
+   "roof": "gable",
+   "wing": true,
+   "accent": "upper"
+  },
+  "styles": {
+   "main": {
+    "kind": "lap",
+    "base": [
+     206,
+     146,
+     82
+    ]
+   },
+   "accent": {
+    "kind": "lap",
+    "base": [
+     142,
+     140,
+     102
+    ]
+   },
+   "roof": {
+    "kind": "asphalt",
+    "base": [
+     150,
+     62,
+     60
+    ]
+   }
+  },
+  "gaps": [
+   "fibre-cement panels A / B are the same lap texture in two hues"
+  ],
+  "views": 1
+ }
+]

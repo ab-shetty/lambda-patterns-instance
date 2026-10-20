@@ -760,8 +760,111 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
 # ----------------------------------------------------------------------------
 # driver
 # ----------------------------------------------------------------------------
-def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=False):
+# ----------------------------------------------------------------------------
+# --spec FILE (2026-10-20): render a GIVEN house + look instead of drawing one -- facsimiles of Gemini images
+# (codex_doc "synthetic facsimiles"). A spec is a JSON object:
+#   {"name": "gemini30_16", "mode": "elevation" | "roof_plan" | "freeform", "shaded": true (colour) | false (line-only),
+#    "views": 1 | 2 | 4 (elevation views on the sheet: one-hot view-count weights for that image),
+#    "house": {"stories": 2, "roof": "gable", "units": null | 2..5, "wing": bool, "ell": bool, "porch": bool,
+#              "chimney": bool, "dormers": bool, "accent": null | "gable" | "wainscot" | "upper" | "block",
+#              "accent2": null | ..., "label_trim": bool},
+#    "styles": {"main": {"kind": "lap", "base": [r, g, b], "params": {"sp": 0.5}}, "accent": {...}, "roof": {...},
+#               "foundation": {...}, "chimney": {...}}}
+# Discrete choices are met by SEARCH: every image id fixes its own mode, house and shaded draw, so the first id (from
+# --start) whose draws match every given "house" / "mode" / "shaded" key is used, and the FreeCAD massing, labels and
+# ref_exclude stay consistent by construction. Styles are then forced by role (kind locked against later restyling;
+# "stipple" / "flat" pick which way stucco comes out,
+# colour base on colour sheets, params merged). Keys the generator cannot express are reported, not faked: a spec
+# whose discrete keys no id meets within --spec-search ids takes the best partial match and lists the unmet keys in
+# spec_matches.json (the gap list). Elevations are the supported mode; plans match mode + house only.
+# ----------------------------------------------------------------------------
+SPEC_BY_ID = {}
+
+
+def _prefix_draws(image_id, seed, mw):
+    rng = random.Random(seed * 1_000_003 + image_id)
+    mode = rng.choices(list(mw.keys()), weights=list(mw.values()))[0]
+    G.make_appearance(rng)
+    house = G.make_house(rng)
+    shaded = random.Random(seed * 1_000_003 + image_id * 173 + 41).random() < 0.4
+    return mode, house, shaded
+
+
+def _house_value(house, key):
+    blocks = house["blocks"]
+    if key == "stories":
+        return blocks[0].stories
+    if key == "roof":
+        return blocks[0].roof
+    if key == "wing":
+        return any(b.kind not in ("main", "ell") for b in blocks[1:])
+    if key == "ell":
+        return any(b.kind == "ell" for b in blocks)
+    return house.get(key)
+
+
+def find_spec_id(spec, seed, mw, start, search):
+    want = [("mode", spec["mode"])] if "mode" in spec else []
+    if "shaded" in spec:
+        want.append(("shaded", bool(spec["shaded"])))
+    want += [("house." + k, v) for k, v in spec.get("house", {}).items()]
+    best = (-1, None, None)
+    for iid in range(start, start + search):
+        mode, house, shaded = _prefix_draws(iid, seed, mw)
+        got = {"mode": mode, "shaded": shaded}
+        unmet = [k for k, v in want
+                 if (got[k] if not k.startswith("house.") else _house_value(house, k[6:])) != v]
+        if not unmet:
+            return iid, []
+        if len(want) - len(unmet) > best[0]:
+            best = (len(want) - len(unmet), iid, unmet)
+    return best[1], best[2]
+
+
+class _LockedStyle(G.Style):
+    """A spec family: later code (plain-wall draws, roof fix-ups) cannot change its kind."""
+    @property
+    def kind(self):
+        return self._kind
+
+    @kind.setter
+    def kind(self, v):
+        if not getattr(self, "_locked", False):
+            self._kind = v
+
+
+def _spec_make_style(orig):
+    def make_style(rng, kind, appearance, seed, S, label_name, roof=False, base_override=None):
+        o = SPEC_BY_ID.get(_CUR[0], {}).get("styles", {}).get(label_name)
+        if not o:
+            return orig(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
+        kind = o.get("kind", kind)
+        if "base" in o and appearance["colour"]:
+            base_override = tuple(int(v) for v in o["base"])
+        if kind in ("stipple", "flat") and not roof:
+            # "stucco" comes out stipple or flat at random: draw from a side stream until it is the asked one
+            # (the sheet's main stream is consumed once, as before)
+            st = orig(rng, "stucco", appearance, seed, S, label_name, roof=roof, base_override=base_override)
+            for t in range(40):
+                if st.kind == kind:
+                    break
+                st = orig(random.Random(seed * 7919 + t), "stucco", appearance, seed, S, label_name, roof=roof,
+                          base_override=base_override)
+        else:
+            st = orig(rng, kind, appearance, seed, S, label_name, roof=roof, base_override=base_override)
+        k = st.kind
+        st.__class__ = _LockedStyle
+        st._kind, st._locked = k, False
+        st.params.update(o.get("params", {}))
+        st._locked = "kind" in o
+        return st
+    return make_style
+
+
+def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=False, spec_by_id=None):
     SHAPED[0] = shaped
+    if spec_by_id:
+        SPEC_BY_ID.update(spec_by_id)
     flags = dict(flags)
     OPENINGS_PER_FACE[0] = bool(flags.pop("openings_per_face", 1))
     CUT_STANDING[0] = bool(flags.pop("cut_standing", 0))
@@ -782,12 +885,23 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     if revit:
         import revit_render
         revit_render.install(G, sys.modules[__name__], plans=revit_plans)
+    if SPEC_BY_ID and not getattr(G.make_style, "_spec", False):
+        G.make_style = _spec_make_style(G.make_style)
+        G.make_style._spec = True
 
 
 def _job(image_id):
     if image_id not in _FACES:
         return (image_id, False, "no massing")
     _CUR[0] = image_id
+    nv = SPEC_BY_ID.get(image_id, {}).get("views")
+    if nv:                                 # one-hot view-count weights: the same single draw, so nothing else moves
+        old = getattr(G, "REVIT_VIEWS", None)
+        G.REVIT_VIEWS = [float(nv == 1), float(nv == 2), float(nv == 4)]
+        try:
+            return G._job(image_id)
+        finally:
+            G.REVIT_VIEWS = old
     return G._job(image_id)
 
 
@@ -918,6 +1032,11 @@ def main():
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
                          "Off = byte-identical")
+    ap.add_argument("--spec", default=None,
+                    help="JSON list of specs: render these houses / looks instead of drawing them (see SPEC_BY_ID); "
+                         "--n is ignored, one sheet per spec")
+    ap.add_argument("--spec-search", type=int, default=50000,
+                    help="ids searched per spec for one whose drawn mode / shaded / house match the spec")
     args = ap.parse_args()
     SHAPED[0] = args.shaped
     if args.revit_plans and not args.revit:
@@ -973,6 +1092,27 @@ def main():
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "annotations"), exist_ok=True)
     ids = list(range(args.start, args.start + args.n))
+    spec_by_id = {}
+    if args.spec:
+        if args.distinct_looks or args.masonry_base or args.roof_lines or args.faint_lines:
+            print("--spec: forcing --distinct-looks 0 --masonry-base 0 --roof-lines 0 --faint-lines 0 "
+                  "(they restyle families the spec fixes)", flush=True)
+        flags["distinct_looks"] = False
+        flags["masonry_base"] = 0.0
+        flags.pop("roof_lines", None)
+        flags.pop("faint_lines", None)
+        G.TRIM_CUT = flags["trim_cut"]         # the only _init global make_house / make_appearance read
+        specs_in = json.load(open(args.spec))
+        ids, report, nxt = [], [], args.start
+        for sp in specs_in:
+            iid, unmet = find_spec_id(sp, args.seed, mw, nxt, args.spec_search)
+            ids.append(iid)
+            spec_by_id[iid] = sp
+            report.append({"name": sp.get("name"), "image_id": iid, "unmet": unmet})
+            nxt = iid + 1                      # ids stay unique and increasing
+            print(f"spec {sp.get('name')}: id {iid}" + (f"  UNMET {unmet}" if unmet else ""), flush=True)
+        with open(os.path.join(args.out, "spec_matches.json"), "w") as fo:
+            json.dump(report, fo, indent=1)
     t0 = time.time()
     specs = [massing_spec(i, args.seed, house_for(i, args.seed, mw)) for i in ids]
     raw = run_freecad(specs, procs=args.workers)
@@ -980,7 +1120,7 @@ def main():
     print(f"massing {len(faces)}/{len(ids)} in {time.time() - t0:.0f}s", flush=True)
     ok, modes = 0, {}
     with Pool(args.workers, initializer=_init, initargs=(args.out, args.seed, mw, flags, faces, args.revit, args.revit_plans,
-                                                                args.shaped)) as pool:
+                                                                args.shaped, spec_by_id)) as pool:
         for i, (iid, good, info) in enumerate(pool.imap_unordered(_job, ids, chunksize=2)):
             if good:
                 ok += 1
