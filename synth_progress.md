@@ -2721,3 +2721,14 @@ squashed wide views: r4 066 came out a row); 9 of 9 sheets with a known layout n
 | v12 (r5-tuned generator) | 0.182 | 0.14 | 0.66 | 3 |
 | v13 (+ garages, layout) | 0.165 | **0.23** | 0.66 | 3 |
 Default pools byte-identical (8/8).
+
+### 2026-10-21 — --base-bands default 1 (GEN_VERSION 21a); trace twins of round 4
+- The user called the line across the bottom third of elevations overused. Measured: the generator drew a foundation band
+  on 65% of houses and a wainscot (accent / accent2) on 48%; Gemini (150 described elevations, r4 + r5) shows 25% / 20%.
+  `--base-bands 1` keeps a foundation with p 0.38 and a wainscot accent with p 0.5 (own stream from the house): 25% / 23%.
+  `--base-bands 0` = byte-identical 20d pools (12/12); at the default 3 of 12 sample sheets change.
+- "Why not just copy the Gemini image": `facsimile_relabel.py` (the label-shape twins of 10-20) generalised to any pool
+  (`--pool`, `--boxes ''`), `panel` kind, line-only sheets keep their paper colour. `facsimile_kinds.py` asks Gemini for the
+  family -> kind map from an outline overlay of the labels (was hand-written for Gemini30). Round-4 015 / 019 / 078 twins
+  are near-identical copies with generator textures in each labelled family. Needs labels: the next step is a tracer for
+  UNLABELLED sheets (regions from the linework, families by texture, kinds from Gemini) -- labels exact by construction.

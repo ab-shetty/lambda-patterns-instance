@@ -53,6 +53,11 @@ _CUR = [None]
 # fused solid; it is block kind "xgable" (own walls, own gable triangle: a gable accent lands in it). Own RNG stream seeded
 # from the house itself, so every caller (massing, elevations, plans) sees the same house; P = 0 = earlier pools.
 CROSS_GABLES = [0.4]
+# --base-bands (default 1 since 2026-10-21a): the generator drew a foundation band on 65% of houses and a wainscot line
+# (accent or accent2) on ~40%; Gemini's elevations show them on 25% and 20% (150 described, r4 + r5), and the user called
+# the line across the bottom third overused. 1 = keep a drawn foundation with p 0.38 and a wainscot accent with p 0.5
+# (own stream seeded from the house); 0 = earlier pools.
+BASE_BANDS = [1.0]
 # --spec: image id -> house keys forced on the drawn house instead of searched for -- the main block's stories and roof
 # (3+ storeys come only with townhouse rows, flat roofs on 8% of houses: a search rarely meets them with the other keys)
 # and the cross-gable count (on an eligible house, 0 = none). Own seed from the house; empty = no change.
@@ -154,6 +159,15 @@ def _cross_gables(make_house):
         f = HOUSE_FORCE.get(_CUR[0]) if HOUSE_FORCE else None
         if f:
             _apply_force(house, f)
+        if BASE_BANDS[0] > 0:
+            br = random.Random(int(house["fh"] * 1e9) * 13 + int(house["plate"] * 1e9) + 29)
+            if house["foundation"] > 0 and br.random() >= 0.38:
+                house["foundation"] = 0.0
+            if br.random() >= 0.5:
+                if house["accent"] == "wainscot":
+                    house["accent"], house["accent2"] = house["accent2"], None
+                if house["accent2"] == "wainscot":
+                    house["accent2"] = None
         if CROSS_GABLES[0] <= 0:
             return house
         m = house["blocks"][0]
@@ -264,7 +278,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-20d"      # 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b);
+GEN_VERSION = "2026-10-21a"      # 21a: --base-bands 1 (0 = 20d); 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b);
                                  # 20d: --pattern-drift 0.3 (0 = 20c)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
@@ -1330,6 +1344,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
     GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
     CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
+    BASE_BANDS[0] = float(flags.pop("base_bands", 1.0))
     WALL_SPLITS[0] = float(flags.pop("wall_splits", 0.3))
     PANEL_SIDING[0] = float(flags.pop("panel_siding", 0.12))
     G.PATTERN_DRIFT = float(flags.pop("pattern_drift", 0.3))
@@ -1490,6 +1505,8 @@ def main():
                     help="3D houses beyond boxes: L (notch), U (rear courtyard), chamfered corners, 45-degree bays; "
                          "roofs over convex polygons as the lower envelope of edge slope planes (fc_massing.py). "
                          "Off = byte-identical")
+    ap.add_argument("--base-bands", type=float, default=1.0,
+                    help="1 = foundation bands / wainscot lines at Gemini's rates (BASE_BANDS); 0 = the 2026-10-20d pools")
     ap.add_argument("--cross-gables", type=float, default=0.4,
                     help="probability a side-gable / hip house gets one or two front cross gables (CROSS_GABLES); "
                          "0 = the 2026-10-17b pools")
@@ -1560,6 +1577,8 @@ def main():
     flags["heavy_pieces"] = args.heavy_pieces
     flags["gable_pairs"] = args.gable_pairs
     flags["cross_gables"] = args.cross_gables
+    flags["base_bands"] = args.base_bands
+    BASE_BANDS[0] = args.base_bands
     CROSS_GABLES[0] = args.cross_gables       # the main process draws houses too (house_for, --spec search)
     flags["wall_splits"] = args.wall_splits
     WALL_SPLITS[0] = args.wall_splits

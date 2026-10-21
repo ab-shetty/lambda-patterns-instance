@@ -43,8 +43,12 @@ def family_style(kind, img, mask, shaded, S, seed, name):
         g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         px = img[mask & (g > np.percentile(g[mask], 30))]          # the fill, not its own lines
         base = tuple(int(v) for v in np.median(px, 0)[::-1])         # BGR -> RGB
-    st = G.make_style(rng, kind if kind not in ("stipple", "flat") else "stucco", app, seed, S, name,
-                      roof=kind in ROOF, base_override=base)
+    mk = {"stipple": "stucco", "flat": "stucco", "panel": "lap"}.get(kind, kind)
+    st = G.make_style(rng, mk, app, seed, S, name, roof=kind in ROOF, base_override=base)
+    if kind == "panel":                         # fibre-cement panels (generate_synthetic_fc --panel-siding's params)
+        pw = rng.choice([2.0, 3.0, 4.0, 4.0])
+        st.kind, st.params = "panel", {"pw": pw, "ph": rng.choice([4.0, 6.0, 8.0, 9.0, 10.0]), "stagger": rng.random() < 0.35,
+                                       "sp": pw}
     for t in range(40):                                             # stucco: stipple or flat as asked
         if kind not in ("stipple", "flat") or st.kind == kind:
             break
@@ -52,8 +56,9 @@ def family_style(kind, img, mask, shaded, S, seed, name):
     if shaded:
         lum = 0.299 * st.base[0] + 0.587 * st.base[1] + 0.114 * st.base[2]
         st.line = G.mix(st.base, (0, 0, 0), 0.35) if lum > 90 else G.mix(st.base, (255, 255, 255), 0.3)
-    else:
-        st.base, st.line = (255, 255, 255), app["ink_fill"]
+    else:                                       # line-only: the sheet's own paper (scans / photos are not white)
+        paper = np.percentile(img.reshape(-1, 3), 90, axis=0)
+        st.base, st.line = tuple(int(v) for v in paper[::-1]), app["ink_fill"]
     st.params.pop("grad", None)
     return st
 
@@ -62,18 +67,19 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--map", required=True, help='{"<sheet index>": {"shaded": bool, "kinds": {"pattern1": "lap", ...}}}')
     ap.add_argument("--out", required=True)
-    ap.add_argument("--boxes", default="eval_boxes/gemini30_v1.json")
+    ap.add_argument("--boxes", default="eval_boxes/gemini30_v1.json", help="eval boxes to remap ('' = none)")
+    ap.add_argument("--pool", default=POOL, help="images/ + annotations/ of the Gemini sheets")
     a = ap.parse_args()
     fmap = json.load(open(a.map))
-    anns = sorted(glob.glob(f"{POOL}/annotations/*.json"))
-    boxes = json.load(open(a.boxes))
+    anns = sorted(glob.glob(f"{a.pool}/annotations/*.json"))
+    boxes = json.load(open(a.boxes)) if a.boxes else {}
     os.makedirs(f"{a.out}/images", exist_ok=True)
     os.makedirs(f"{a.out}/annotations", exist_ok=True)
     new_boxes, order = {}, []
-    for k, (si, spec) in enumerate(sorted(fmap.items(), key=lambda kv: int(kv[0]))):
+    for k, (si, spec) in enumerate(sorted(((k_, v) for k_, v in fmap.items() if k_.isdigit()), key=lambda kv: int(kv[0]))):
         si = int(si)
         A = json.load(open(anns[si]))
-        img = cv2.imread(f"{POOL}/images/{A['image']['file_name']}")
+        img = cv2.imread(f"{a.pool}/images/{A['image']['file_name']}")
         h, w = img.shape[:2]
         fams = {}
         for an in A["annotations"]:

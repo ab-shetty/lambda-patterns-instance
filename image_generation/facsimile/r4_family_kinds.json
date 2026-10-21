@@ -1,0 +1,680 @@
+{
+ "17": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "bb",
+   "pattern2": "stone"
+  },
+  "name": "floz_gen_019"
+ },
+ "67": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "lap",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_078"
+ },
+ "13": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "stipple",
+   "pattern3": "brick"
+  },
+  "name": "floz_gen_015"
+ },
+ "2": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap"
+  },
+  "name": "floz_gen_003"
+ },
+ "0": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid",
+   "pattern2": "stone"
+  },
+  "name": "floz_gen_001"
+ },
+ "3": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "shingle"
+  },
+  "name": "floz_gen_004"
+ },
+ "1": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "seam",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_002"
+ },
+ "5": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid"
+  },
+  "name": "floz_gen_007"
+ },
+ "4": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stipple"
+  },
+  "name": "floz_gen_006"
+ },
+ "6": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid",
+   "pattern2": "plank"
+  },
+  "name": "floz_gen_008"
+ },
+ "7": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "lap",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_009"
+ },
+ "8": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "asphalt"
+  },
+  "name": "floz_gen_010"
+ },
+ "9": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stipple",
+   "pattern2": "bb",
+   "pattern3": "lap"
+  },
+  "name": "floz_gen_011"
+ },
+ "10": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "concrete"
+  },
+  "name": "floz_gen_012"
+ },
+ "11": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "concrete"
+  },
+  "name": "floz_gen_013"
+ },
+ "12": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_014"
+ },
+ "15": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "plank"
+  },
+  "name": "floz_gen_017"
+ },
+ "14": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "lap"
+  },
+  "name": "floz_gen_016"
+ },
+ "16": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "lap"
+  },
+  "name": "floz_gen_018"
+ },
+ "18": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "plank",
+   "pattern3": "stone"
+  },
+  "name": "floz_gen_020"
+ },
+ "19": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "solid"
+  },
+  "name": "floz_gen_021"
+ },
+ "21": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "stipple",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_023"
+ },
+ "24": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stone",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_026"
+ },
+ "23": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "stone",
+   "pattern2": "seam"
+  },
+  "name": "floz_gen_025"
+ },
+ "22": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stipple",
+   "pattern2": "grid"
+  },
+  "name": "floz_gen_024"
+ },
+ "25": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "seam"
+  },
+  "name": "floz_gen_027"
+ },
+ "26": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "stipple",
+   "pattern2": "vertical"
+  },
+  "name": "floz_gen_028"
+ },
+ "27": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick"
+  },
+  "name": "floz_gen_029"
+ },
+ "28": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "bb",
+   "pattern3": "panel"
+  },
+  "name": "floz_gen_030"
+ },
+ "29": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_031"
+ },
+ "30": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "asphalt",
+   "pattern3": "brick",
+   "pattern4": "stipple"
+  },
+  "name": "floz_gen_033"
+ },
+ "32": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick"
+  },
+  "name": "floz_gen_035"
+ },
+ "33": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "stipple",
+   "pattern2": "asphalt"
+  },
+  "name": "floz_gen_036"
+ },
+ "31": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid"
+  },
+  "name": "floz_gen_034"
+ },
+ "34": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "brick"
+  },
+  "name": "floz_gen_037"
+ },
+ "35": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid",
+   "pattern2": "grid",
+   "pattern3": "plank"
+  },
+  "name": "floz_gen_038"
+ },
+ "37": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "seam"
+  },
+  "name": "floz_gen_040"
+ },
+ "36": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid",
+   "pattern2": "grid",
+   "pattern3": "grid"
+  },
+  "name": "floz_gen_039"
+ },
+ "41": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_044"
+ },
+ "38": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "vertical"
+  },
+  "name": "floz_gen_041"
+ },
+ "40": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "flat_roof",
+   "pattern2": "stipple",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_043"
+ },
+ "42": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "asphalt"
+  },
+  "name": "floz_gen_045"
+ },
+ "44": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "bb",
+   "pattern2": "bb",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_047"
+ },
+ "43": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stipple"
+  },
+  "name": "floz_gen_046"
+ },
+ "39": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "seam",
+   "pattern2": "stipple",
+   "pattern3": "lap",
+   "pattern4": "stipple"
+  },
+  "name": "floz_gen_042"
+ },
+ "47": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "hatch"
+  },
+  "name": "floz_gen_051"
+ },
+ "45": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "vertical"
+  },
+  "name": "floz_gen_049"
+ },
+ "46": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stone",
+   "pattern2": "stipple",
+   "pattern3": "seam",
+   "pattern4": "vertical"
+  },
+  "name": "floz_gen_050"
+ },
+ "48": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "shingle"
+  },
+  "name": "floz_gen_052"
+ },
+ "49": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "asphalt"
+  },
+  "name": "floz_gen_054"
+ },
+ "50": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap"
+  },
+  "name": "floz_gen_055"
+ },
+ "51": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "seam",
+   "pattern2": "stipple",
+   "pattern3": "tile_roof"
+  },
+  "name": "floz_gen_056"
+ },
+ "52": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "shingle"
+  },
+  "name": "floz_gen_057"
+ },
+ "53": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_058"
+ },
+ "54": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "solid",
+   "pattern2": "hatch"
+  },
+  "name": "floz_gen_060"
+ },
+ "56": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "plank",
+   "pattern2": "grid",
+   "pattern3": "solid"
+  },
+  "name": "floz_gen_062"
+ },
+ "55": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "stone"
+  },
+  "name": "floz_gen_061"
+ },
+ "57": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_063"
+ },
+ "58": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "seam",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_064"
+ },
+ "60": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "lap",
+   "pattern3": "seam"
+  },
+  "name": "floz_gen_066"
+ },
+ "59": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "solid"
+  },
+  "name": "floz_gen_065"
+ },
+ "61": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "asphalt"
+  },
+  "name": "floz_gen_067"
+ },
+ "62": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "ashlar"
+  },
+  "name": "floz_gen_069"
+ },
+ "63": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "shingle",
+   "pattern3": "stipple"
+  },
+  "name": "floz_gen_070"
+ },
+ "64": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stone"
+  },
+  "name": "floz_gen_075"
+ },
+ "65": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "hatch",
+   "pattern2": "bb"
+  },
+  "name": "floz_gen_076"
+ },
+ "66": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap"
+  },
+  "name": "floz_gen_077"
+ },
+ "69": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "concrete"
+  },
+  "name": "floz_gen_080"
+ },
+ "68": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stipple",
+   "pattern2": "flat_roof",
+   "pattern3": "asphalt"
+  },
+  "name": "floz_gen_079"
+ },
+ "71": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick",
+   "pattern2": "shingle",
+   "pattern3": "bb"
+  },
+  "name": "floz_gen_082"
+ },
+ "70": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "shingle",
+   "pattern2": "plank"
+  },
+  "name": "floz_gen_081"
+ },
+ "72": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "plank",
+   "pattern2": "grid"
+  },
+  "name": "floz_gen_083"
+ },
+ "73": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "brick"
+  },
+  "name": "floz_gen_084"
+ },
+ "75": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid"
+  },
+  "name": "floz_gen_087"
+ },
+ "74": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "hatch",
+   "pattern2": "lap"
+  },
+  "name": "floz_gen_085"
+ },
+ "77": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_089"
+ },
+ "78": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_090"
+ },
+ "76": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "stone"
+  },
+  "name": "floz_gen_088"
+ },
+ "81": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "bb"
+  },
+  "name": "floz_gen_093"
+ },
+ "83": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "grid"
+  },
+  "name": "floz_gen_095"
+ },
+ "82": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "hatch"
+  },
+  "name": "floz_gen_094"
+ },
+ "80": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "stipple"
+  },
+  "name": "floz_gen_092"
+ },
+ "85": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "asphalt",
+   "pattern2": "bb"
+  },
+  "name": "floz_gen_098"
+ },
+ "84": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "shingle"
+  },
+  "name": "floz_gen_097"
+ },
+ "87": {
+  "shaded": true,
+  "kinds": {
+   "pattern1": "lap",
+   "pattern2": "brick"
+  },
+  "name": "floz_gen_100"
+ },
+ "86": {
+  "shaded": false,
+  "kinds": {
+   "pattern2": "asphalt"
+  },
+  "name": "floz_gen_099"
+ }
+}
