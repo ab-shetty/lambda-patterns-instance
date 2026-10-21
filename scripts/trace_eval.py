@@ -34,13 +34,15 @@ def score(true, traced):
     for ov, tn, rn in pairs:
         if ov and tn not in used_t and rn not in used_r:
             match[tn] = rn; used_t.add(tn); used_r.add(rn)
-    ious = {}
+    allt = np.any(list(true.values()), axis=0)
+    ious, inl = {}, {}
     for tn, t in true.items():
         r = traced.get(match.get(tn), np.zeros_like(t))
         ious[tn] = float((t & r).sum() / max(1, (t | r).sum()))
-    allt = np.any(list(true.values()), axis=0)
+        ri = r & allt                                            # inside the labelled area only: what the labeller
+        inl[tn] = float((t & ri).sum() / max(1, (t | ri).sum()))  # skipped (roofs, trim) is not held against the trace
     allr = np.any(list(traced.values()), axis=0) if traced else np.zeros_like(allt)
-    return ious, float((allt & ~allr).sum() / max(1, allt.sum())), float((allr & ~allt).sum() / max(1, allr.sum()))
+    return ious, inl, float((allt & ~allr).sum() / max(1, allt.sum())), float((allr & ~allt).sum() / max(1, allr.sum()))
 
 
 def main():
@@ -57,14 +59,16 @@ def main():
             continue
         T = json.load(open(truth[stem])); R = json.load(open(f))
         h, w = T["image"]["height"], T["image"]["width"]
-        ious, unclaimed, spill = score(families(T["annotations"], h, w), families(R["annotations"], h, w))
+        ious, inl, unclaimed, spill = score(families(T["annotations"], h, w), families(R["annotations"], h, w))
         rows.append({"name": stem, "fam_iou": ious, "miou": float(np.mean(list(ious.values()))) if ious else 0.0,
+                     "miou_in": float(np.mean(list(inl.values()))) if inl else 0.0,
                      "unclaimed": unclaimed, "spill": spill})
     for r in rows:
-        print(f"{r['name']}: mIoU {r['miou']:.3f}  unclaimed {r['unclaimed']:.2f}  spill {r['spill']:.2f}  "
+        print(f"{r['name']}: mIoU {r['miou']:.3f} (in-label {r['miou_in']:.3f})  unclaimed {r['unclaimed']:.2f}  spill {r['spill']:.2f}  "
               + " ".join(f"{k}={v:.2f}" for k, v in r["fam_iou"].items()))
     if rows:
-        print(f"== {len(rows)} sheets: mean family IoU {np.mean([r['miou'] for r in rows]):.3f}, "
+        print(f"== {len(rows)} sheets: mean family IoU {np.mean([r['miou'] for r in rows]):.3f} "
+              f"(in-label {np.mean([r['miou_in'] for r in rows]):.3f}), "
               f"unclaimed {np.mean([r['unclaimed'] for r in rows]):.3f}, spill {np.mean([r['spill'] for r in rows]):.3f}")
     if a.out:
         json.dump(rows, open(a.out, "w"), indent=1)

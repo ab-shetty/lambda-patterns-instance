@@ -178,10 +178,11 @@ def discover(model, img, grid=9, min_frac=0.004):
     return [c[0] / c[1] for c in clusters], [c[2] for c in clusters]
 
 
-def colour_split(img, Pb, win, min_de=14.0, min_share=0.15):
+def colour_split(img, Pb, win, min_de=10.0, min_share=0.15):
     """Colour-filled sheets: a family whose fills form two clearly different colours (two siding colours Gemini or the
     clustering lumped) becomes two families. k-means (k=2) on the Lab fill colours of its confident pixels; split when
-    the centres are >= `min_de` apart and the smaller holds >= `min_share`. Returns (Pb, win, parent index per family)."""
+    the centres' chroma (a, b) are >= `min_de` apart -- shadows only change lightness -- and the smaller holds
+    >= `min_share`. Returns (Pb, win, parent index per family)."""
     k = max(3, int(img.shape[1] / 400) | 1)
     lab = cv2.cvtColor(cv2.medianBlur(img, k), cv2.COLOR_BGR2LAB).astype(np.float32)
     newP, parent = [], []
@@ -193,7 +194,8 @@ def colour_split(img, Pb, win, min_de=14.0, min_share=0.15):
             _, lbl, cen = cv2.kmeans(sub, 2, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.5), 3,
                                      cv2.KMEANS_PP_CENTERS)
             share = np.bincount(lbl.ravel(), minlength=2) / len(lbl)
-            if np.linalg.norm(cen[0] - cen[1]) >= min_de and share.min() >= min_share:
+            # hue / chroma only (a, b): shade and shadow change lightness, a second material changes colour
+            if np.linalg.norm(cen[0][1:] - cen[1][1:]) >= min_de and share.min() >= min_share:
                 d = np.stack([np.linalg.norm(lab - c, axis=-1) for c in cen])
                 d = np.stack([cv2.GaussianBlur(x, (0, 0), k) for x in d])
                 a = d.argmin(0)
@@ -256,8 +258,11 @@ def gemini_probs(img, fam, model):
     P, kept, k = [], [], 0
     for i in keep:                                               # a family = its strongest reference at each pixel
         ps = probs[k:k + len(boxes[i])]
-        # a box its own segmentation does not cover sat on text / a leader / another material: drop it
-        good = [p for p, (x, y, bw, bh) in zip(ps, boxes[i]) if p[y:y + bh, x:x + bw].mean() >= 0.4]
+        # a box its own segmentation does not cover sat on text / a leader / another material: drop it (the family keeps
+        # its best box unless even that is junk: faint patterns on photographed sheets score low everywhere)
+        sc = [float(p[y:y + bh, x:x + bw].mean()) for p, (x, y, bw, bh) in zip(ps, boxes[i])]
+        best = int(np.argmax(sc)) if sc else 0
+        good = [p for j, (p, c) in enumerate(zip(ps, sc)) if c >= 0.4 or (j == best and c >= 0.15)]
         k += len(boxes[i])
         if good:
             P.append(np.max(good, axis=0)); kept.append(i)
@@ -265,12 +270,68 @@ def gemini_probs(img, fam, model):
 
 
 MISSING = ("The first image is an architectural drawing; the second is the same drawing with the material patterns found "
-           "so far outlined ({legend}). List the material patterns that are NOT inside any outline, and any outline that "
+           "so far outlined (LEGEND). List the material patterns that are NOT inside any outline, and any outline that "
            "holds two clearly different patterns (a different colour, tone, spacing or direction counts) -- for those, "
            "the pattern the outline's name does not describe. Ignore text, windows, doors, trim, glass and blank paper. "
            f"For each give its kind from {json.dumps(KINDS)} and 1-3 small boxes [ymin, xmin, ymax, xmax] normalised to "
            "0-1000, each entirely INSIDE an area of that pattern, never touching text or leaders. Answer with ONE JSON "
-           'object: {{"families": [{{"kind": k, "boxes": [[...], ...]}}]}} -- an empty list if nothing is missing.')
+           'object: {"families": [{"kind": k, "boxes": [[...], ...]}]} -- an empty list if nothing is missing.')
+
+
+def refine_boxes(model, img, P, boxes, seed=0):
+    """Second look with in-distribution references: for each family, up to 3 boxes drawn the way training drew them
+    (sample_reference_box, 128-512 px, inside the family's largest confident pieces it wins), one more segmentation,
+    and the family's map becomes the max over its old and new references. Gemini's boxes are loose and sized by eye."""
+    from refmask2former.dataset import sample_reference_box
+    if not len(P):
+        return P, boxes
+    Pa = np.stack(P)
+    win = Pa.argmax(0)
+    jobs = []
+    for j, p in enumerate(P):
+        m = ((win == j) & (p > 0.7)).astype(np.uint8)
+        n, cc, st, _ = cv2.connectedComponentsWithStats(m, connectivity=4)
+        order = [i for i in np.argsort(-st[1:, 4]) + 1 if st[i, 4] > 4000][:3]
+        rng = random.Random(seed * 7919 + j)
+        for i in order:
+            x, y, bw, bh = sample_reference_box(cc == i, 128, 512, rng=rng)
+            jobs.append((j, (x, y, bw, bh)))
+    if not jobs:
+        return P, boxes
+    new = segment(model, img, [b for _, b in jobs])
+    P = [p.copy() for p in P]
+    boxes = [list(b) for b in boxes]
+    for (j, b), q in zip(jobs, new):
+        x, y, bw, bh = b
+        if q[y:y + bh, x:x + bw].mean() >= 0.4:                 # the same self-check as Gemini's boxes
+            P[j] = np.maximum(P[j], q); boxes[j].append(b)
+    return P, boxes
+
+
+def _fill_lab(img, p):
+    lab = cv2.cvtColor(cv2.medianBlur(img, max(3, int(img.shape[1] / 400) | 1)), cv2.COLOR_BGR2LAB).astype(np.float32)
+    sel = p > 0.7
+    return np.median(lab[sel], 0) if sel.sum() > 200 else None
+
+
+def merge_second(img, P, kinds, bxs, P2, kinds2, bxs2, shaded, min_de=12.0):
+    """Second-pass families join a first-pass family of the same kind (Gemini re-listing a family it already had splits
+    it in two), unless the sheet is colour-filled and their fills differ by >= `min_de` -- the two-colour case the
+    second pass is for. Joining = max of the maps."""
+    for p2, k2, b2 in zip(P2, kinds2, bxs2):
+        same = [i for i, k in enumerate(kinds) if k == k2]
+        target = None
+        for i in same:
+            if not shaded:
+                target = i; break
+            c1, c2 = _fill_lab(img, P[i]), _fill_lab(img, p2)
+            if c1 is None or c2 is None or np.linalg.norm(c1 - c2) < min_de:
+                target = i; break
+        if target is None:
+            P.append(p2); kinds.append(k2); bxs.append(b2)
+        else:
+            P[target] = np.maximum(P[target], p2); bxs[target] = bxs[target] + b2
+    return P, kinds, bxs
 
 
 def ask_missing(client, types, img, P, kinds):
@@ -283,7 +344,7 @@ def ask_missing(client, types, img, P, kinds):
         pil = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)); pil.thumbnail((2048, 2048))
         buf = io.BytesIO(); pil.save(buf, "JPEG", quality=88)
         parts.append(types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg"))
-    r = client.models.generate_content(model="gemini-2.5-pro", contents=parts + [MISSING.format(legend="; ".join(legend))],
+    r = client.models.generate_content(model="gemini-2.5-pro", contents=parts + [MISSING.replace("LEGEND", "; ".join(legend))],
                                        config=types.GenerateContentConfig(response_mime_type="application/json",
                                                                           temperature=0))
     return json.loads(r.text)
@@ -374,6 +435,8 @@ def main():
                     help="gemini: Gemini lists families with boxes; discover: the model finds them from a grid of "
                          "self-consistent references and Gemini only names their kinds")
     ap.add_argument("--colour-snap", type=int, default=1, help="colour-filled sheets: snap families to the fills")
+    ap.add_argument("--refine-boxes", type=int, default=1,
+                    help="1 = re-segment each family from references sampled inside its own confident area")
     ap.add_argument("--second-pass", type=int, default=1,
                     help="1 = show Gemini what was found and ask for the patterns still missing (or lumped)")
     ap.add_argument("--oracle-kinds", default="image_generation/facsimile/r4_family_kinds.json")
@@ -428,7 +491,10 @@ def main():
                         print(p.stem, "gemini error (second pass)", str(e)[:120], flush=True); continue
                     json.dump(allfam, open(fpath, "w"), indent=1)
                 P2, kinds2, bxs2 = gemini_probs(img, {"families": allfam[p.stem]["missing"]}, model)
-                P, kinds, bxs = list(P) + list(P2), kinds + kinds2, bxs + bxs2
+                P, kinds, bxs = merge_second(img, list(P), kinds, bxs, P2, kinds2, bxs2,
+                                             bool(allfam[p.stem].get("shaded")))
+            if a.refine_boxes and not a.oracle:
+                P, bxs = refine_boxes(model, img, list(P), bxs, seed=k)
             twin, anns, info = finish(img, P, kinds, bool(allfam[p.stem].get("shaded")), k, bxs)
         allfam[p.stem]["traced"] = info
         name = f"trace_{p.stem}.png"
