@@ -2732,3 +2732,11 @@ Default pools byte-identical (8/8).
   family -> kind map from an outline overlay of the labels (was hand-written for Gemini30). Round-4 015 / 019 / 078 twins
   are near-identical copies with generator textures in each labelled family. Needs labels: the next step is a tracer for
   UNLABELLED sheets (regions from the linework, families by texture, kinds from Gemini) -- labels exact by construction.
+- **Trace twins of UNLABELLED sheets** (`scripts/facsimile_trace.py`): Gemini lists each material pattern with a kind and
+  1-3 small boxes inside it; the best model (xblend-kq30-kms30, CPU, 2048) segments each from its boxes (max over a
+  family's boxes; families compete on Gaussian-blurred probabilities, then open / close); facsimile_relabel's styles
+  repaint each mask; the labels are the repainted masks (exact by construction). Round-4 015 / 078 run end to end
+  (`data/diag/trace_r4_compare.jpg`: original | twin | labels). Limits seen: Gemini merges similar families (078's olive
+  and tan lap → one "lap", so both become tan), the model's masks are blobby where two similar families meet, and pattern
+  areas no family claims keep Gemini's texture unlabelled. SLIC superpixel snapping made it worse (square tiles) and was
+  dropped.
