@@ -668,9 +668,12 @@ def compose_revit(image_id, seed, mode_weights):
         cols = 2
     sp_aspect = getattr(FC, "SPEC_BY_ID", {}).get(FC._CUR[0], {}).get("sheet_aspect")
     if sp_aspect:                              # --spec: the column count whose sheet proportions are closest to the original's
+        # on the drawings plus half the label room (the original's ink box takes in some level heads, not all margins)
+        dcells = [(cw_ - (left_room + right_room) / 2, ch_ - (top_room + bot_room) / 2) for cw_, ch_ in cells]
+
         def _aspect(c):
-            cwk = [max(cells[i][0] for i in range(len(cells)) if i % c == k) for k in range(c)]
-            rhk = [max(cells[i][1] for i in range(len(cells)) if i // c == k) for k in range(math.ceil(len(cells) / c))]
+            cwk = [max(dcells[i][0] for i in range(len(dcells)) if i % c == k) for k in range(c)]
+            rhk = [max(dcells[i][1] for i in range(len(dcells)) if i // c == k) for k in range(math.ceil(len(dcells) / c))]
             return (sum(cwk) + gap * (c - 1)) / (sum(rhk) + gap * (len(rhk) - 1))
         cols = min((c for c in (1, 2, 4) if c <= len(elevs) and len(elevs) % c == 0),
                    key=lambda c: abs(math.log(_aspect(c) / sp_aspect)))

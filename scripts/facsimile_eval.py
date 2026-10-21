@@ -100,6 +100,9 @@ def to_specs(described, out, image_dir=None):
         for k, v in (r.get("house") or {}).items():
             if k == "facade_aspect":
                 continue
+            if k in ("garage", "garage_doors"):
+                s[k] = v                        # forced (--spec), not searched
+                continue
             if k == "split" and not v:
                 continue                        # absence of a split is not a constraint worth searching for
             if k in HOUSE_KEYS and v is not None and not (k in ("units",) and v in (0, 1)):

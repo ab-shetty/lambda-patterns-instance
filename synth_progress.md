@@ -2708,3 +2708,16 @@ Excluded from facsimile specs: `image_generation/facsimile/r5_excluded.json` (19
 perspective). Gemini's own flat-vs-3D check (scripts/flag_3d_sheets.py) called all 111 flat -- not usable.
 106 sheets: cos 0.157, top-1 0.21, top-5 0.41, rank 8. The 17 sheets using the new keys: cos 0.163 → **0.201**, rank 9 → 9.
 Default pools byte-identical (8/8).
+
+### Round 4 (pruned, Roboflow floz-gen-gemini-r4-clean) as the facsimile set (user, 2026-10-21)
+88 sheets → describer: 44 elevations, 35 freeform, 8 roof plans (links: data/image_generation/gemini_r4/). Describer now
+asks `garage`: none / wing / integrated (garage doors in the main wall, under living space) + `garage_doors`; r4
+elevations: 8 integrated, 4 wing. Generator: a described integrated garage puts 1-3 doors (9 or 16 ft) at one end of the
+widest planar face of the main front at grade; the front door moves to the other side if they meet. Layout choice
+(row / grid / column) now compares the original's ink aspect with the drawings plus half the label room (full margins
+squashed wide views: r4 066 came out a row); 9 of 9 sheets with a known layout now right.
+| r4 | own cos | top-1 | top-5 | median rank (of 44) |
+|---|---|---|---|---|
+| v12 (r5-tuned generator) | 0.182 | 0.14 | 0.66 | 3 |
+| v13 (+ garages, layout) | 0.165 | **0.23** | 0.66 | 3 |
+Default pools byte-identical (8/8).

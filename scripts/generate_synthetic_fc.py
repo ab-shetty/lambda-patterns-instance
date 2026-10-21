@@ -76,6 +76,8 @@ def _force_of(spec):
     if spec.get("apartment"):
         f["apartment"] = True
         f["balconies"] = bool(spec.get("balconies"))
+    if spec.get("garage") == "integrated":
+        f["garage_int"] = max(1, min(3, int(spec.get("garage_doors") or 1)))
     for k in ("recessed_balconies", "sections", "recessed_entry", "upper_setback"):
         if spec.get(k):
             f[k] = True
@@ -1092,9 +1094,26 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
                     if ok(p):
                         out.append({"poly": p, "type": "window", "block": bi})
         return out
+    gint = HOUSE_FORCE.get(_CUR[0], {}).get("garage_int") if (HOUSE_FORCE and front_main) else None
+    if gint:
+        # --spec integrated garage: 1-3 garage doors in the main block's own front wall at grade, at one end (own stream)
+        gr = random.Random(_CUR[0] * 659 + 23)
+        gw = (16.0 if gr.random() < 0.5 else 9.0) if gint == 1 else 9.0
+        run = gint * gw + (gint - 1) * 2.0
+        fa, _, fb, _ = max(fvis, key=lambda v: v.bounds[2] - v.bounds[0]).bounds    # all on one planar face
+        if run > fb - fa - 3 and gint > 1:
+            gint, run = 1, gw
+        if run < fb - fa - 3:
+            g0 = fa + 1.5 if gr.random() < 0.5 else fb - 1.5 - run
+            for k in range(gint):
+                p = G.rect(g0 + k * (gw + 2.0), 0, g0 + k * (gw + 2.0) + gw, -7.5)
+                if p.within(wall.buffer(0.01)) and (p := fit(p)) is not None:
+                    out.append({"poly": p, "type": "garage", "block": bi})
     if front_main:
         dw = 3.0 if rng.random() < 0.7 else 6.0
         du = min(max(fu0 + house["front_door_u"] * width, fu0 + 2.5), fu1 - 2.5 - dw)
+        if gint and any(G.rect(du - 1, 0, du + dw + 1, -6.8).intersects(o["poly"]) for o in out):
+            du = min(max(fu0 + fu1 - du - dw, fu0 + 2.5), fu1 - 2.5 - dw)    # the other side of the facade
         p = G.rect(du, 0, du + dw, -6.8)
         if p.within(wall.buffer(0.01)) and (p := fit(p)) is not None:
             out.append({"poly": p, "type": "door", "block": bi})

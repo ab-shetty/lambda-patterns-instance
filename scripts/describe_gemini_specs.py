@@ -42,6 +42,8 @@ Answer with ONE JSON object and nothing else:
            "cross_gables": 0|1|2 (gabled bays projecting from the front wall with a ridge perpendicular to the main ridge),
            "split": true if part of the main wall (an end or entry bay, full height) is a different material, "units": null or 2..5 (identical side-by-side townhouse units),
            "wing": true if an attached garage or side wing, "ell": true if a rear ell, "porch": bool, "chimney": bool,
+           "garage": "none" | "wing" (garage doors in a separate attached block) | "integrated" (garage doors in the
+           main building's own wall, e.g. under living space), "garage_doors": number of garage doors in the first view,
            "dormers": bool, "accent": null|"gable"|"wainscot"|"upper"|"block" (where a second wall material sits:
            gable triangles, a base band, the upper storey, or a whole block/wing), "accent2": same values or null,
            "label_trim": true if trim boards are a prominent separate material}},
