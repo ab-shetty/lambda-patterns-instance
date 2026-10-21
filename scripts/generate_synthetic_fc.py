@@ -73,6 +73,9 @@ def _force_of(spec):
         f["aspect"] = float(spec["facade_aspect"])
     if spec.get("bay") is not None:
         f["bay"] = bool(spec["bay"])
+    if spec.get("apartment"):
+        f["apartment"] = True
+        f["balconies"] = bool(spec.get("balconies"))
     return f
 
 
@@ -87,7 +90,7 @@ def _apply_force(house, f):
                    "flat": 0.0}[m.roof]
         if m.roof == "flat":
             house["dormers"] = False
-    if "aspect" in f and not house.get("units"):
+    if "aspect" in f and (not house.get("units") or f.get("apartment")):   # (an apartment does not use the unit template)
         # front-view width / height: stretch the plan along x (every block, so attachments stay attached), x0.35-2.2
         k = max(0.35, min(2.2, f["aspect"] / facade_aspect(house)))
         for b in house["blocks"]:
@@ -642,6 +645,59 @@ def _railing(house, view, walls_by_block, fh, rr):
             "stair": stair, "bi": bi, "standing": standing, "ref_excl": standing + excl}
 
 
+def _apartment_balconies(house, view, openings, fh):
+    """--spec apartment with balconies (describer tag): stacked balconies on the main block's upper storeys at chosen
+    window columns (every bay, alternate bays, or the two ends) -- slab edge, end posts, top / bottom rail and pickets,
+    cable or a glass panel -- each with a door or slider behind it in place of that window. One railing dict, so it is
+    drawn, shadowed and cut from the labels exactly like --railings. Own stream per sheet and view."""
+    B = house["blocks"][0]
+    if view not in ("front", "rear") or B.stories < 2:
+        return None
+    br = random.Random(_CUR[0] * 739 + {"front": 1, "rear": 2}[view] * 17 + 9)
+    # (block indices follow the shaped massing pieces, so the columns come from every upper-storey window)
+    ups = [o for o in openings if o["type"] == "window" and o["poly"].bounds[3] < -fh]
+    cols = sorted({round((o["poly"].bounds[0] + o["poly"].bounds[2]) / 2, 1) for o in ups})
+    bi = ups[0]["block"] if ups else 0
+    if not cols:
+        return None
+    pick = br.choice(["all", "alt", "ends"])
+    cols = cols if pick == "all" or len(cols) < 3 else cols[br.randrange(2)::2] if pick == "alt" else [cols[0], cols[-1]]
+    w = br.uniform(7, 11)
+    infill = br.choice(["pickets", "pickets", "cable", "glass"])
+    rail_h, pw, slab = br.uniform(3.2, 3.6), br.uniform(0.3, 0.45), br.uniform(0.6, 1.0)
+    dw = br.choice([3.0, 5.0, 6.0])
+    cut, rails, lines, standing, excl = [], [], [], [], []
+    for st in range(1, B.stories):
+        deck_y = -st * fh
+        for cu in cols:
+            a = cu - w / 2
+            door = G.rect(cu - dw / 2, deck_y, cu + dw / 2, deck_y - 6.8)
+            openings[:] = [o for o in openings if not o["poly"].intersects(door.buffer(0.3))]
+            openings.append({"poly": door, "type": "door", "block": bi})
+            top = deck_y - rail_h
+            cut.append(G.rect(a, deck_y, a + w, deck_y + slab))                      # slab edge
+            rails.append(G.rect(a, top, a + w, top + 0.25))                          # top rail
+            for px in (a + pw / 2, a + w - pw / 2):
+                cut.append(G.rect(px - pw / 2, top - 0.1, px + pw / 2, deck_y)); standing.append(cut[-1])
+            excl.append(G.rect(a, top - 0.1, a + w, deck_y))
+            if infill == "glass":
+                rails.append(G.rect(a, deck_y - 0.45, a + w, deck_y - 0.3))
+                lines.append(((a + pw, top + 0.6), (a + w - pw, top + 0.6)))
+            elif infill == "pickets":
+                rails.append(G.rect(a, deck_y - 0.55, a + w, deck_y - 0.4))
+                x = a + pw + 0.4
+                while x < a + w - pw - 0.1:
+                    lines.append(((x, top + 0.25), (x, deck_y - 0.55))); x += 0.4
+            else:
+                y = top + 0.55
+                while y < deck_y - 0.3:
+                    lines.append(((a + pw, y), (a + w - pw, y))); y += 0.33
+    if not cut:
+        return None
+    return {"cut": cut, "rails": rails, "lines": lines, "depth": br.uniform(4, 6), "deck": (cols[0] - w / 2, cols[0] + w / 2, -fh),
+            "stair": None, "bi": bi, "standing": standing, "ref_excl": standing + excl}
+
+
 def _balcony_door(railing, walls_by_block, openings, fh, view):
     """--balcony-doors P: an upper-floor balcony gets a door (or a slider) in the wall behind its
     railing, from the deck up 6.8 ft. It is an ordinary opening -- cut from the wall label, drawn as a
@@ -787,7 +843,13 @@ def build_elevation_fc(house, view, rng):
         trims += porch["posts"]
     standing = list(porch["posts"]) if porch else []
     railing = None
-    if getattr(G, "RAILINGS", 0) > 0 and walls_by_block:
+    hf = HOUSE_FORCE.get(_CUR[0], {}) if HOUSE_FORCE else {}
+    if hf.get("apartment") and hf.get("balconies"):
+        railing = _apartment_balconies(house, view, openings, fh)
+        if railing is not None:
+            trims += railing["cut"]
+            standing += railing["standing"]
+    if railing is None and not hf.get("apartment") and getattr(G, "RAILINGS", 0) > 0 and walls_by_block:
         rr = random.Random(_CUR[0] * 977 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 31 + 7)
         if rr.random() < G.RAILINGS:
             railing = _railing(house, view, walls_by_block, fh, rr)
@@ -807,6 +869,41 @@ def build_elevation_fc(house, view, rng):
     return {"surfaces": surfaces, "trims": trims, "label_trims": label_trims, "openings": openings,
             "porch": porch, "extent": unary_union(allp).bounds, "vf": vf, "railing": railing,
             "downspouts": downspouts, "ref_excl": ref_excl}
+
+
+def _apartment_openings(house, B, bi, view, fu0, width, ok):
+    """--spec apartment block (the describer's apartment_or_multistorey_block): window columns aligned through every
+    storey at a regular bay spacing, wider units on the long faces, and on the front a glazed entry (single or double
+    door) in place of the ground-floor window of one or two bays -- not the townhouse template's door + garage per unit.
+    Own stream per sheet and view."""
+    fh = house["fh"]
+    ar = random.Random(_CUR[0] * 613 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 29 + 3)
+    long_face = view in ("front", "rear")
+    bay = ar.uniform(9, 13) if long_face else ar.uniform(8, 12)
+    n = max(1, int(width / bay))
+    ww = min(width / n - 1.5, ar.choice([3.5, 4.0, 5.0, 6.0]) if long_face else ar.choice([3.0, 3.5, 4.0]))
+    wh = ar.choice([4.0, 4.5, 5.0])
+    entries = set()
+    if view == "front":
+        mid = (n - 1) / 2
+        entries = {int(mid)} if n % 2 or n < 4 else {n // 2 - 1, n // 2} if ar.random() < 0.3 else {n // 2}
+        if n >= 6 and ar.random() < 0.4:
+            entries = {1, n - 2}
+    out = []
+    for i in range(n):
+        cu = fu0 + (i + 0.5) * width / n
+        for st in range(B.stories):
+            if st == 0 and i in entries:
+                dw = 3.0 if ar.random() < 0.5 else 5.5
+                p = G.rect(cu - dw / 2, 0, cu + dw / 2, -7.2)
+                if p.within(G.rect(fu0, 0.01, fu0 + width, -B.stories * fh)):
+                    out.append({"poly": p, "type": "door", "block": bi})
+                continue
+            head = -st * fh - 7.0
+            p = G.rect(cu - ww / 2, head, cu + ww / 2, head + wh)
+            if ok(p):
+                out.append({"poly": p, "type": "window", "block": bi})
+    return out
 
 
 def place_openings(house, B, bi, view, wall, Fs, rng):
@@ -855,6 +952,8 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
                         return q
         return None
 
+    if HOUSE_FORCE.get(_CUR[0], {}).get("apartment") and B.kind == "main":
+        return out + _apartment_openings(house, B, bi, view, fu0, width, ok)
     if house.get("units") and B.kind == "main" and view in ("front", "rear"):
         n = house["units"]
         uw = width / n

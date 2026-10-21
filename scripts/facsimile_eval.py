@@ -54,6 +54,8 @@ def to_specs(described, out, image_dir=None):
              "views": r.get("views") if r.get("views") in (1, 2, 4) else 1, "house": {}, "styles": {},
              "gaps": list(r.get("gaps", []))}
         s["bay"] = "bay_or_bump_out" in (r.get("gap_tags") or [])     # forced (--spec), not searched
+        s["apartment"] = "apartment_or_multistorey_block" in (r.get("gap_tags") or [])
+        s["balconies"] = "balconies" in (r.get("gap_tags") or [])
         vl = [v for v in (r.get("view_list") or []) if v in ("front", "rear", "left", "right")]
         if vl:
             s["view_list"] = vl[:4]

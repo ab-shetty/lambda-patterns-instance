@@ -2683,3 +2683,14 @@ v2. Text accuracy is out of scope (user, 2026-10-20). Default pools byte-identic
 Montage (seed 11) `data/diag/fac_r5_v10/montage.jpg`: 041, 061, 101, 104, 160 now read as the same building. Still off:
 apartment ground floors get townhouse garage doors (172), "existing / proposed" sheets of one view come out squashed (186),
 Gemini's single wide "front + adjacent side" view is split into two views (097).
+
+### v11 — apartment blocks (2026-10-21)
+The describer tags 14 of 108 elevations `apartment_or_multistorey_block`, often with `units` set, so the twin got the
+townhouse template: a door + garage per unit on the ground floor. Spec key `apartment` (from the tag) now gives
+`_apartment_openings`: window columns aligned through every storey at a 9-13 ft bay spacing, a single / double glazed entry
+in place of one or two ground-floor windows, no garages; the facade-aspect stretch applies even with `units`.
+With the `balconies` tag (7 of the 14): `_apartment_balconies` -- stacked balconies on the upper storeys at every / alternate
+/ end columns (slab edge, end posts, pickets, cable or glass) with a door or slider behind each, as one railing dict (drawn,
+shadowed, label-cut like --railings). Apartments get no generic ground deck / stair.
+Apartments: own cos median 0.171 → **0.270**, median rank 3.5 → **2.5**. All 108: cos 0.158, top-1 0.16, top-5 0.45, rank 7
+(top-1 moves with the score's standardisation; no other spec changed). Default pools byte-identical (8/8).
