@@ -420,6 +420,13 @@ def finish(img, P, kinds, shaded, seed, boxes=None):
         ink = (g < np.percentile(g, 90) - 30).astype(np.float32)
         kw = max(15, int(w / 35))
         win = np.where(cv2.blur(ink, (kw, kw)) < 0.012, -1, win)
+    # texture check per piece: local stroke density vs the family's own reference boxes. A piece much sparser or denser
+    # than its references is blank paper, a text block or another material the map spilled onto (margins, titles,
+    # under the building); on line-only sheets a family whose references hold almost no ink is not a pattern at all
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    strokes = (cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))) > 30)
+    dens = cv2.blur(strokes.astype(np.float32), (max(9, int(w / 80)),) * 2)
+    lo, hi = 0.2, 4.0                                           # (0.35 on line-only sheets cut real pattern on r4 015)
     out = img.copy()
     anns, info = [], []
     S = max(8.0, w / 60.0)
@@ -427,10 +434,21 @@ def finish(img, P, kinds, shaded, seed, boxes=None):
         kind = kinds[parent[j]]
         if kind not in KINDS or (kind == "flat" and not shaded):
             continue
+        bl = boxes[parent[j]] if boxes else []
+        ref = np.median(np.concatenate([dens[y:y + bh, x:x + bw].ravel() for x, y, bw, bh in bl])) if bl else None
+        if ref is not None and not shaded and ref < 0.03:
+            continue
         m = (win == j) & (Pb[j] > 0.5)
         kk = max(3, int(w / 500) | 1)
         m = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_OPEN, np.ones((kk, kk), np.uint8))
         m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((kk, kk), np.uint8)).astype(bool)
+        if ref is not None and ref > 0.005:
+            n_, cc = cv2.connectedComponents(m.astype(np.uint8), connectivity=8)
+            for c in range(1, n_):
+                sel = cc == c
+                r_ = float(np.median(dens[sel])) / ref
+                if not lo <= r_ <= hi:
+                    m[sel] = False
         segs = instances(m, min_px=0.0005 * h * w)
         mm = np.zeros((h, w), np.uint8)
         for sg in segs:                                           # the label exactly as written
