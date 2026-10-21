@@ -1,0 +1,3 @@
+{"_why": "sheets not like what clients send, left out of facsimile specs and scores (user, 2026-10-21). Gemini's own flat-vs-3D check (scripts/flag_3d_sheets.py) called all 111 round-5 elevations flat, so this list is kept by hand.",
+ "floz_gen_r5_194": "rendered 3-D look: porch columns and decks standing in depth, realistic shading",
+ "floz_gen_r5_004": "photo of a printed sheet, perspective-distorted and cropped"}

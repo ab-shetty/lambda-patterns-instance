@@ -2694,3 +2694,17 @@ With the `balconies` tag (7 of the 14): `_apartment_balconies` -- stacked balcon
 shadowed, label-cut like --railings). Apartments get no generic ground deck / stair.
 Apartments: own cos median 0.171 → **0.270**, median rank 3.5 → **2.5**. All 108: cos 0.158, top-1 0.16, top-5 0.45, rank 7
 (top-1 moves with the score's standardisation; no other spec changed). Default pools byte-identical (8/8).
+
+### v12 — recessed balconies, recessed entries, setbacks, projecting sections (2026-10-21)
+Read from the describer's gap text (no schema keys): `recessed_balconies` (inset / recessed balconies, 2 sheets),
+`sections` (projecting and recessed / staggered / articulated facade, 13), `recessed_entry` (3), `upper_setback` (top
+storey set back, 4). Massing: fc_massing now takes `cuts` (boxes subtracted from the fused solid), so recesses are real
+voids -- the visible-face pipeline gives their back walls, reveals and shadows. `_cut_plan` (own stream per sheet, shared by
+massing and elevations): recessed balconies at the apartment window columns on every upper storey (door / slider on the
+back wall, railing flush with the facade); a recessed entry around the front door (the only front door); a flat-roofed top
+storey set back 5-9 ft. Projecting sections: 1-3 flat-roofed blocks 2-4 ft proud, full height (flat roofs only; kind
+"section", window columns shared with the main block). Described apartments / sectioned facades skip --shaped notches.
+Excluded from facsimile specs: `image_generation/facsimile/r5_excluded.json` (194: rendered 3-D look; 004: photo of a print,
+perspective). Gemini's own flat-vs-3D check (scripts/flag_3d_sheets.py) called all 111 flat -- not usable.
+106 sheets: cos 0.157, top-1 0.21, top-5 0.41, rank 8. The 17 sheets using the new keys: cos 0.163 → **0.201**, rank 9 → 9.
+Default pools byte-identical (8/8).

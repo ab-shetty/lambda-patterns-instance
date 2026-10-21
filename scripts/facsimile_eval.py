@@ -10,6 +10,7 @@ image with its description, get a near-same synthetic version from the generator
                                     own source). Writes side-by-sides of the worst pairs.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -45,10 +46,18 @@ def refine_box(g, box):
     return nx0, top, nx1, y1
 
 
+EXCLUDED = Path(__file__).parent.parent / "image_generation/facsimile/r5_excluded.json"
+
+
 def to_specs(described, out, image_dir=None):
     specs = []
+    excluded = json.load(open(EXCLUDED)) if EXCLUDED.exists() else {}
     for r in map(json.loads, open(described)):
         if "error" in r or r.get("mode") != "elevation":
+            continue
+        if "perspective_or_3d" in (r.get("gap_tags") or []):
+            continue                            # 3-D / perspective sheets: not what clients send (user, 2026-10-21)
+        if r["name"] in excluded:
             continue
         s = {"name": r["name"], "mode": "elevation", "shaded": bool(r.get("shaded")),
              "views": r.get("views") if r.get("views") in (1, 2, 4) else 1, "house": {}, "styles": {},
@@ -56,6 +65,13 @@ def to_specs(described, out, image_dir=None):
         s["bay"] = "bay_or_bump_out" in (r.get("gap_tags") or [])     # forced (--spec), not searched
         s["apartment"] = "apartment_or_multistorey_block" in (r.get("gap_tags") or [])
         s["balconies"] = "balconies" in (r.get("gap_tags") or [])
+        gt = " | ".join(r.get("gaps") or []).lower()     # massing the vocabulary has no key for, read from the gap text
+        s["recessed_balconies"] = s["balconies"] and bool(re.search(r"(inset|recess)\w* balcon|balcon\w* (are )?(inset|recess)", gt))
+        s["sections"] = bool(re.search(r"projecting and recessed|recessed and projecting|staggered|articulated|"
+                                       r"projects? forward|bumps? out slightly|recessed wall section", gt))
+        s["recessed_entry"] = bool(re.search(r"recessed (front )?entry|entry (is )?recessed", gt))
+        s["upper_setback"] = bool(re.search(r"(second|third|upper|top) (story|storey|floor)( section)? (is )?(set|stepped)[ -]back|"
+                                            r"stepped[ -]back (second|third|upper)", gt))
         vl = [v for v in (r.get("view_list") or []) if v in ("front", "rear", "left", "right")]
         if vl:
             s["view_list"] = vl[:4]

@@ -204,6 +204,9 @@ def build(house):
     if ch:
         solids.append(Part.makeBox(ch["w"], ch["d"], ch["z1"] - ch["z0"], V(ch["x0"], ch["y0"], ch["z0"])))
     shape = solids[0].fuse(solids[1:]) if len(solids) > 1 else solids[0]
+    cuts = [Part.makeBox(c["w"], c["d"], c["h"], V(c["x0"], c["y0"], c["z0"])) for c in house.get("cuts", [])]
+    if cuts:                              # recessed balconies / entries, upper-storey setbacks (--spec)
+        shape = shape.cut(cuts[0].fuse(cuts[1:]) if len(cuts) > 1 else cuts[0])
     shape = shape.removeSplitter()
     return faces_of(shape)
 

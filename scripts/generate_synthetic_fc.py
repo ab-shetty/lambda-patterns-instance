@@ -76,6 +76,9 @@ def _force_of(spec):
     if spec.get("apartment"):
         f["apartment"] = True
         f["balconies"] = bool(spec.get("balconies"))
+    for k in ("recessed_balconies", "sections", "recessed_entry", "upper_setback"):
+        if spec.get(k):
+            f[k] = True
     return f
 
 
@@ -95,6 +98,52 @@ def _apply_force(house, f):
         k = max(0.35, min(2.2, f["aspect"] / facade_aspect(house)))
         for b in house["blocks"]:
             b.x0, b.w = b.x0 * k, b.w * k
+    if f.get("sections") and m.roof == "flat":
+        # projecting sections: 1-3 flat-roofed bays, 2-4 ft proud of the main facade, full height, as Gemini articulates
+        # apartment fronts; the accent "block" material lands on them (v6: a non-main block)
+        n = fr.choice([1, 2, 2, 3])
+        sw = fr.uniform(0.14, 0.26) * m.w
+        p = fr.uniform(2.0, 4.0)
+        xs = [m.x0 + m.w / 2] if n == 1 else [m.x0 + 0.5 * sw + 1, m.x1 - 0.5 * sw - 1] if n == 2 else \
+            [m.x0 + 0.5 * sw + 1, m.x0 + m.w / 2, m.x1 - 0.5 * sw - 1]
+        for c in xs:
+            house["blocks"].append(G.Block(c - sw / 2, m.y0 - p, sw, p + 1.0, m.stories, "flat", "x", 0.0, m.ov, "section"))
+
+
+def _cut_plan(house, image_id):
+    """--spec recesses as boxes cut from the massing (fc_massing "cuts"), plan feet, z up from grade: recessed balconies on
+    the upper storeys at the apartment window columns, a recessed entry around the front door, the top storey set back
+    from the front. Deterministic per sheet (own stream), so the massing and the elevations agree."""
+    f = HOUSE_FORCE.get(image_id, {}) if HOUSE_FORCE else {}
+    if not any(f.get(k) for k in ("recessed_balconies", "recessed_entry", "upper_setback")):
+        return []
+    m, fh = house["blocks"][0], house["fh"]
+    cr = random.Random(image_id * 883 + 41)
+    front = min(b.y0 for b in house["blocks"]) - 1.0
+    out = []
+    if f.get("recessed_balconies") and m.stories >= 2:
+        allc = _apt_cols(house, "front", image_id)
+        cols = allc
+        pick = cr.choice(["all", "alt", "ends"])
+        cols = cols if pick == "all" or len(cols) < 3 else cols[cr.randrange(2)::2] if pick == "alt" else [cols[0], cols[-1]]
+        w = min(cr.uniform(7, 10), 0.9 * m.w / max(1, len(allc)))
+        dep = cr.uniform(4, 6)
+        for st in range(1, m.stories):
+            for cu in cols:
+                out.append({"kind": "balcony", "st": st, "x0": cu - w / 2, "y0": front, "z0": st * fh,
+                            "w": w, "d": m.y0 + dep - front, "h": fh - 1.0})
+    if f.get("recessed_entry"):
+        w, dep = cr.uniform(6, 9), cr.uniform(3, 5)
+        cu = m.x0 + min(max(house["front_door_u"], 0.15), 0.85) * m.w
+        if f.get("apartment"):
+            cu = m.x0 + m.w / 2
+        out.append({"kind": "entry", "st": 0, "x0": cu - w / 2, "y0": front, "z0": 0.0, "w": w,
+                    "d": m.y0 + dep - front, "h": min(fh - 1.0, 8.5)})
+    if f.get("upper_setback") and m.stories >= 2 and m.roof == "flat":
+        dep = min(cr.uniform(5, 9), 0.35 * m.d)
+        out.append({"kind": "setback", "st": m.stories - 1, "x0": m.x0 - 5, "y0": front, "z0": (m.stories - 1) * fh + 0.05,
+                    "w": m.w + 10, "d": m.y0 + dep - front, "h": 60.0})
+    return out
 
 
 def _cross_gables(make_house):
@@ -397,11 +446,15 @@ def massing_spec(image_id, seed, house):
                        "pitch": pitch, "ov": b.ov, "parapet": r.uniform(1.0, 2.5)})
         if b.kind == "xgable":
             blocks[-1]["xgable"] = True
-    if SHAPED[0]:
+    hf = HOUSE_FORCE.get(image_id, {}) if HOUSE_FORCE else {}
+    if SHAPED[0] and not (hf.get("apartment") or hf.get("sections")):     # (a described apartment facade stays planar)
         # own rng stream: the rest of the spec (chimney) is unchanged by the flag
         blocks = shape_blocks(blocks, house, random.Random(seed * 1_000_003 + image_id * 211 + 3),
                               bay=HOUSE_FORCE.get(image_id, {}).get("bay"))
     spec = {"id": image_id, "blocks": blocks}
+    cuts = _cut_plan(house, image_id)
+    if cuts:
+        spec["cuts"] = [{k: c[k] for k in ("x0", "y0", "z0", "w", "d", "h")} for c in cuts]
     if house["chimney"]:
         m = blocks[0]
         cw, cd = r.uniform(2.0, 3.5), r.uniform(1.8, 3.0)
@@ -645,6 +698,50 @@ def _railing(house, view, walls_by_block, fh, rr):
             "stair": stair, "bi": bi, "standing": standing, "ref_excl": standing + excl}
 
 
+def _recess_features(house, view, openings, fh):
+    """What sits in the --spec recesses (_cut_plan) on the front view: a door or slider on each recessed balcony's back
+    wall with a railing flush with the facade (pickets, cable or glass; no posts -- the reveals hold it), and a door in a
+    recessed entry. Openings the recess swallows are dropped. Returns a railing dict (as --railings) or None."""
+    cuts = [c for c in _cut_plan(house, _CUR[0]) if c["kind"] in ("balcony", "entry")]
+    if view != "front" or not cuts:
+        return None
+    rr = random.Random(_CUR[0] * 757 + 13)
+    infill = rr.choice(["pickets", "pickets", "cable", "glass"])
+    rail_h = rr.uniform(3.2, 3.6)
+    bi = next((o["block"] for o in openings), 0)
+    cut, rails, lines, excl = [], [], [], []
+    for c in cuts:
+        a, b = c["x0"], c["x0"] + c["w"]
+        z0 = -c["z0"]
+        hole = G.rect(a, z0 + 0.01, b, z0 - c["h"])
+        openings[:] = [o for o in openings if not o["poly"].intersects(hole) and
+                       not (c["kind"] == "entry" and o["type"] == "door" and o["poly"].bounds[3] > -0.2)]   # one front door
+        dw = 3.0 if c["kind"] == "balcony" and rr.random() < 0.4 else min(6.0, c["w"] - 1.5) if rr.random() < 0.5 else 3.0
+        cu = (a + b) / 2
+        openings.append({"poly": G.rect(cu - dw / 2, z0, cu + dw / 2, z0 - 6.8), "type": "door", "block": bi})
+        if c["kind"] != "balcony":
+            continue
+        top = z0 - rail_h
+        rails.append(G.rect(a, top, b, top + 0.22))
+        excl.append(G.rect(a, top, b, z0))
+        if infill == "glass":
+            rails.append(G.rect(a, z0 - 0.4, b, z0 - 0.28))
+            lines.append(((a + 0.3, top + 0.6), (b - 0.3, top + 0.6)))
+        elif infill == "pickets":
+            rails.append(G.rect(a, z0 - 0.5, b, z0 - 0.38))
+            x = a + 0.4
+            while x < b - 0.2:
+                lines.append(((x, top + 0.22), (x, z0 - 0.5))); x += 0.4
+        else:
+            y = top + 0.5
+            while y < z0 - 0.3:
+                lines.append(((a, y), (b, y))); y += 0.33
+    if not rails:
+        return None
+    return {"cut": cut, "rails": rails, "lines": lines, "depth": 0.3, "deck": (cuts[0]["x0"], cuts[0]["x0"] + cuts[0]["w"], -fh),
+            "stair": None, "bi": bi, "standing": [], "ref_excl": excl}
+
+
 def _apartment_balconies(house, view, openings, fh):
     """--spec apartment with balconies (describer tag): stacked balconies on the main block's upper storeys at chosen
     window columns (every bay, alternate bays, or the two ends) -- slab edge, end posts, top / bottom rail and pickets,
@@ -844,7 +941,10 @@ def build_elevation_fc(house, view, rng):
     standing = list(porch["posts"]) if porch else []
     railing = None
     hf = HOUSE_FORCE.get(_CUR[0], {}) if HOUSE_FORCE else {}
-    if hf.get("apartment") and hf.get("balconies"):
+    recessed = _recess_features(house, view, openings, fh) if hf else None
+    if recessed is not None:
+        railing = recessed
+    elif hf.get("apartment") and hf.get("balconies") and not hf.get("recessed_balconies"):
         railing = _apartment_balconies(house, view, openings, fh)
         if railing is not None:
             trims += railing["cut"]
@@ -871,32 +971,46 @@ def build_elevation_fc(house, view, rng):
             "downspouts": downspouts, "ref_excl": ref_excl}
 
 
+def _apt_cols(house, view, image_id=None):
+    """The apartment window columns of a view (view-u feet): a regular bay spacing over the main block's span, own
+    stream per sheet and view, so every block of the facade (projecting sections included) and the recess cuts share it."""
+    m = house["blocks"][0]
+    span = {"front": (m.x0, m.x1), "rear": (-m.x1, -m.x0), "left": (-m.y1, -m.y0), "right": (m.y0, m.y1)}[view]
+    iid = _CUR[0] if image_id is None else image_id
+    ar = random.Random(iid * 613 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 29 + 3)
+    bay = ar.uniform(9, 13) if view in ("front", "rear") else ar.uniform(8, 12)
+    n = max(1, int((span[1] - span[0]) / bay))
+    return [span[0] + (i + 0.5) * (span[1] - span[0]) / n for i in range(n)]
+
+
 def _apartment_openings(house, B, bi, view, fu0, width, ok):
     """--spec apartment block (the describer's apartment_or_multistorey_block): window columns aligned through every
-    storey at a regular bay spacing, wider units on the long faces, and on the front a glazed entry (single or double
-    door) in place of the ground-floor window of one or two bays -- not the townhouse template's door + garage per unit.
-    Own stream per sheet and view."""
+    storey (_apt_cols, shared by all blocks of the facade), wider units on the long faces, and on the front a glazed
+    entry (single or double door) in place of the ground-floor window of one or two bays -- not the townhouse
+    template's door + garage per unit. Own stream per sheet and view."""
     fh = house["fh"]
-    ar = random.Random(_CUR[0] * 613 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 29 + 3)
+    ar = random.Random(_CUR[0] * 617 + {"front": 1, "rear": 2, "left": 3, "right": 4}[view] * 31 + 5)
     long_face = view in ("front", "rear")
-    bay = ar.uniform(9, 13) if long_face else ar.uniform(8, 12)
-    n = max(1, int(width / bay))
-    ww = min(width / n - 1.5, ar.choice([3.5, 4.0, 5.0, 6.0]) if long_face else ar.choice([3.0, 3.5, 4.0]))
+    cols = _apt_cols(house, view)
+    n = len(cols)
+    pitch_u = (cols[1] - cols[0]) if n > 1 else width
+    ww = min(pitch_u - 1.5, ar.choice([3.5, 4.0, 5.0, 6.0]) if long_face else ar.choice([3.0, 3.5, 4.0]))
     wh = ar.choice([4.0, 4.5, 5.0])
     entries = set()
-    if view == "front":
+    if view == "front" and not any(c["kind"] == "entry" for c in _cut_plan(house, _CUR[0])):
         mid = (n - 1) / 2
         entries = {int(mid)} if n % 2 or n < 4 else {n // 2 - 1, n // 2} if ar.random() < 0.3 else {n // 2}
         if n >= 6 and ar.random() < 0.4:
             entries = {1, n - 2}
     out = []
-    for i in range(n):
-        cu = fu0 + (i + 0.5) * width / n
+    for i, cu in enumerate(cols):
+        if not fu0 - 0.5 <= cu <= fu0 + width + 0.5:
+            continue                            # this column is on another block of the facade
         for st in range(B.stories):
             if st == 0 and i in entries:
                 dw = 3.0 if ar.random() < 0.5 else 5.5
                 p = G.rect(cu - dw / 2, 0, cu + dw / 2, -7.2)
-                if p.within(G.rect(fu0, 0.01, fu0 + width, -B.stories * fh)):
+                if ok(p, 0.0) or p.within(G.rect(fu0, 0.01, fu0 + width, -B.stories * fh)):
                     out.append({"poly": p, "type": "door", "block": bi})
                 continue
             head = -st * fh - 7.0
@@ -952,7 +1066,7 @@ def place_openings(house, B, bi, view, wall, Fs, rng):
                         return q
         return None
 
-    if HOUSE_FORCE.get(_CUR[0], {}).get("apartment") and B.kind == "main":
+    if HOUSE_FORCE.get(_CUR[0], {}).get("apartment") and B.kind in ("main", "section"):
         return out + _apartment_openings(house, B, bi, view, fu0, width, ok)
     if house.get("units") and B.kind == "main" and view in ("front", "rear"):
         n = house["units"]
@@ -1075,7 +1189,7 @@ def _house_value(house, key):
     if key == "roof":
         return blocks[0].roof
     if key == "wing":
-        return any(b.kind not in ("main", "ell", "xgable") for b in blocks[1:])
+        return any(b.kind not in ("main", "ell", "xgable", "section") for b in blocks[1:])
     if key == "ell":
         return any(b.kind == "ell" for b in blocks)
     if key == "ridge":                      # "side": eaves face the front view (ridge along x); "front": gable end faces it
