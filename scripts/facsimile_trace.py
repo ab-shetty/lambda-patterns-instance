@@ -178,11 +178,10 @@ def discover(model, img, grid=9, min_frac=0.004):
     return [c[0] / c[1] for c in clusters], [c[2] for c in clusters]
 
 
-def colour_split(img, Pb, win, min_de=10.0, min_share=0.15):
+def colour_split(img, Pb, win, min_de=14.0, min_share=0.15):
     """Colour-filled sheets: a family whose fills form two clearly different colours (two siding colours Gemini or the
     clustering lumped) becomes two families. k-means (k=2) on the Lab fill colours of its confident pixels; split when
-    the centres' chroma (a, b) are >= `min_de` apart -- shadows only change lightness -- and the smaller holds
-    >= `min_share`. Returns (Pb, win, parent index per family)."""
+    the centres are >= `min_de` apart and the smaller holds >= `min_share`. Returns (Pb, win, parent index per family)."""
     k = max(3, int(img.shape[1] / 400) | 1)
     lab = cv2.cvtColor(cv2.medianBlur(img, k), cv2.COLOR_BGR2LAB).astype(np.float32)
     newP, parent = [], []
@@ -194,8 +193,8 @@ def colour_split(img, Pb, win, min_de=10.0, min_share=0.15):
             _, lbl, cen = cv2.kmeans(sub, 2, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.5), 3,
                                      cv2.KMEANS_PP_CENTERS)
             share = np.bincount(lbl.ravel(), minlength=2) / len(lbl)
-            # hue / chroma only (a, b): shade and shadow change lightness, a second material changes colour
-            if np.linalg.norm(cen[0][1:] - cen[1][1:]) >= min_de and share.min() >= min_share:
+            # full Lab: a chroma-only test (shadow-proof in principle) split 054 / 070 wrongly (r4: 0.726 -> 0.681)
+            if np.linalg.norm(cen[0] - cen[1]) >= min_de and share.min() >= min_share:
                 d = np.stack([np.linalg.norm(lab - c, axis=-1) for c in cen])
                 d = np.stack([cv2.GaussianBlur(x, (0, 0), k) for x in d])
                 a = d.argmin(0)
@@ -308,6 +307,16 @@ def refine_boxes(model, img, P, boxes, seed=0):
     return P, boxes
 
 
+def _box_lab(img, boxes):
+    """Median Lab fill colour inside a family's reference boxes (median-blurred: hatch lines wash out). The boxes sit on
+    the family's own colour; its probability map often spreads over a neighbour of the same texture."""
+    if not boxes:
+        return None
+    lab = cv2.cvtColor(cv2.medianBlur(img, max(3, int(img.shape[1] / 400) | 1)), cv2.COLOR_BGR2LAB).astype(np.float32)
+    px = np.concatenate([lab[y:y + h, x:x + w].reshape(-1, 3) for x, y, w, h in boxes])
+    return np.median(px, 0) if len(px) else None
+
+
 def _fill_lab(img, p):
     lab = cv2.cvtColor(cv2.medianBlur(img, max(3, int(img.shape[1] / 400) | 1)), cv2.COLOR_BGR2LAB).astype(np.float32)
     sel = p > 0.7
@@ -317,14 +326,27 @@ def _fill_lab(img, p):
 def merge_second(img, P, kinds, bxs, P2, kinds2, bxs2, shaded, min_de=12.0):
     """Second-pass families join a first-pass family of the same kind (Gemini re-listing a family it already had splits
     it in two), unless the sheet is colour-filled and their fills differ by >= `min_de` -- the two-colour case the
-    second pass is for. Joining = max of the maps."""
+    second pass is for -- or whose mask overlaps a first-pass family's at IoU >= 0.65 whatever it is called (colours
+    from the reference boxes, which sit on each family's own colour). Joining = max of the maps."""
     for p2, k2, b2 in zip(P2, kinds2, bxs2):
         same = [i for i, k in enumerate(kinds) if k == k2]
         target = None
+        m2 = p2 > 0.5
+        c2 = _box_lab(img, b2) if shaded else None
+        for i, p in enumerate(P):                               # the same region under another name (shingle / asphalt)
+            m1 = p > 0.5
+            if (m1 & m2).sum() / max(1, (m1 | m2).sum()) >= 0.65:
+                c1 = _box_lab(img, bxs[i]) if shaded else None
+                if c1 is not None and c2 is not None and np.linalg.norm(c1 - c2) >= min_de:
+                    continue                                    # a lumped two-colour family being split: keep it
+                target = i; break
+        if target is not None:
+            P[target] = np.maximum(P[target], p2); bxs[target] = bxs[target] + b2
+            continue
         for i in same:
             if not shaded:
                 target = i; break
-            c1, c2 = _fill_lab(img, P[i]), _fill_lab(img, p2)
+            c1, c2 = _box_lab(img, bxs[i]), _box_lab(img, b2)
             if c1 is None or c2 is None or np.linalg.norm(c1 - c2) < min_de:
                 target = i; break
         if target is None:
@@ -391,12 +413,19 @@ def finish(img, P, kinds, shaded, seed, boxes=None):
         # the fills only MOVE pixels between families; where they say nothing the model's winner stands
         win = np.where(snapped >= 0, snapped, np.where(Pb.max(0) > 0.5, win, -1))
         Pb = np.where(win[None] == np.arange(len(Pb))[:, None, None], 1.0, 0.0).astype(np.float32)
+    if not shaded:
+        # line-only sheets: blank paper is never a pattern (Gemini lists "flat" for sky / plain roofs and it floods the
+        # empty sheet) -- areas with almost no ink in a ~3%-of-width window leave every family
+        g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        ink = (g < np.percentile(g, 90) - 30).astype(np.float32)
+        kw = max(15, int(w / 35))
+        win = np.where(cv2.blur(ink, (kw, kw)) < 0.012, -1, win)
     out = img.copy()
     anns, info = [], []
     S = max(8.0, w / 60.0)
     for j in range(len(Pb)):
         kind = kinds[parent[j]]
-        if kind not in KINDS:
+        if kind not in KINDS or (kind == "flat" and not shaded):
             continue
         m = (win == j) & (Pb[j] > 0.5)
         kk = max(3, int(w / 500) | 1)
@@ -435,8 +464,8 @@ def main():
                     help="gemini: Gemini lists families with boxes; discover: the model finds them from a grid of "
                          "self-consistent references and Gemini only names their kinds")
     ap.add_argument("--colour-snap", type=int, default=1, help="colour-filled sheets: snap families to the fills")
-    ap.add_argument("--refine-boxes", type=int, default=1,
-                    help="1 = re-segment each family from references sampled inside its own confident area")
+    ap.add_argument("--refine-boxes", type=int, default=0,
+                    help="1 = re-segment each family from references sampled inside its own confident area (r4: 0.726 -> 0.680 in-label IoU, 054 collapses; off)")
     ap.add_argument("--second-pass", type=int, default=1,
                     help="1 = show Gemini what was found and ask for the patterns still missing (or lumped)")
     ap.add_argument("--oracle-kinds", default="image_generation/facsimile/r4_family_kinds.json")
