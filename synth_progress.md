@@ -2769,3 +2769,22 @@ masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 el
 - The untested direct lever: the 139 hand-labelled r2-r4 Gemini sheets outside Gemini30
   (`scripts/build_gemini_holdout_pool.py`, 0 overlap checked). `run_gemini_holdout.sh`: ctl (kq pool) vs gem (kq pool +
   139 x18), seeds 7 / 8 + two-seed blends, paired compares, reproduction check against single18kq-blend50.
+
+### 2026-10-21 (CPU) — post-processing: what the errors are, and a colour rule that survives the real sheets
+- **Errors are confident, not borderline** (xblend-kq30-kms30 @4096, share of target + FP area): FP at p >= 0.9: Gemini30 4.5%,
+  val 4.0%, HF14 1.0%; FN at p < 0.05: 2.2 / 2.5 / 2.3%. Pixels at 0.05-0.9 are ~half target, half not on every split -- no
+  threshold / hysteresis rule can do much; a rule has to overturn confident decisions with evidence the model ignored.
+- **Colour consistency** (`scripts/pp_probe/colourcut.py`): on colour-filled sheets, cut selected pieces whose fill (median-blurred,
+  hatch washed out) is another paint than the reference box's. Raw Lab distance (DE > 10 / 15) fails on real sheets: val -0.104,
+  HF14 -0.029 (val 17: the reference sits in a shaded dormer, the lit wall is the same paint but DE > 10). **rgb chromaticity**
+  (rgb / (r+g+b); a shadow is a multiply and cancels) separates them: same family incl. shadow p90 <= 2.4, Gemini30 26's wrong
+  material ~6. Thresholds 4 and 6 set from those two design cases (so val 17 / Gemini30 26 informed the design) before scoring:
+  | vs lin_fill | Gemini30 | val | HF14 |
+  |---|---|---|---|
+  | chroma > 4 | +0.0157 (8 / 0) | -0.0007 (0 / 6) | -0.0022 (6 / 2; HF14 3 q2 0.989 -> 0.839, dark low-chroma roof) |
+  | **chroma > 6** | **+0.0076** (8 / 0) | -0.0001 (0 / 1) | **+0.0010** (5 / 0) |
+  The Gemini30 gain is sheet 26 (its design case); HF14 24 / 25 / 27 gain ~+0.01 each at both thresholds (not looked at).
+  Chromaticity is noisy on dark / greyish paint (HF14 3) -- the reason 6, the pre-registered conservative variant, is the pick;
+  not re-tuned on HF14.
+- Remaining confident misses are line-only sheets left blotchy or striped (Gemini30 17 roof planes, 1 between battens, 19's
+  framing holes): no colour to go on; a texture-region rule is the next candidate.
