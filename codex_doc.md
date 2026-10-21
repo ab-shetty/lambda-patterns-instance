@@ -81,6 +81,19 @@ Copies content, not appearance. Pilot: 10 user Gemini images + 10 Gemini30 twins
 - HF14 12 q1 / q3 (turned deck boards) and HF14 2 / Gemini30 8 (elevations) move with the plan pairs; Gemini30 1 swings 0.30-0.69.
 - Gemini30 0: tile reference takes the sofas / chairs. HF14 18: the two roofs merge under label fix v2.
 
+## Pick up here (2026-10-21): `./run_gemini_holdout.sh` -- does real Gemini appearance move Gemini30?
+
+The twin test says Gemini30's worst sheets fail on how Gemini DRAWS materials, not on layout. The 139 hand-labelled
+Gemini r2-r4 sheets that are not in Gemini30 (`scripts/build_gemini_holdout_pool.py`; Gemini30 is a random 30 of r2-r4,
+so earlier mixes with all of r2-r4 leaked it) have never been trained on with a clean Gemini30 read. The script trains the
+standard one-epoch restart (run_single_pass.sh) on the current best's own kq pool (generator at 2026-10-15b, rebuilt from
+commit `6b25130^`) with and without those 139 sheets x18, at seeds 7 and 8, blends the seeds, scores HF14 / fix v2 / val /
+Gemini30 @4096 and writes `logs/gemho_compare.txt` (ctl vs gem, paired; plus ctl seed 7 vs single18kq-blend50, which
+should match). ~5 h. Read: Gemini30 up well beyond seed noise (~0.016) with HF14 / val not down = labelled Gemini data
+is the lever (label more, e.g. round 5); flat = the remaining gap is not appearance data, measure the label ceiling.
+The 2026-10-20d / 21a generator defaults (cross gables, wall splits, panels, pattern drift, base bands) are still
+unscreened; this run deliberately does not use them.
+
 ## Machine setup (fresh GH200, ~15 min)
 
 ```bash

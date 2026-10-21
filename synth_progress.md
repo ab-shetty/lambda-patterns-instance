@@ -2756,3 +2756,16 @@ The gap to the oracle is Gemini's family list, not our segmentation. Dropped: gr
 0.25 on two sheets), SLIC snapping, refined in-distribution boxes (054 collapses), chroma-only split, Gemini segmentation
 masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 elevations, `data/synthetic/trace_r5`,
 `trace_r4_all`. Usage: image_generation/facsimile/README.md.
+
+### 2026-10-21 — critical review: what can reach 0.95 on Gemini30; GPU run prepared
+- Gemini30's 0.126 loss (best model): label precision <= 4 px ~0.018, trim 4-25 px ~0.017, far / label gaps ~0.019
+  (sheet 19's unlabelled joists 0.0085), the rest sheet-level failures (26, 1, 19, 17, 0, 8). The twin test (2026-10-20)
+  says the sheet-level failures are appearance (how Gemini draws materials), not layout.
+- So: the parametric facsimile work (`--spec`, cross gables, apartments, recesses, garages) and the trace twins (Gemini
+  layout + OUR textures) do not target the measured failure -- they add layouts / replace Gemini's drawing with ours.
+  The production trace run was stopped (40 / 44 r4 sheets done; nothing for r5).
+- Adding generator patterns aimed at Gemini30's own sheets fits the eval set; and it has been tried for 26 and 1
+  (gable tone pairs single18kg: 26 +0.11, 1 -0.32; kw30: 26 up, 1 0.557 -> 0.328) -- fixing one appearance broke another.
+- The untested direct lever: the 139 hand-labelled r2-r4 Gemini sheets outside Gemini30
+  (`scripts/build_gemini_holdout_pool.py`, 0 overlap checked). `run_gemini_holdout.sh`: ctl (kq pool) vs gem (kq pool +
+  139 x18), seeds 7 / 8 + two-seed blends, paired compares, reproduction check against single18kq-blend50.
