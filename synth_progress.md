@@ -2740,3 +2740,19 @@ Default pools byte-identical (8/8).
   and tan lap → one "lap", so both become tan), the model's masks are blobby where two similar families meet, and pattern
   areas no family claims keep Gemini's texture unlabelled. SLIC superpixel snapping made it worse (square tiles) and was
   dropped.
+
+### 2026-10-21 — trace twins of unlabelled sheets: measured and tuned
+`scripts/trace_eval.py` scores a trace (run WITHOUT labels) against round 4's hand labels: per true family the IoU of the
+traced family overlapping it most; in-label IoU ignores traced pixels the labeller left unlabelled (roofs, trim);
+unclaimed = labelled pattern the trace left unlabelled (the only error that would be label noise -- twin labels are
+the repainted masks). 22 round-4 elevations:
+| version | family IoU | in-label | unclaimed | spill |
+|---|---|---|---|---|
+| oracle families + boxes (ceiling) | 0.879 | 0.944 | 0.024 | 0.075 |
+| Gemini, one pass | 0.650 | 0.730 | 0.118 | 0.292 |
+| v3: clearer prompt, second pass (what is missing / lumped), same-kind merge, box self-check | 0.682 | 0.726 | 0.076 | 0.322 |
+| v8: + overlap merge with box colours, no blank paper on line-only sheets | 0.686 | 0.727 | 0.080 | 0.274 |
+The gap to the oracle is Gemini's family list, not our segmentation. Dropped: grid discovery with the model (slow,
+0.25 on two sheets), SLIC snapping, refined in-distribution boxes (054 collapses), chroma-only split, Gemini segmentation
+masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 elevations, `data/synthetic/trace_r5`,
+`trace_r4_all`. Usage: image_generation/facsimile/README.md.

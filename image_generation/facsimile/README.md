@@ -37,15 +37,22 @@ Already-traced sheets are skipped unless `--force`. About 2 min of CPU per sheet
 traced family that overlaps it most. "In-label" IoU ignores traced pixels outside every hand label (roofs and trim
 the labeller skipped). "Unclaimed" = labelled pattern the trace left unlabelled.
 
-| version | family IoU | in-label | unclaimed |
-|---|---|---|---|
-| oracle: true families, boxes inside them (ceiling of steps 2-5) | 0.879 | 0.944 | 0.024 |
-| Gemini families, one pass | 0.650 | 0.730 | 0.118 |
-| + clearer prompt, second pass, duplicate merge, box self-check | 0.682 | 0.726 | 0.076 |
+| version | family IoU | in-label | unclaimed | spill |
+|---|---|---|---|---|
+| oracle: true families, boxes inside them (ceiling of steps 2-5) | 0.879 | 0.944 | 0.024 | 0.075 |
+| Gemini families, one pass | 0.650 | 0.730 | 0.118 | 0.292 |
+| + clearer prompt, second pass, duplicate merge, box self-check (v3) | 0.682 | 0.726 | 0.076 | 0.322 |
+| + overlap / box-colour duplicate merge, no blank paper on line-only sheets (v8, current) | 0.686 | 0.727 | 0.080 | 0.274 |
+
+Per sheet the trace is either near the oracle (025, 088, 097, 098, 054, 003, 015: 0.85-1.0 in-label) or loses a family
+Gemini did not see or boxed on the wrong material (019 faint board-and-batten on a photographed sheet, 027, 049, 058:
+0.25-0.5).
 
 The gap to the oracle is Gemini's family list (lumped colours, boxes on callout text, missed families), not the
 segmentation. Tried and dropped: family discovery from a grid of model references (slow, worse), SLIC superpixel
-snapping (square tiles), re-sampled in-distribution boxes (`--refine-boxes 1`, 0.726 -> 0.680, merges families).
+snapping (square tiles), re-sampled in-distribution boxes (`--refine-boxes 1`, 0.726 -> 0.680, merges families),
+a chroma-only colour split (0.726 -> 0.681), Gemini 2.5 segmentation masks (Pro returns none; Flash returns made-up
+polygons).
 
 ## 2. Label-shape twin of a LABELLED sheet
 
