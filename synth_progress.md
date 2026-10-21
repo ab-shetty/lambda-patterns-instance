@@ -2788,3 +2788,15 @@ masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 el
   not re-tuned on HF14.
 - Remaining confident misses are line-only sheets left blotchy or striped (Gemini30 17 roof planes, 1 between battens, 19's
   framing holes): no colour to go on; a texture-region rule is the next candidate.
+- **Can the SHAPE of the prediction tell us what to clean?** (`scripts/pp_probe/{shapes,holes,necks}.py`, descriptive, best model
+  @4096 maps at a 2048 working scale, lin_fill mask; areas as shares of label area.)
+  - Most wrong area is INSIDE the answer's largest piece (Gemini30 0.062 of 0.094 FP; val / HF14 likewise): spill attached to
+    correct regions or wrong regions merged into them -- not odd separate pieces. Thin / ragged / elongated / far pieces are
+    mostly right (dropping them: Gemini30 -0.008 .. -0.14, val -0.04 .. -0.39). Only tiny pieces (< 1% of the largest) are
+    net wrong: drop all = +0.0024 / +0.0008 / +0.0010.
+  - Holes enclosed by the answer are mostly real openings (windows, doors; rectangular): filling all = -0.038 / -0.181 / -0.035;
+    irregular holes only: +0.0005 / +0.0003 / +0.0009. Gemini30's blotchy misses (17, 1) are not sealed holes.
+  - Necks: cutting the answer at narrow necks (opening r = 4 / 8 / 16 px) and dropping the small detached fragments:
+    Gemini30 +0.001 .. -0.010, val -0.04 .. -0.06, HF14 ~-0.001. Spill does not hang off necks.
+  - So the prediction's shape carries ~+0.001-0.003 of fixable error; the rest needs image evidence (the colour cut: Gemini30
+    +0.008) or a better model. Missed area is mostly whole regions OUTSIDE the answer (val 0.037, HF14 0.035 of label).
