@@ -35,8 +35,12 @@ from facsimile_relabel import family_style  # noqa: E402
 from refmask2former.dataset import _normalize_chw  # noqa: E402
 
 CKPT = "data/hf_ckpt/xblend-kq30-kms30.pth"
+COLOUR_SNAP = [True]
 PROMPT = ("This is an architectural drawing. List EVERY distinct material pattern drawn on it (siding, masonry, stucco, "
           "roofing, floor finishes, hatches) -- one entry per distinct pattern, even if it appears in several places. "
+          "The SAME kind of pattern in a different colour, tone, line spacing or direction is a DIFFERENT entry (e.g. tan "
+          "lap siding and olive lap siding are two entries). Boxes must never touch callout text, leaders, labels or "
+          "dimension strings. "
           f"For each give its kind from {json.dumps(KINDS)} and 1-3 small boxes [ymin, xmin, ymax, xmax] normalised to "
           "0-1000, each in a DIFFERENT area where the pattern appears (all of them if it is in several places, up to 3), "
           "each lying entirely INSIDE that area of the pattern (well clear of its edges, windows, text and "
@@ -97,9 +101,141 @@ def instances(mask, min_px):
     return out
 
 
-def trace(img, fam, model, seed):
+def colour_snap(img, Pb, win, tol=9.0, overlap=0.3):
+    """Colour-filled sheets: families snapped to the fills. Each family's fill colour (Lab median of its confident,
+    non-ink pixels); every pixel of a median-blurred copy (hatch lines wash out) takes the nearest family colour within
+    `tol` (dark outline pixels take none, so regions stop at the drawn edges); a family gets every connected colour
+    region its prediction overlaps by >= `overlap`. Boundaries follow the fills; same-colour areas the model missed come
+    in. Returns the new winner map (-1 = none)."""
     h, w = img.shape[:2]
-    shaded = bool(fam.get("shaded"))
+    k = max(3, int(w / 400) | 1)
+    blur = cv2.medianBlur(img, k)
+    lab = cv2.cvtColor(blur, cv2.COLOR_BGR2LAB).astype(np.float32)
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ink = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))) > 60
+    cols = []
+    for j in range(len(Pb)):
+        sel = (win == j) & (Pb[j] > 0.7) & ~ink
+        cols.append(np.median(lab[sel], 0) if sel.sum() > 200 else None)
+    ok = [j for j, c in enumerate(cols) if c is not None]
+    if not ok:
+        return win
+    D = np.stack([np.linalg.norm(lab - cols[j], axis=-1) for j in ok])
+    near = D.argmin(0)
+    lab_map = np.where(D.min(0) < tol, np.array(ok)[near], -1)
+    lab_map[ink] = -1
+    out = np.full((h, w), -1, np.int32)
+    for j in ok:
+        n, cc = cv2.connectedComponents((lab_map == j).astype(np.uint8), connectivity=4)
+        pred = (win == j) & (Pb[j] > 0.5)
+        hit = np.bincount(cc.ravel(), weights=pred.ravel().astype(np.float64), minlength=n)
+        size = np.bincount(cc.ravel(), minlength=n)
+        good = (hit / np.maximum(size, 1) >= overlap)
+        good[0] = False
+        out[good[cc]] = j
+    # ink lines inside a family's region belong to it (the hatch / outline pixels the fill wraps)
+    for j in ok:
+        m = (out == j).astype(np.uint8)
+        cl = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((k + 2, k + 2), np.uint8)).astype(bool)
+        out[cl & (out == -1)] = j
+    return out
+
+
+def discover(model, img, grid=9, min_frac=0.004):
+    """Families without Gemini's boxes: candidate reference boxes on a grid over the inked drawing, one segmentation
+    each; a candidate is kept when its own box is inside its mask (mean probability there >= 0.6) and the mask is not a
+    speck; kept masks are clustered greedily (IoU >= 0.5 with a cluster's mean map = same family). Returns (probability
+    maps, the boxes behind each family)."""
+    h, w = img.shape[:2]
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ink = (g < np.percentile(g, 92) - 25).astype(np.float32)
+    bs = int(0.055 * min(h, w) + 0.02 * max(h, w))
+    dens = cv2.blur(ink, (bs, bs))
+    cands = []
+    for gy in range(grid):
+        for gx in range(int(grid * w / h + 0.5) if w > h else grid):
+            cy = int((gy + 0.5) * h / grid); cx = int((gx + 0.5) * w / max(1, int(grid * w / h + 0.5) if w > h else grid))
+            if 0.04 < dens[cy, cx] < 0.6:                       # pattern-like ink density (not paper, not solid fill)
+                cands.append((max(0, cx - bs // 2), max(0, cy - bs // 2), min(bs, w - 1), min(bs, h - 1)))
+    if not cands:
+        return [], []
+    probs = segment(model, img, cands)
+    keep = []
+    for b, p in zip(cands, probs):
+        x, y, bw, bh = b
+        if p[y:y + bh, x:x + bw].mean() >= 0.6 and (p > 0.5).mean() >= min_frac:
+            keep.append((b, p))
+    keep.sort(key=lambda t: -(t[1] > 0.5).sum())
+    clusters = []                                               # [sum of maps, count, boxes]
+    for b, p in keep:
+        m = p > 0.5
+        for c in clusters:
+            cm = (c[0] / c[1]) > 0.5
+            if (m & cm).sum() / max(1, (m | cm).sum()) >= 0.5:
+                c[0] += p; c[1] += 1; c[2].append(b); break
+        else:
+            clusters.append([p.copy(), 1, [b]])
+    return [c[0] / c[1] for c in clusters], [c[2] for c in clusters]
+
+
+def colour_split(img, Pb, win, min_de=14.0, min_share=0.15):
+    """Colour-filled sheets: a family whose fills form two clearly different colours (two siding colours Gemini or the
+    clustering lumped) becomes two families. k-means (k=2) on the Lab fill colours of its confident pixels; split when
+    the centres are >= `min_de` apart and the smaller holds >= `min_share`. Returns (Pb, win, parent index per family)."""
+    k = max(3, int(img.shape[1] / 400) | 1)
+    lab = cv2.cvtColor(cv2.medianBlur(img, k), cv2.COLOR_BGR2LAB).astype(np.float32)
+    newP, parent = [], []
+    for j in range(len(Pb)):
+        sel = (win == j) & (Pb[j] > 0.5)
+        px = lab[sel]
+        if len(px) > 2000:
+            sub = px[np.random.default_rng(j).choice(len(px), min(20000, len(px)), replace=False)]
+            _, lbl, cen = cv2.kmeans(sub, 2, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.5), 3,
+                                     cv2.KMEANS_PP_CENTERS)
+            share = np.bincount(lbl.ravel(), minlength=2) / len(lbl)
+            if np.linalg.norm(cen[0] - cen[1]) >= min_de and share.min() >= min_share:
+                d = np.stack([np.linalg.norm(lab - c, axis=-1) for c in cen])
+                d = np.stack([cv2.GaussianBlur(x, (0, 0), k) for x in d])
+                a = d.argmin(0)
+                for c in range(2):
+                    newP.append(np.where(a == c, Pb[j], 0.0).astype(np.float32)); parent.append(j)
+                continue
+        newP.append(Pb[j]); parent.append(j)
+    Pn = np.stack(newP)
+    return Pn, Pn.argmax(0), parent
+
+
+def oracle_families(pool, kinds_path, stem, hw):
+    """Families from a labelled pool's hand labels: kind from the family -> kind map, up to 3 boxes sampled inside the
+    family's largest pieces (the evaluator's sampler), in Gemini's 0-1000 [ymin, xmin, ymax, xmax] format."""
+    import glob
+    from refmask2former.dataset import render_instance_mask, sample_reference_box
+    h, w = hw
+    f = [x for x in sorted(glob.glob(f"{pool}/annotations/*.json")) if os.path.basename(x).split("_png")[0] == stem][0]
+    si = sorted(glob.glob(f"{pool}/annotations/*.json")).index(f)
+    km = json.load(open(kinds_path)).get(str(si), {})
+    A = json.load(open(f))
+    pieces = {}
+    for an in A["annotations"]:
+        pieces.setdefault(an["category_name"], []).append(render_instance_mask(an["segmentation"], h, w).astype(bool))
+    fams = []
+    for cat, ms in sorted(pieces.items()):
+        rng = random.Random(len(fams) * 7919 + 13)
+        boxes = []
+        for m in sorted(ms, key=lambda m: -m.sum())[:3]:
+            if m.sum() < 400:
+                continue
+            x, y, bw, bh = sample_reference_box(m, 128, 512, rng=rng)
+            boxes.append([y * 1000 / h, x * 1000 / w, (y + bh) * 1000 / h, (x + bw) * 1000 / w])
+        if boxes:
+            fams.append({"kind": km.get("kinds", {}).get(cat, "lap"), "boxes": boxes, "true": cat})
+    return {"shaded": bool(km.get("shaded")), "families": fams}
+
+
+def gemini_probs(img, fam, model):
+    """Families from Gemini's (or the oracle's) boxes: one map per family = max over its boxes. Returns
+    (maps, kinds, boxes)."""
+    h, w = img.shape[:2]
     fams = [f for f in fam.get("families", []) if f.get("kind") in KINDS]
     boxes = []                                                   # per family: its reference boxes (x, y, w, h)
     for f in fams:
@@ -117,19 +253,90 @@ def trace(img, fam, model, seed):
     keep = [i for i, bl in enumerate(boxes) if bl]
     flat = [b for i in keep for b in boxes[i]]
     probs = segment(model, img, flat) if flat else []
-    if not probs:
-        return img.copy(), [], []
-    P, k = [], 0
+    P, kept, k = [], [], 0
     for i in keep:                                               # a family = its strongest reference at each pixel
-        P.append(np.max(probs[k:k + len(boxes[i])], axis=0)); k += len(boxes[i])
+        ps = probs[k:k + len(boxes[i])]
+        # a box its own segmentation does not cover sat on text / a leader / another material: drop it
+        good = [p for p, (x, y, bw, bh) in zip(ps, boxes[i]) if p[y:y + bh, x:x + bw].mean() >= 0.4]
+        k += len(boxes[i])
+        if good:
+            P.append(np.max(good, axis=0)); kept.append(i)
+    return P, [fams[i]["kind"] for i in kept], [boxes[i] for i in kept]
+
+
+MISSING = ("The first image is an architectural drawing; the second is the same drawing with the material patterns found "
+           "so far outlined ({legend}). List the material patterns that are NOT inside any outline, and any outline that "
+           "holds two clearly different patterns (a different colour, tone, spacing or direction counts) -- for those, "
+           "the pattern the outline's name does not describe. Ignore text, windows, doors, trim, glass and blank paper. "
+           f"For each give its kind from {json.dumps(KINDS)} and 1-3 small boxes [ymin, xmin, ymax, xmax] normalised to "
+           "0-1000, each entirely INSIDE an area of that pattern, never touching text or leaders. Answer with ONE JSON "
+           'object: {{"families": [{{"kind": k, "boxes": [[...], ...]}}]}} -- an empty list if nothing is missing.')
+
+
+def ask_missing(client, types, img, P, kinds):
+    from facsimile_kinds import overlay
+    from PIL import Image
+    fams = {f"{kinds[j]} ({j + 1})": p > 0.5 for j, p in enumerate(P)}
+    ov, legend = overlay(img, fams)
+    parts = []
+    for im in (img, ov):
+        pil = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)); pil.thumbnail((2048, 2048))
+        buf = io.BytesIO(); pil.save(buf, "JPEG", quality=88)
+        parts.append(types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg"))
+    r = client.models.generate_content(model="gemini-2.5-pro", contents=parts + [MISSING.format(legend="; ".join(legend))],
+                                       config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                                          temperature=0))
+    return json.loads(r.text)
+
+
+DISCOVER_KINDS = dict(KINDS, none="not a material pattern (text, glass, trim, doors, sky, dimension lines, blank wall)")
+
+
+def name_families(client, types, img, P):
+    """Gemini names each discovered family's kind from an outline overlay (or 'none')."""
+    from facsimile_kinds import overlay
+    from PIL import Image
+    fams = {f"pattern{j + 1}": p > 0.5 for j, p in enumerate(P)}
+    ov, legend = overlay(img, fams)
+    parts = []
+    for im in (img, ov):
+        pil = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)); pil.thumbnail((2048, 2048))
+        buf = io.BytesIO(); pil.save(buf, "JPEG", quality=88)
+        parts.append(types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg"))
+    prompt = (f"The first image is an architectural drawing; the second is the same drawing with regions outlined: "
+              f"{'; '.join(legend)}. For each outlined region name the material pattern that fills MOST of it, choosing "
+              f"from {json.dumps(DISCOVER_KINDS)}. Answer with ONE JSON object: "
+              '{"shaded": true if surfaces are colour-filled else false, "kinds": {"<label name>": "<kind key>"}}')
+    r = client.models.generate_content(model="gemini-2.5-pro", contents=parts + [prompt],
+                                       config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                                          temperature=0))
+    return json.loads(r.text)
+
+
+def finish(img, P, kinds, shaded, seed, boxes=None):
+    """Winner map from the family maps (blurred argmax; on colour sheets split two-colour families, snap to the fills),
+    repaint each family with the generator's texture for its kind, labels = the repainted masks."""
+    h, w = img.shape[:2]
+    if not len(P):
+        return img.copy(), [], []
     P = np.stack(P)
     sig = max(1.0, w / 400)
     Pb = np.stack([cv2.GaussianBlur(p, (0, 0), sig) for p in P])  # competing families: smooth borders, not scribbles
     win = Pb.argmax(0)
+    parent = list(range(len(Pb)))
+    if shaded and COLOUR_SNAP[0]:
+        Pb, win, parent = colour_split(img, Pb, win)
+        snapped = colour_snap(img, Pb, win)
+        # the fills only MOVE pixels between families; where they say nothing the model's winner stands
+        win = np.where(snapped >= 0, snapped, np.where(Pb.max(0) > 0.5, win, -1))
+        Pb = np.where(win[None] == np.arange(len(Pb))[:, None, None], 1.0, 0.0).astype(np.float32)
     out = img.copy()
     anns, info = [], []
     S = max(8.0, w / 60.0)
-    for j, i in enumerate(keep):
+    for j in range(len(Pb)):
+        kind = kinds[parent[j]]
+        if kind not in KINDS:
+            continue
         m = (win == j) & (Pb[j] > 0.5)
         kk = max(3, int(w / 500) | 1)
         m = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_OPEN, np.ones((kk, kk), np.uint8))
@@ -144,14 +351,14 @@ def trace(img, fam, model, seed):
         if not mm.any():
             continue
         cat = f"pattern{len(info) + 1}"
-        st = family_style(fams[i]["kind"], img, mm, shaded, S, seed * 101 + j, cat)
+        st = family_style(kind, img, mm, shaded, S, seed * 101 + j, cat)
         ys, xs = np.nonzero(mm)
         tmp = out.copy()
         G.draw_fill(tmp, sbox(xs.min(), ys.min(), xs.max() + 1, ys.max() + 1), st, S, w, h)
         out[mm] = tmp[mm]
         anns += [{"segmentation": sg, "category_name": cat} for sg in segs]
-        info.append({"category": cat, "kind": fams[i]["kind"], "boxes_xywh": [list(b) for b in boxes[i]],
-                     "pixels": int(mm.sum())})
+        info.append({"category": cat, "kind": kind, "pixels": int(mm.sum()),
+                     "boxes_xywh": [list(b) for b in boxes[parent[j]]] if boxes else []})
     return out, anns, info
 
 
@@ -160,10 +367,23 @@ def main():
     ap.add_argument("--images", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--names", default=None, help="comma list of image stems")
+    ap.add_argument("--oracle", default=None, help="labelled pool: take the families (and 1-3 boxes inside each) from its "
+                    "hand labels instead of Gemini -- the segmentation stage's ceiling (diagnostic)")
+    ap.add_argument("--force", action="store_true", help="re-trace sheets already in --out")
+    ap.add_argument("--families", default="gemini", choices=("gemini", "discover"),
+                    help="gemini: Gemini lists families with boxes; discover: the model finds them from a grid of "
+                         "self-consistent references and Gemini only names their kinds")
+    ap.add_argument("--colour-snap", type=int, default=1, help="colour-filled sheets: snap families to the fills")
+    ap.add_argument("--second-pass", type=int, default=1,
+                    help="1 = show Gemini what was found and ask for the patterns still missing (or lumped)")
+    ap.add_argument("--oracle-kinds", default="image_generation/facsimile/r4_family_kinds.json")
     a = ap.parse_args()
-    from google import genai
-    from google.genai import types
-    client = genai.Client()
+    COLOUR_SNAP[0] = bool(a.colour_snap)
+    client, types = None, None
+    if not a.oracle:
+        from google import genai
+        from google.genai import types
+        client = genai.Client()
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     model, _ = load_refunet(CKPT, torch.device("cpu"))
     os.makedirs(f"{a.out}/images", exist_ok=True); os.makedirs(f"{a.out}/annotations", exist_ok=True)
@@ -174,14 +394,42 @@ def main():
         want = set(a.names.split(",")); paths = [p for p in paths if p.stem in want]
     rows = []
     for k, p in enumerate(paths):
+        if not a.force and os.path.exists(f"{a.out}/annotations/trace_{p.stem}.json"):
+            continue
         img = cv2.imread(str(p))
-        if p.stem not in allfam or "families" not in allfam[p.stem]:
-            try:
-                allfam[p.stem] = ask_gemini(client, types, img)
-            except Exception as e:                               # noqa: BLE001 - rerun to retry
-                print(p.stem, "gemini error", str(e)[:120], flush=True); continue
-            json.dump(allfam, open(fpath, "w"), indent=1)
-        twin, anns, info = trace(img, allfam[p.stem], model, seed=k)
+        if a.families == "discover" and not a.oracle:
+            P, dboxes = discover(model, img)
+            fam = allfam.get(p.stem, {})
+            if fam.get("n_discovered") != len(P) or "kinds" not in fam:
+                try:
+                    fam = name_families(client, types, img, P) if P else {"shaded": False, "kinds": {}}
+                except Exception as e:                           # noqa: BLE001 - rerun to retry
+                    print(p.stem, "gemini error", str(e)[:120], flush=True); continue
+                fam["n_discovered"] = len(P)
+                allfam[p.stem] = fam
+                json.dump(allfam, open(fpath, "w"), indent=1)
+            kinds = [fam["kinds"].get(f"pattern{j + 1}", "none") for j in range(len(P))]
+            twin, anns, info = finish(img, P, kinds, bool(fam.get("shaded")), k, dboxes)
+        else:
+            if a.oracle:
+                allfam[p.stem] = oracle_families(a.oracle, a.oracle_kinds, p.stem, img.shape[:2])
+            elif p.stem not in allfam or "families" not in allfam[p.stem]:
+                try:
+                    allfam[p.stem] = ask_gemini(client, types, img)
+                except Exception as e:                           # noqa: BLE001 - rerun to retry
+                    print(p.stem, "gemini error", str(e)[:120], flush=True); continue
+                json.dump(allfam, open(fpath, "w"), indent=1)
+            P, kinds, bxs = gemini_probs(img, allfam[p.stem], model)
+            if a.second_pass and not a.oracle and P:
+                if "missing" not in allfam[p.stem]:
+                    try:
+                        allfam[p.stem]["missing"] = ask_missing(client, types, img, P, kinds).get("families", [])
+                    except Exception as e:                       # noqa: BLE001 - rerun to retry
+                        print(p.stem, "gemini error (second pass)", str(e)[:120], flush=True); continue
+                    json.dump(allfam, open(fpath, "w"), indent=1)
+                P2, kinds2, bxs2 = gemini_probs(img, {"families": allfam[p.stem]["missing"]}, model)
+                P, kinds, bxs = list(P) + list(P2), kinds + kinds2, bxs + bxs2
+            twin, anns, info = finish(img, P, kinds, bool(allfam[p.stem].get("shaded")), k, bxs)
         allfam[p.stem]["traced"] = info
         name = f"trace_{p.stem}.png"
         cv2.imwrite(f"{a.out}/images/{name}", twin)
