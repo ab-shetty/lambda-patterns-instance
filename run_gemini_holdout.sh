@@ -37,7 +37,7 @@ for proj, ver, name in [("floz-gen-gemini-r2", 1, "floz-gen-gemini-r2"), ("floz-
         ws.project(proj).version(ver).download("coco-segmentation", location=loc, overwrite=True)
 PY
 for p in floz-gen-gemini-r2 floz-gen-gemini-r3v3 floz-gen-gemini-r4v2; do
-  [ -d $RF/$p-clean ] && continue
+  { [ -d $RF/$p-clean ] || [ -d $RF/$p-clean-train ]; } && continue
   parts=""
   for sp in train valid test; do
     [ -f $RF/$p-raw/$sp/_annotations.coco.json ] || continue
@@ -45,8 +45,9 @@ for p in floz-gen-gemini-r2 floz-gen-gemini-r3v3 floz-gen-gemini-r4v2; do
       --img-dir $RF/$p-raw/$sp --out $RF/$p-clean-$sp | tail -1 | sed "s/^/$p $sp: /"
     parts="$parts $RF/$p-clean-$sp"
   done
-  if [ $(echo $parts | wc -w) = 1 ]; then mv $parts $RF/$p-clean
-  else python3 scripts/merge_local_datasets.py --out $RF/$p-clean --sources $parts > /dev/null && rm -rf $parts; fi
+  # a multi-split export stays in its parts: merging renames files to item_NNNNNN, and the holdout builder needs the
+  # floz_gen_NNN names to drop the Gemini30 sheets (it reads the parts directly)
+  if [ $(echo $parts | wc -w) = 1 ]; then mv $parts $RF/$p-clean; fi
 done
 [ -d $GEM-clean ] || python3 scripts/build_gemini_holdout_pool.py --out $GEM-clean
 
