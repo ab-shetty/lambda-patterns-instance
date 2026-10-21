@@ -676,5 +676,12 @@
    "pattern2": "asphalt"
   },
   "name": "floz_gen_099"
+ },
+ "20": {
+  "shaded": false,
+  "kinds": {
+   "pattern1": "plank"
+  },
+  "name": "floz_gen_022"
  }
 }
