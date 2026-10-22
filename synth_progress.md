@@ -2828,3 +2828,12 @@ Reproduction check: ctl_s7 vs single18kq-blend50 HF14 -0.005 (p 0.26), Gemini30 
   the better arm (`run_gem_seed8.sh`); neither result is pushed yet. Gemini30 +0.019 is about one seed-noise unit (~0.016) on the
   mean, but 99 / 28 questions and the gains on HF14 / fix v2 / val point the same way.
 - The 0.5 / 0.5 blend with xblend (Gemini30 0.8883, HF14 0.9206, fix v2 0.9307, val 0.8990) is the new best on every set.
+
+### 2026-10-22 (CPU) — close-out post-processing stack (`scripts/pp_probe/stack.py`), on xblend-kq30-kms30's maps
+| | evaluator mask | polygons (production) | + multi-scale (0.7 x 4096 + 0.3 x 2048) | + chromaticity cut (6) | **multi-scale + cut** | + same-paint fill |
+|---|---|---|---|---|---|---|
+| Gemini30 | 0.8740 | 0.8821 | 0.8892 | 0.8914 | **0.8977** | 0.8899 |
+| val | 0.8988 | 0.9049 | 0.9063 | 0.9047 | **0.9061** | 0.9059 |
+| HF14 | 0.9163 | 0.9183 | 0.9178 | 0.9182 | **0.9187** | 0.9201 |
+The same-paint fill (chromaticity < 2 inside a closing of the answer) loses on Gemini30 (-0.008 vs the stack): dropped. Final
+stack = multi-scale + chromaticity cut + polygons; run `python3 scripts/pp_probe/stack.py SPLIT MAPS_DIR` on the final maps.
