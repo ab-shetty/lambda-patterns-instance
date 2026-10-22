@@ -20,7 +20,7 @@ def iou(a, b):
     return float((a & b).sum() / max(1, (a | b).sum()))
 
 
-def colour_cut(img, m, box, t=6.0):
+def colour_cut(img, m, box, t=6.0, adapt=False):
     k = max(5, int(max(img.shape[:2]) / 160) | 1)
     blur = cv2.medianBlur(img, k)
     lab = cv2.cvtColor(blur, cv2.COLOR_BGR2LAB).astype(np.float32) * [100 / 255, 1, 1] - [0, 128, 128]
@@ -32,6 +32,10 @@ def colour_cut(img, m, box, t=6.0):
     f = blur.astype(np.float32) + 1
     ch = f / f.sum(-1, keepdims=True) * 100
     d = np.linalg.norm(ch - np.median(ch[y:y + bh, x:x + bw].reshape(-1, 3), 0), axis=-1)
+    # a flat, light reference colour earns a tighter cut (Gemini30 26: tan vs olive siding at 5.97); chromaticity is
+    # noisy on darker fills (HF14 3, val 19 at L 52-54 lose with it), so those keep t
+    if adapt and np.median(lab[y:y + bh, x:x + bw, 0]) >= 60:
+        t = float(np.clip(4 * np.percentile(d[y:y + bh, x:x + bw], 90), 3.5, t))
     far = (m & (d > t)).astype(np.uint8)
     n, cc, st, _ = cv2.connectedComponentsWithStats(far, connectivity=8)
     big = np.zeros(n, bool); big[1:] = st[1:, 4] > 0.0002 * m.size
@@ -85,10 +89,10 @@ def colour_add(img, m, box, t=2.0):
     return m | (closed & (d < t))
 
 
-def to_mask(P_native, s, img=None, box=None, add=False, paper=False):
+def to_mask(P_native, s, img=None, box=None, add=False, paper=False, adapt=False):
     m = _fill_holes(P_native > T, 4096 / s / s)
     if img is not None:
-        m = colour_cut(img, m, box)
+        m = colour_cut(img, m, box, adapt=adapt)
         if paper:
             m = paper_cut(img, m, box)
         if add:
@@ -116,6 +120,7 @@ def sheet(job, maps, split):
             r["ms"] = iou(to_mask(P, s), tgt)
             r["ms+cc"] = iou(to_mask(P, s, img, box), tgt)
             r["ms+cc+paper"] = iou(to_mask(P, s, img, box, paper=True), tgt)
+            r["ms+acc+paper"] = iou(to_mask(P, s, img, box, paper=True, adapt=True), tgt)
         rows.append(r)
     return rows
 
@@ -127,6 +132,6 @@ if __name__ == "__main__":
     R = [r for job in common.jobs(split) for r in sheet(job, maps, split)]
     tag = Path(maps).name
     json.dump(R, open(f"scripts/pp_probe/rows_stack_{tag}_{split}.json", "w"))
-    keys = [k for k in ("base", "poly", "ms", "cc", "ms+cc", "ms+cc+paper") if k in R[0]]
+    keys = [k for k in ("base", "poly", "ms", "cc", "ms+cc", "ms+cc+paper", "ms+acc+paper") if k in R[0]]
     print(split, tag, " ".join(f"{k} {np.mean([r[k] for r in R]):.4f}" for k in keys),
           "| vs poly:", " ".join(f"{k} {np.mean([r[k] - r['poly'] for r in R]):+.4f}" for k in keys if k not in ("base", "poly")))
