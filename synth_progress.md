@@ -2883,3 +2883,12 @@ Gemini r2-r4 sheets outside Gemini30 x18) unless said. Seed 8 of ctl was stopped
 `scripts/pp_probe/stack.py` row ms+acc+paper, maps from floz-diag `gem2s_x/`: Gemini30 0.9261 (ms+cc 0.9123), HF14 0.9269,
 val 0.9062. gke-x 0.9289 / 0.9255 / 0.9067, gk-x 0.9277. The two added cuts were designed on Gemini30 19 / 26: part of
 their +0.014 on Gemini30 may not carry to unseen sheets; they move val / HF14 / fix v2 by <= 0.0002.
+
+### 2026-10-22: the stack on 30 more Gemini sheets (Gemini30b, unseen by xblend)
+
+30 sheets drawn (seed 20261022) from the 139 hand-labelled Gemini sheets outside Gemini30 (`pool_manifests/gemini30b_s20261022.json`),
+xblend-kq30-kms30, automatic boxes (no hand boxes for these), 207 questions, CPU. Raw 0.7595 (a harder draw: xblend's automatic-box
+2048 mean over all 139 is 0.817, over these 30 0.776). Stack: poly 0.7643, ms 0.7742, ms+cc 0.7741, + paper cut 0.7744,
++ adaptive colour threshold 0.7748 (+0.015 over raw; Gemini30 got +0.038). Per rule: multi-scale carries it (+0.010); the colour cut
+is neutral here (+0.0001); the paper cut +0.0003 (5 questions better, 0 worse); the adaptive threshold +0.0004 on average but 8
+questions better, 18 worse (worst -0.063): it does not generalise -- the Gemini30 26 fix it was built for is a one-off.
