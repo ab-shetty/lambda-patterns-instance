@@ -2877,3 +2877,9 @@ Gemini r2-r4 sheets outside Gemini30 x18) unless said. Seed 8 of ctl was stopped
 - Gemini30 0.95 not reached: 0.915 with the fixed stack (0.928 with the Gemini30-designed rules). The remaining loss is spread over the
   0.80-0.93 middle band of sheets plus 26 / 19 (unchanged by the Gemini data). More labelled Gemini sheets (round 5: 200 generated,
   unlabelled) are the lever this session measured.
+
+### 2026-10-22: full stack (ms + adaptive colour cut + paper cut) on the default gem2s-x
+
+`scripts/pp_probe/stack.py` row ms+acc+paper, maps from floz-diag `gem2s_x/`: Gemini30 0.9261 (ms+cc 0.9123), HF14 0.9269,
+val 0.9062. gke-x 0.9289 / 0.9255 / 0.9067, gk-x 0.9277. The two added cuts were designed on Gemini30 19 / 26: part of
+their +0.014 on Gemini30 may not carry to unseen sheets; they move val / HF14 / fix v2 by <= 0.0002.
