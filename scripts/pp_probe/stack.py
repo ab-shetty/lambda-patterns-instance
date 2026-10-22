@@ -41,6 +41,29 @@ def colour_cut(img, m, box, t=6.0):
     return cv2.morphologyEx(out.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool) | keep
 
 
+def paper_cut(img, m, box, ref_min=10.0, paper_max=4.0):
+    """Filled vs bare paper (Gemini30 19: grey-filled joist areas labelled, the same lines on white paper not). When the
+    reference's fill differs from the paper by > ref_min (Lab, median-blurred so hatch lines wash out), selected pieces
+    whose fill is paper (within paper_max) are cut: a shadow never turns paint into paper-white. Neutral greys included --
+    the chromaticity cut cannot see grey vs white. Skipped when the reference box itself holds paper."""
+    k = max(5, int(max(img.shape[:2]) / 160) | 1)
+    lab = cv2.cvtColor(cv2.medianBlur(img, k), cv2.COLOR_BGR2LAB).astype(np.float32) * [100 / 255, 1, 1] - [0, 128, 128]
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    paper = np.median(lab[g >= np.percentile(g, 90)], 0)
+    x, y, bw, bh = box
+    d = np.linalg.norm(lab[y:y + bh, x:x + bw].reshape(-1, 3) - paper, axis=1)
+    # the reference must be filled throughout: one whose own box shows paper (val 9/10, a pale roof whose strips are
+    # bare between the stripes) may own paper elsewhere too
+    if np.median(d) <= ref_min or (d < paper_max).mean() > 0.02:
+        return m
+    bare = (m & (np.linalg.norm(lab - paper, axis=-1) < paper_max)).astype(np.uint8)
+    n, cc, st, _ = cv2.connectedComponentsWithStats(bare, connectivity=8)
+    big = np.zeros(n, bool); big[1:] = st[1:, 4] > 0.0005 * m.size
+    cut = big[cc]
+    return cv2.morphologyEx((m & ~cut).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool) | \
+        (m & ~cv2.dilate(cut.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool))
+
+
 def colour_add(img, m, box, t=2.0):
     """Same paint inside the answer's outline: on colour sheets, pixels whose chromaticity is within t of the reference's
     (same paint, shadow included: same-family p50 ~0.3, p90 <= 2.4) and that lie inside a closing of the mask (radius ~1% of
@@ -62,10 +85,12 @@ def colour_add(img, m, box, t=2.0):
     return m | (closed & (d < t))
 
 
-def to_mask(P_native, s, img=None, box=None, add=False):
+def to_mask(P_native, s, img=None, box=None, add=False, paper=False):
     m = _fill_holes(P_native > T, 4096 / s / s)
     if img is not None:
         m = colour_cut(img, m, box)
+        if paper:
+            m = paper_cut(img, m, box)
         if add:
             m = colour_add(img, m, box)
     u8 = (np.clip(P_native, 0, 1) * 255).astype(np.uint8)
@@ -90,7 +115,7 @@ def sheet(job, maps, split):
             P = 0.7 * P4 + 0.3 * cv2.resize(p2, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
             r["ms"] = iou(to_mask(P, s), tgt)
             r["ms+cc"] = iou(to_mask(P, s, img, box), tgt)
-            r["ms+cc+add"] = iou(to_mask(P, s, img, box, add=True), tgt)
+            r["ms+cc+paper"] = iou(to_mask(P, s, img, box, paper=True), tgt)
         rows.append(r)
     return rows
 
@@ -102,6 +127,6 @@ if __name__ == "__main__":
     R = [r for job in common.jobs(split) for r in sheet(job, maps, split)]
     tag = Path(maps).name
     json.dump(R, open(f"scripts/pp_probe/rows_stack_{tag}_{split}.json", "w"))
-    keys = [k for k in ("base", "poly", "ms", "cc", "ms+cc", "ms+cc+add") if k in R[0]]
+    keys = [k for k in ("base", "poly", "ms", "cc", "ms+cc", "ms+cc+paper") if k in R[0]]
     print(split, tag, " ".join(f"{k} {np.mean([r[k] for r in R]):.4f}" for k in keys),
           "| vs poly:", " ".join(f"{k} {np.mean([r[k] - r['poly'] for r in R]):+.4f}" for k in keys if k not in ("base", "poly")))
