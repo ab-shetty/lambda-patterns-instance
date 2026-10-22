@@ -2811,3 +2811,20 @@ masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 el
   engineered hatch matcher reached oracle-threshold IoU 0.505 on HF14, failing on the same inputs as the model; 74% of its FPs
   are real linework labelled as another material). The spill is the same drawn pattern assigned to another material: only
   colour (the chromaticity cut) or meaning separates it.
+
+### 2026-10-22 (GH200) — Gemini holdout, seed 7: real labelled Gemini sheets help everywhere (`run_gemini_holdout.sh`)
+ctl = the kq recipe on the kq pool (GEN 2026-10-15b, rebuilt from 6b25130^); gem = same + the 139 hand-labelled r2-r4 Gemini
+sheets outside Gemini30 x18 (2,502 records). Seed 7, standard one-epoch DR / no-DR restart, 50/50 blend, @4096, hand boxes.
+Reproduction check: ctl_s7 vs single18kq-blend50 HF14 -0.005 (p 0.26), Gemini30 +0.001 (p 0.39) -- the run is sound.
+| | ctl_s7 | gem_s7 | gem - ctl | 0.5 gem_s7 + 0.5 xblend | vs xblend |
+|---|---|---|---|---|---|
+| HF14 | 0.9034 | 0.9183 | +0.0150 (p 0.019; 13 / 5) | 0.9206 | +0.0043 (p 0.10) |
+| HF14 fix v2 | 0.9044 | 0.9265 | +0.0221 (p 0.021) | 0.9307 | +0.0017 |
+| val | 0.8942 | 0.8974 | +0.0033 (p 0.025; 5 / 2) | 0.8990 | +0.0002 |
+| Gemini30 | 0.8629 | 0.8818 | **+0.0190** (p 0.0014; 99 / 28, sign p 2e-10) | **0.8883** | **+0.0143** (p 0.0004; 73 / 19) |
+- Gemini30 sheets > 0.05 (gem - ctl): **1 0.640 -> 0.875**, 10 +0.09, 22 +0.07, 28 +0.06, 8 +0.06, 7 +0.06, 24 +0.05;
+  down: 0 -0.05 (tile plan, sofas), 18 -0.06. Sheet 1 -- the "Gemini draws it differently" case -- recovers with real Gemini data.
+- One seed only: the GPU session stopped ctl / gem seed 8 for a hard-mined variant (`run_gemini_hard.sh`) and a seed-8 run of
+  the better arm (`run_gem_seed8.sh`); neither result is pushed yet. Gemini30 +0.019 is about one seed-noise unit (~0.016) on the
+  mean, but 99 / 28 questions and the gains on HF14 / fix v2 / val point the same way.
+- The 0.5 / 0.5 blend with xblend (Gemini30 0.8883, HF14 0.9206, fix v2 0.9307, val 0.8990) is the new best on every set.
