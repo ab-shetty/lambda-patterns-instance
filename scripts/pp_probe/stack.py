@@ -107,7 +107,8 @@ def sheet(job, maps, split):
     h, w = img.shape[:2]
     rows = []
     for ref, cat, tgt, p4, box in qs:
-        f2 = Path(maps) / f"{split}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz"
+        # fix v2 uses the HF14 maps (common.jobs does the same for the 4096 ones)
+        f2 = Path(maps) / f"{'hf14' if split.startswith('hf14') else split}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz"
         P4 = cv2.resize(p4, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
         s = p4.shape[1] / w
         r = {"sheet": idx, "q": ref,

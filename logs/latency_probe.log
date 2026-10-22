@@ -1,0 +1,7 @@
+sheet 1 3168x1313: backbone4096 0.04s question4096 0.06s pass2048 0.06s postproc 0.53s total_single 0.64s total_ms 0.69s
+sheet 2 3168x1344: backbone4096 0.03s question4096 0.06s pass2048 0.05s postproc 0.49s total_single 0.58s total_ms 0.63s
+sheet 3 3168x1211: backbone4096 0.03s question4096 0.06s pass2048 0.06s postproc 0.39s total_single 0.48s total_ms 0.55s
+sheet 4 3168x1240: backbone4096 0.03s question4096 0.06s pass2048 0.05s postproc 0.39s total_single 0.48s total_ms 0.53s
+sheet 5 2752x1523: backbone4096 0.04s question4096 0.12s pass2048 0.06s postproc 0.47s total_single 0.63s total_ms 0.69s
+sheet 6 2528x1653: backbone4096 0.05s question4096 0.14s pass2048 0.06s postproc 0.49s total_single 0.68s total_ms 0.73s
+median over 6 sheets: backbone4096 0.04s question4096 0.06s pass2048 0.06s postproc 0.48s total_single 0.61s total_ms 0.66s
