@@ -1,7 +1,7 @@
 # Synthetic Dataset Progress
 
 Working summary. Every dated entry (2026-08-06 to 2026-09-26) is kept verbatim
-in `synth_progress_archive.md`, Part 1, under its original heading; other docs'
+in `archive/synth_progress_archive.md`, Part 1, under its original heading; other docs'
 references to "`synth_progress.md` (DATE)" resolve there. Append new results
 below "Log".
 
@@ -2807,7 +2807,7 @@ masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 el
   magnitude in 8 directions x 6 spacing bands of 32 px stroke windows + density; `linesig.py`): on Gemini30 the model's wrong
   pixels inside the answer have the reference's signature as often as the right ones (< 0.3 of the reference's similarity:
   correct 0.139 / wrong 0.012 of label area; 0.3-0.6: 0.105 / 0.038; > 0.9: 0.443 / 0.028) -- no cut where wrong exceeds right.
-  Same conclusion as 2026-08-07 (synth_progress_archive.md, "Classical template matching is strong but redundant": an
+  Same conclusion as 2026-08-07 (archive/synth_progress_archive.md, "Classical template matching is strong but redundant": an
   engineered hatch matcher reached oracle-threshold IoU 0.505 on HF14, failing on the same inputs as the model; 74% of its FPs
   are real linework labelled as another material). The spill is the same drawn pattern assigned to another material: only
   colour (the chromaticity cut) or meaning separates it.

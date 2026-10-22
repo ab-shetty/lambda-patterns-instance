@@ -533,7 +533,7 @@ resolution column says otherwise. The sampler column is load-bearing.
 Older rows, still valid at 1280 with the fixed sampler: `mix3652` 0.6860 ±
 0.0175 and its 2026-08-12 rebuild 0.6954 ± 0.0023; locally generated synth
 without confusable pairs 0.6823 ± 0.0190. Pre-2026-08-06 (broken sampler) and
-retired query-model numbers: `synth_progress_archive.md`, not comparable here.
+retired query-model numbers: `archive/synth_progress_archive.md`, not comparable here.
 
 ### Frozen-backbone probe rows (2026-09-20, NOT product numbers)
 

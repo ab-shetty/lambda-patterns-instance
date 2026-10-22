@@ -1203,7 +1203,7 @@ components merge), `select_disconnected_local.py`, `select_by_connectivity.py`,
 
 ## Archived material (pre-2026-08-06 sampler / query-model lineage)
 
-Moved to `synth_progress_archive.md` on 2026-09-17 — not relabeled in place
+Moved to `archive/synth_progress_archive.md` on 2026-09-17 — not relabeled in place
 this time, actually moved out, because last time's "condensation" was just this
 same marker with the material left sitting below it, and it grew another 280
 lines past that point anyway. That file covers the broken-sampler numbers, the
@@ -1288,7 +1288,7 @@ Two mechanisms worth remembering:
   phase-invariant Gabor energy only reaches 0.674.
 
 (Older negative-evidence list and the retired-architecture operational rules:
-`synth_progress_archive.md`.)
+`archive/synth_progress_archive.md`.)
 
 **Split screen (auto-recorded, `run_split_screen.sh`, seed 7):**
 ```

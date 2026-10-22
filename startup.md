@@ -3,7 +3,7 @@
 The reference manual: what the current best is, how to rebuild and score it on a fresh VM, and the rules every number follows.
 Read `PROJECT_UNDERSTANDING.md` first (the task, the metric, what does not count as evidence). `codex_doc.md` is the handoff
 (where we left off, what is next); `synth_progress.md` logs every experiment. Past bests, superseded recipes and old comparison
-tables are in `startup_archive.md`. This file holds the single copy of current numbers and commands: overwrite them when a new
+tables are in `archive/startup_archive.md`. This file holds the single copy of current numbers and commands: overwrite them when a new
 best lands, and move the old text to the archive.
 
 Other tracks: the labelling-assist model is in `labeling_assist.md`; image generation in `image_generation/README.md`.
@@ -98,7 +98,7 @@ read the sheet rule as "beyond seed noise".
 `select_epoch_on_val.py`, `average_checkpoints.py`) now uses `eval_boxes/hand_v1.json` by default:
 the 88 moved boxes and 6 dropped questions from the Reference Box Editor; every box not moved or
 dropped is the automatic box, unchanged. HF14 = 51 questions, val = 72. `--boxes auto` gives the
-older automatic-only protocol (most numbers in `startup_archive.md` used it); `--local-pool` uses
+older automatic-only protocol (most numbers in `archive/startup_archive.md` used it); `--local-pool` uses
 automatic boxes unless `--boxes` names a file made for that pool (Gemini30: `eval_boxes/gemini30_v1.json`).
 
 ### Validation split — tune here, never on HF14

@@ -4,7 +4,7 @@ Last updated: 2026-10-22 (close-out, GH200)
 
 Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDING.md` defines the task and the metric;
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
-Finished handoffs are in `startup_archive.md` and git history. Rewrite this file at the end of each session.
+Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
 
 ## Where we are (2026-10-22): closed out
 
