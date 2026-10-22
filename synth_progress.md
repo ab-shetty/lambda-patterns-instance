@@ -2837,3 +2837,43 @@ Reproduction check: ctl_s7 vs single18kq-blend50 HF14 -0.005 (p 0.26), Gemini30 
 | HF14 | 0.9163 | 0.9183 | 0.9178 | 0.9182 | **0.9187** | 0.9201 |
 The same-paint fill (chromaticity < 2 inside a closing of the answer) loses on Gemini30 (-0.008 vs the stack): dropped. Final
 stack = multi-scale + chromaticity cut + polygons; run `python3 scripts/pp_probe/stack.py SPLIT MAPS_DIR` on the final maps.
+
+### 2026-10-22 (GH200) — close-out: seed 8, three Gemini arms, blends, stack, latency; three models published
+All @4096, hand boxes, one-epoch restarts of longswiss-swa37-41 (DR + no-DR arms, 50/50 blend) on the gem mix (kq pool + 139
+Gemini r2-r4 sheets outside Gemini30 x18) unless said. Seed 8 of ctl was stopped for the arms below (seed noise was settled by gem s8).
+| model | HF14 fix v2 | Gemini30 | val | HF14 |
+|---|---:|---:|---:|---:|
+| gem_s7 | 0.9265 | 0.8818 | 0.8974 | 0.9183 |
+| gem_s8 | 0.9232 | 0.8841 | 0.8962 | 0.9240 |
+| gemhard_s7 (56 hardest holdout sheets, by the best's own errors, +32 copies each) | 0.9147 | 0.8830 | 0.8974 | 0.9117 |
+| gemkms_s7 (multi-resolution, `--image-max-size-max 3072`, batch 4) | 0.9196 | 0.8851 | 0.9005 | 0.9055 |
+| geme2_s7 (second epoch, from gem_s7 blend50) | 0.9261 | 0.8833 | 0.8998 | 0.9202 |
+| gem2s (0.5 s7 + 0.5 s8) | 0.9291 | 0.8854 | 0.8974 | 0.9249 |
+| 0.5 gem_s7 + 0.5 xblend | 0.9307 | 0.8883 | 0.8990 | 0.9206 |
+| 3-way: 0.25 gem_s7 + 0.25 gemhard_s7 + 0.5 xblend | 0.9291 | 0.8901 | 0.8993 | 0.9218 |
+| **gem2s-x**: 0.25 s7 + 0.25 s8 + 0.5 xblend | **0.9320** | 0.8891 | 0.8990 | **0.9235** |
+| gk: 0.5 gem2s + 0.5 gemkms | 0.9251 | 0.8904 | 0.8993 | 0.9175 |
+| **gk-x**: 1/6 s7 + 1/6 s8 + 1/6 gemkms + 1/2 xblend | 0.9301 | 0.8913 | 0.8995 | 0.9212 |
+| **gke-x**: 1/6 geme2 + 1/6 s8 + 1/6 gemkms + 1/2 xblend | 0.9293 | **0.8931** | **0.8999** | 0.9219 |
+| xblend-kq30-kms30 (previous best) | 0.9290 | 0.8740 | 0.8988 | 0.9163 |
+- **Hard mining does not help**: gemhard_s7 vs gem_s7 Gemini30 +0.0012 (p 0.71), fix v2 -0.0118 (p 0.03). The gain is having Gemini
+  labels at all, not their dose.
+- **Seeds agree**: gem_s8 lands within noise of gem_s7 on every split; the gain is not one seed's luck.
+- Against xblend, paired: gke-x Gemini30 +0.0192 (p 7e-7), fix v2 +0.0003 (p 0.94), val +0.0011; gem2s-x Gemini30 +0.0152 (p 1e-4),
+  fix v2 +0.0030 (p 0.38), val +0.0002; worst sheet -0.021 for both (Gemini30 18 / 6). Both pass the gate. gke-x vs gem2s-x: Gemini30
+  +0.0040 (p 2e-6), fix v2 -0.0027 (p 0.095, 2 / 5 questions). The user published all three; gem2s-x is the default (fix v2 first).
+- **Stack** (`scripts/pp_probe/stack.py` ms+cc, fixed in advance; it skipped multi-scale on fix v2 until 2026-10-22 -- it looked for
+  `hf14fix2_2048`; fixed): gem2s-x fix v2 0.9365 / Gemini30 0.9122 / val 0.9064 / HF14 0.9268; gk-x 0.9349 / 0.9136 / 0.9067 / 0.9248;
+  gke-x 0.9340 / 0.9150 / 0.9068 / 0.9254. + paper cut + adaptive colour threshold (designed on Gemini30 19 / 26): Gemini30 0.920 / 0.928
+  for gk-x, nothing elsewhere.
+- **Latency** (`scripts/latency_probe.py`, GH200, warm, 6 Gemini30 sheets, median): backbone @4096 0.04 s, one question 0.06 s, the
+  2048 pass 0.06 s, CPU post-processing 0.48 s; 0.61 s single-scale, 0.66 s with multi-scale. TTA dropped (the user: ~2 s budget).
+- **Model-in-the-loop post-processing fails** (`scripts/reciprocity_probe.py`, 3-way model, Gemini30, K=6 back-queries per question,
+  settings fixed before scoring): reciprocity cut 0.8901 -> 0.7439 (10 up / 98 down), reference ensembling 0.8814, both 0.7397. The model
+  is not symmetric: of back-queries whose answer covers < 5% of the user's box, 67% sit on the right material, so "does not answer back"
+  does not mean "another material".
+- Infrastructure: 6 CPU evals at 4096 with `--tta 8` beside training OOM-killed the VM's whole job unit (tmux, training, the session) at
+  01:10; `scripts/memguard.sh` now kills CPU evals under 50 GB free, and CPU scoring runs 2 at a time (`scripts/cpu_score_queue.sh`).
+- Gemini30 0.95 not reached: 0.915 with the fixed stack (0.928 with the Gemini30-designed rules). The remaining loss is spread over the
+  0.80-0.93 middle band of sheets plus 26 / 19 (unchanged by the Gemini data). More labelled Gemini sheets (round 5: 200 generated,
+  unlabelled) are the lever this session measured.

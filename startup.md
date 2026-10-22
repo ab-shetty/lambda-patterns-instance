@@ -35,7 +35,10 @@ older automatic-only protocol (every number below this section that does not say
 
 | model | HF14 hand | val hand | HF14 auto |
 |---|---:|---:|---:|
-| **`xblend-kq30-kms30` (best, synthetic only, no training: 0.5 kq30 + 0.5 kms30, 2026-10-17; fix v2 0.9290, Gemini30 0.8740)** | **0.9163** | 0.8988 | -- |
+| **`gem2s-x` (best, 2026-10-22: 0.25 gem_s7 + 0.25 gem_s8 + 0.5 xblend; first model with real Gemini labels outside Gemini30; fix v2 0.9320, Gemini30 0.8891)** | **0.9235** | 0.8990 | -- |
+| `gke-x` (2026-10-22: 1/6 geme2_s7 + 1/6 gem_s8 + 1/6 gemkms_s7 + 1/2 xblend; fix v2 0.9293, Gemini30 **0.8931**) | 0.9219 | 0.8999 | -- |
+| `gk-x` (2026-10-22: 1/6 gem_s7 + 1/6 gem_s8 + 1/6 gemkms_s7 + 1/2 xblend; fix v2 0.9301, Gemini30 0.8913) | 0.9212 | 0.8995 | -- |
+| `xblend-kq30-kms30` (previous best, synthetic only, 2026-10-17; fix v2 0.9290, Gemini30 0.8740) | 0.9163 | 0.8988 | -- |
 | `single18kq-blend30` (previous best, 2026-10-15; fix v2 0.9221, Gemini30 0.8680) | 0.9156 | 0.8976 | -- |
 | `single18kq-blend50` (2026-10-15) | 0.9088 | 0.8973 | -- |
 | `single18kf-blend50` (HF14-best reference, 2026-10-15) | **0.9157** | 0.8971 | -- |
@@ -45,6 +48,24 @@ older automatic-only protocol (every number below this section that does not say
 | `longswiss-swa37-41` (synthetic only, 2026-10-06) | 0.8779 | 0.8766 | -- |
 | `mixr4-roiadd-swa15` (shipped) | 0.8466 | 0.8193 | 0.8440 |
 | `revit10k-roi-e5` (synthetic only) | 0.8118 | 0.8981 | 0.8126 |
+
+**Best since 2026-10-22: three published Gemini-data blends, `gem2s-x` the default** (`abshetty/floz-refunet-swint-{gem2s-x,gk-x,gke-x}`,
+private, round-trip identical 243 / 243). All pass the gate against xblend-kq30-kms30 and sit within noise of each other; the user
+chose to publish all three. `gem2s-x` is the default because HF14 fix v2 is the priority split (the user, 2026-10-22). Components on the
+Hub: `-gemho-gem-s7`, `-gemho-gem-s8`, `-gemkms-s7`, `-geme2-s7` (each a one-epoch restart of longswiss-swa37-41 on the kq pool + the 139
+hand-labelled Gemini r2-r4 sheets outside Gemini30 x18, 50/50 DR / no-DR blend). Rebuild a blend with `scripts/blend_ckpts.py`.
+
+**Product output = polygons + multi-scale (0.7 x 4096 + 0.3 x 2048) + chromaticity colour cut** (`scripts/pp_probe/stack.py`, ms+cc;
+fixed before scoring). 0.66 s per query on a GH200 (median, warm; `scripts/latency_probe.py`; post-processing 0.48 s of it, CPU):
+| model + stack (ms+cc) | HF14 fix v2 | Gemini30 | val | HF14 |
+|---|---:|---:|---:|---:|
+| `gem2s-x` | **0.9365** | 0.9122 | 0.9064 | **0.9268** |
+| `gk-x` | 0.9349 | 0.9136 | 0.9067 | 0.9248 |
+| `gke-x` | 0.9340 | **0.9150** | **0.9068** | 0.9254 |
+| xblend-kq30-kms30 (previous best) | -- | 0.8977 | 0.9061 | 0.9187 |
+Adding the paper cut and the adaptive colour threshold (both designed on Gemini30 sheets 19 / 26) gives Gemini30 ~0.928 and no change
+elsewhere -- optimistic, report separately. No TTA: it breaks the ~2 s latency budget. Maps (4096 + 2048, HF14 / val / Gemini30) on
+`abshetty/floz-diag` `{gem2s_x,gk_x,gke_x}/`. Details: `synth_progress.md` 2026-10-22.
 
 **Publish gate (the user's rule, revised 2026-10-15):** publish a new candidate (Hub + HF14 / val / Gemini30 `--save-probs`
 maps on `abshetty/floz-diag`) and make it the best only if, against the current best at @4096 with hand boxes,

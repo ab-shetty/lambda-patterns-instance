@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-10-20 (end of GH200 session)
+Last updated: 2026-10-22 (close-out, GH200)
 
 `PROJECT_UNDERSTANDING.md` defines the task and the metric. `startup.md` holds every number, command and the publish gate;
 `synth_progress.md` holds every experiment. This file says only where to pick up and how to set a machine up. Older
@@ -80,6 +80,15 @@ Copies content, not appearance. Pilot: 10 user Gemini images + 10 Gemini30 twins
   with the range; no grad accumulation / checkpointing in `train_refunet.py`).
 - HF14 12 q1 / q3 (turned deck boards) and HF14 2 / Gemini30 8 (elevations) move with the plan pairs; Gemini30 1 swings 0.30-0.69.
 - Gemini30 0: tile reference takes the sofas / chairs. HF14 18: the two roofs merge under label fix v2.
+
+## Pick up here (2026-10-22): closed out -- three Gemini-data blends published, `gem2s-x` the default
+
+Best: `abshetty/floz-refunet-swint-gem2s-x` (0.25 gem_s7 + 0.25 gem_s8 + 0.5 xblend-kq30-kms30), with `-gk-x` and `-gke-x` published
+beside it (all pass the gate; within noise of each other). Raw @4096: fix v2 0.9320, Gemini30 0.8891, val 0.8990, HF14 0.9235; with the
+product stack (polygons + multi-scale + colour cut, 0.66 s / query) fix v2 0.9365, Gemini30 0.9122. Numbers and rebuild: `startup.md`;
+every run: `synth_progress.md` 2026-10-22. The lever that worked: hand-labelled Gemini sheets outside Gemini30 (+0.019 Gemini30 at one
+seed). Next if the project resumes: label round 5 (200 Gemini sheets, `image_generation/prompts_r5.jsonl`) and retrain the gem recipe.
+Do not use TTA (latency budget ~2 s).
 
 ## Pick up here (2026-10-21): `./run_gemini_holdout.sh` -- does real Gemini appearance move Gemini30?
 

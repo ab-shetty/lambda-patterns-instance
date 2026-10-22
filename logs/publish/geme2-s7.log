@@ -1,0 +1,15 @@
+staged in /tmp/refunet_publish_9ylm4e89:
+  README.md  0.00 MB
+  config.json  0.00 MB
+  model.safetensors  129.11 MB
+{
+  "epoch": null,
+  "actual_epoch": null,
+  "real_mean_iou": 0.8492399478375964,
+  "model_class": "RefSwinUNet",
+  "source_checkpoint": "data/runs/ck_geme2_s7_blend50.pth",
+  "git_commit": "345bdebfc212e826d2533113e8b0bd4000c601cb",
+  "n_params": 32243239
+}
+
+published -> https://huggingface.co/abshetty/floz-refunet-swint-geme2-s7 (private)
