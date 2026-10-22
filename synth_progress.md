@@ -2800,3 +2800,14 @@ masks. Production run: all 106 round-5 elevations (unlabelled) and 44 round-4 el
     Gemini30 +0.001 .. -0.010, val -0.04 .. -0.06, HF14 ~-0.001. Spill does not hang off necks.
   - So the prediction's shape carries ~+0.001-0.003 of fixable error; the rest needs image evidence (the colour cut: Gemini30
     +0.008) or a better model. Missed area is mostly whole regions OUTSIDE the answer (val 0.037, HF14 0.035 of label).
+- **Classical pattern checks on the doubtful parts** (2026-10-22, the user: shape + a classical "is the pattern there" check):
+  blank-strip cut (thin parts with < 0.4 x the reference's stroke density): +0.0003 / -0.0002 / -0.0006 (neutral). Template
+  matching (NCC, 32 px central template, 9 px max-pool) on thin parts + non-largest pieces: -0.025 / -0.043 / -0.060 -- NCC is
+  phase- and feature-bound (HF14 14: the template caught a window; the true wall scored 0.28 vs 0.89). Line signature (FFT
+  magnitude in 8 directions x 6 spacing bands of 32 px stroke windows + density; `linesig.py`): on Gemini30 the model's wrong
+  pixels inside the answer have the reference's signature as often as the right ones (< 0.3 of the reference's similarity:
+  correct 0.139 / wrong 0.012 of label area; 0.3-0.6: 0.105 / 0.038; > 0.9: 0.443 / 0.028) -- no cut where wrong exceeds right.
+  Same conclusion as 2026-08-07 (synth_progress_archive.md, "Classical template matching is strong but redundant": an
+  engineered hatch matcher reached oracle-threshold IoU 0.505 on HF14, failing on the same inputs as the model; 74% of its FPs
+  are real linework labelled as another material). The spill is the same drawn pattern assigned to another material: only
+  colour (the chromaticity cut) or meaning separates it.
