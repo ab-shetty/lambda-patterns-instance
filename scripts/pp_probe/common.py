@@ -14,13 +14,14 @@ MAPS = Path("data/floz-diag/xblend-kq30-kms30")
 def jobs(split):
     fix = split == "hf14fix2"
     fixes = json.load(open("eval_labels/hf14_fixes_v2.json")) if fix else {}
-    if split == "gemini30":
-        pool_dir = Path("data/eval_pools/gemini30_s20261006"); recs = {}
+    if split.startswith("gemini30"):   # gemini30b: 30 more Gemini sheets, automatic boxes (no hand boxes)
+        pool_dir = Path({"gemini30": "data/eval_pools/gemini30_s20261006",
+                         "gemini30b": "data/eval_pools/gemini30b_s20261022"}[split]); recs = {}
         for i, f in enumerate(sorted((pool_dir / "annotations").glob("*.json"))):
             ann = json.loads(f.read_text())
             recs[i] = {"image_path": str(pool_dir / "images" / ann["image"]["file_name"]), "annotations": ann["annotations"],
                        "ref_exclude": ann.get("ref_exclude")}
-        hb = json.load(open("eval_boxes/gemini30_v1.json")); idxs = sorted(recs)
+        hb = json.load(open("eval_boxes/gemini30_v1.json")) if split == "gemini30" else {}; idxs = sorted(recs)
     else:
         recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
         hb = hand_boxes(); idxs = HF14 if split.startswith("hf14") else VAL

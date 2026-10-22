@@ -35,7 +35,8 @@ def main():
     for rnd, src0 in SRC.items():
         # a merged export, or its train / valid / test parts (r3 v3 is split)
         srcs = [src0] if os.path.isdir(f"{src0}/annotations") else \
-            [f"{src0}-{sp}" for sp in ("train", "valid", "test") if os.path.isdir(f"{src0}-{sp}/annotations")]
+            [d for sp in ("train", "valid", "test") for d in (f"{src0}-{sp}", src0.replace("-clean", f"-{sp}-clean"))
+             if os.path.isdir(f"{d}/annotations")]
         for src, x in [(d, x) for d in srcs for x in sorted(os.listdir(f"{d}/annotations"))]:
             sheet = re.match(r"(floz_gen_\d+)", x).group(1)
             if (rnd, sheet) in held:
