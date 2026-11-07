@@ -2923,3 +2923,8 @@ edges within 6 deg of horizontal / vertical snapped exact (right-angle corners),
 eps 3 goes to 2-3x for another -0.001; snap at 10 deg costs more (Gemini30 -0.002). Dropping small pieces does not help:
 predicted pieces already match the labels' (Gemini30 5.9 vs 6.0, val 6.8 vs 5.7) and min_frac 0.03 costs val -0.025
 (`scripts/pp_probe/pieces.py`). The vertices left are along real edges that follow the pattern's own stepping.
+
+Against the vertices the labeller actually placed (`scripts/pp_probe/vertcount.py`, eps 2 + snap): ours / label median 4.2x on
+Gemini30 (p75 10x), 2.7x val, 2.9x HF14; 4-17% of ours on spill pieces. Worst cases (Gemini30 6, 989 vs 59): notches cut
+around slope text / vent symbols / skylight edges inside a correct region, and jitter along diagonal hip / ridge lines (the snap
+only straightens horizontal / vertical edges). Next: fill notches on text / symbols, fit straight lines at any angle.
