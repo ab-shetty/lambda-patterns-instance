@@ -104,6 +104,11 @@ def parse_args():
     p.add_argument("--bce-other-weight", type=float, default=1.0,
                    help="BCE weight on pixels of the plan's OTHER labelled families (look-alike negatives); "
                         "1 = plain BCE (default, unchanged)")
+    p.add_argument("--edge-weight", type=float, default=1.0,
+                   help="BCE weight on pixels within --edge-px of the target's boundary (2026-11-07, the vertex test: the "
+                        "polygons the user edits come from that boundary). 1 = off")
+    p.add_argument("--edge-px", type=int, default=3,
+                   help="half-width of the --edge-weight band, in training-resolution pixels")
     p.add_argument("--bce-per-question", action="store_true",
                    help="average BCE over each question's valid pixels, then over the batch (as Dice and the "
                         "metric weight questions), instead of over all pixels of the batch")
@@ -259,10 +264,20 @@ class _RecordingSampler(Sampler):
         return len(self.inner)
 
 
+def edge_band(targets, px):
+    """1 within `px` pixels of a target boundary (targets [B, 1, H, W] in {0, 1}), else 0."""
+    k = 2 * px + 1
+    grown = F.max_pool2d(targets, k, stride=1, padding=px)
+    shrunk = -F.max_pool2d(-targets, k, stride=1, padding=px)
+    return (grown - shrunk).clamp(0, 1)
+
+
 def mask_loss(logits, targets, valid, bce_weight, dice_weight, other=None, other_weight=1.0,
-              per_question=False):
+              per_question=False, edge_weight=1.0, edge_px=3):
     bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     weight = valid if other is None else valid * (1 + (other_weight - 1) * other)
+    if edge_weight != 1.0:
+        weight = weight * (1 + (edge_weight - 1) * edge_band(targets.float(), edge_px))
     if per_question:
         bce = ((bce * weight).flatten(1).sum(1) / weight.flatten(1).sum(1).clamp(min=1)).mean()
     else:
@@ -432,7 +447,8 @@ def main():
                     loss, bce, dice = mask_loss(logits[keep], targets[keep],
                                                 valid.repeat_interleave(k, 0)[keep],
                                                 args.bce_weight, args.dice_weight,
-                                                per_question=args.bce_per_question)
+                                                per_question=args.bce_per_question,
+                                                edge_weight=args.edge_weight, edge_px=args.edge_px)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(base_model.parameters(), 1.0)
                 optimizer.step(); scheduler.step(); step += 1; save_step()
@@ -459,7 +475,8 @@ def main():
                          if "other" in batch else None)
                 loss, bce, dice = mask_loss(logits, targets, valid,
                                             args.bce_weight, args.dice_weight, other,
-                                            args.bce_other_weight, args.bce_per_question)
+                                            args.bce_other_weight, args.bce_per_question,
+                                            args.edge_weight, args.edge_px)
                 if auxiliary is not None:
                     aux_loss, _, _ = mask_loss(auxiliary, targets, valid,
                                                args.bce_weight, args.dice_weight, other,
