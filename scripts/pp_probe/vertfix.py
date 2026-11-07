@@ -12,7 +12,7 @@ from pathlib import Path
 import common
 from polygonize import probs_to_polygons, rasterize, T, _fill_holes
 from vertcount import label_vertices
-from text_mask import text_mask
+import textcache   # text_mask.py masks, cached by textcache.py
 common.WITH_BOX[0] = True
 
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         idx, img, _, qs = common.load(job)
         h, w = img.shape[:2]
         ink = common.ink_map(img)
-        text = text_mask(img) & ink if any(c.get("src") == "text" for n, c in CFG.items() if ONLY is None or n in ONLY) else None
+        text = textcache.load(split, idx, (h, w)) & ink if any(c.get("src") == "text" for n, c in CFG.items() if ONLY is None or n in ONLY) else None
         for ref, cat, tgt, p4, box in qs:
             P = cv2.resize(p4.astype(np.float32) / 255, (w, h), interpolation=cv2.INTER_LINEAR)
             m0 = _fill_holes(P > T, 4096 / (p4.shape[1] / w) ** 2)

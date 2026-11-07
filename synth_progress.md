@@ -2928,3 +2928,18 @@ Against the vertices the labeller actually placed (`scripts/pp_probe/vertcount.p
 Gemini30 (p75 10x), 2.7x val, 2.9x HF14; 4-17% of ours on spill pieces. Worst cases (Gemini30 6, 989 vs 59): notches cut
 around slope text / vent symbols / skylight edges inside a correct region, and jitter along diagonal hip / ridge lines (the snap
 only straightens horizontal / vertical edges). Next: fill notches on text / symbols, fit straight lines at any angle.
+
+**Vertex fixes beyond eps 2 + snap** (`scripts/pp_probe/vertfix.py`, gem2s-x, vs the labeller's vertices; median ratio / IoU):
+
+| | Gemini30 | val | HF14 |
+|---|---|---|---|
+| default (eps 2 + snap) | 4.18x / 0.8971 | 2.65x / 0.9056 | 2.92x / 0.9250 |
+| merge near-collinear vertices, any angle (1% of length, <= 4 px) | 3.59x / 0.8957 | 2.23x / 0.9037 | 2.30x / 0.9223 |
+| close notches holding drawing ink (r 10 px, < 0.2% of the sheet) | 4.18x / 0.8858 | 2.20x / 0.9070 | 3.00x / 0.9267 |
+| same, text ink only (Tesseract words, `textcache.py`) | 4.18x / 0.8966 | 2.65x / 0.9056 | 2.92x / 0.9247 |
+
+None kept. The merge buys 15-20% fewer vertices for 0.0015-0.003 IoU. The ink notch fill helps real sheets both ways but costs
+Gemini30 0.011 (its pattern lines are ink too, so it bridges into neighbours). Text-only does nothing: the notches are on slope
+labels ("4:12", under the 3-character word rule) and vent / skylight symbols, not on words Tesseract reads.
+Tesseract note: one thread per process (OMP_THREAD_LIMIT=1) -- unset, 3 processes x all cores ran a single sheet for 20+ min;
+set, the 58 eval sheets take ~4 min on 4 cores.
