@@ -37,7 +37,10 @@ Hub: `-gemho-gem-s7`, `-gemho-gem-s8`, `-gemkms-s7`, `-geme2-s7` (each a one-epo
 hand-labelled Gemini r2-r4 sheets outside Gemini30 x18, 50/50 DR / no-DR blend). Rebuild a blend with `scripts/blend_ckpts.py`.
 
 **Product output = polygons + multi-scale (0.7 x 4096 + 0.3 x 2048) + chromaticity colour cut** (`scripts/pp_probe/stack.py`, ms+cc;
-fixed before scoring). 0.66 s per query on a GH200 (median, warm; `scripts/latency_probe.py`; post-processing 0.48 s of it, CPU):
+fixed before scoring). Not in it: the paper cut and the adaptive colour threshold (designed on Gemini30 19 / 26; on 30 unseen
+Gemini sheets +0.0003 and 8 better / 18 worse, synth_progress 2026-10-22). Since 2026-11-07 the polygons are simplified at 2 px
+and snapped to exact horizontal / vertical edges (`scripts/polygonize.py` defaults): half the vertices for <= -0.0008 IoU; the
+table below is the earlier 1 px output. 0.66 s per query on a GH200 (median, warm; `scripts/latency_probe.py`; post-processing 0.48 s of it, CPU):
 | model + stack (ms+cc) | HF14 fix v2 | Gemini30 | val | HF14 |
 |---|---:|---:|---:|---:|
 | `gem2s-x` | **0.9365** | 0.9122 | 0.9064 | **0.9268** |

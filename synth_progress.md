@@ -2907,3 +2907,19 @@ A third of the error pixels sit within 4 px of the edge, nearly all of it inside
 precision, not an offset -- dilating or eroding the mask by 1-2 px only loses (val: -1 px 0.8974, +1 px 0.9052). Simplifying
 the polygons is nearly free: approxPolyDP eps 1 -> 2 halves the vertices (val 4.7x -> 2.8x of the label's, IoU +0.0003; HF14
 6.9x -> 3.7x, -0.0013); eps 3 -> 2.1-2.3x for -0.001 / -0.0026.
+
+Gemini30 (rebuilt from Roboflow through the proxy): IoU 0.8978, ignoring 2 / 4 / 8 px around the true edge 0.9172 / 0.9195 /
+0.9224, 20% of error pixels within 4 px of the edge; region errors dominate even more than on real sheets.
+
+**Polygon simplification + snapping, now the `polygonize.py` default** (`scripts/pp_probe/snap.py`): Douglas-Peucker 2 px, then
+edges within 6 deg of horizontal / vertical snapped exact (right-angle corners), collinear vertices dropped.
+
+| gem2s-x @4096 | IoU eps 1 (old) | IoU eps 2 + snap | vertices / label, old -> new (median) |
+|---|---|---|---|
+| Gemini30 | 0.8978 | 0.8971 | 8.7x -> 4.1x |
+| val | 0.9059 | 0.9056 | 4.7x -> 2.7x |
+| HF14 | 0.9258 | 0.9250 | 6.4x -> 2.9x |
+
+eps 3 goes to 2-3x for another -0.001; snap at 10 deg costs more (Gemini30 -0.002). Dropping small pieces does not help:
+predicted pieces already match the labels' (Gemini30 5.9 vs 6.0, val 6.8 vs 5.7) and min_frac 0.03 costs val -0.025
+(`scripts/pp_probe/pieces.py`). The vertices left are along real edges that follow the pattern's own stepping.
