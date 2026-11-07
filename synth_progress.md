@@ -2892,3 +2892,18 @@ xblend-kq30-kms30, automatic boxes (no hand boxes for these), 207 questions, CPU
 + adaptive colour threshold 0.7748 (+0.015 over raw; Gemini30 got +0.038). Per rule: multi-scale carries it (+0.010); the colour cut
 is neutral here (+0.0001); the paper cut +0.0003 (5 questions better, 0 worse); the adaptive threshold +0.0004 on average but 8
 questions better, 18 worse (worst -0.063): it does not generalise -- the Gemini30 26 fix it was built for is a one-off.
+
+### 2026-11-07: is the remaining error at the boundary (vertex placement) or whole regions?
+
+gem2s-x, production polygons @4096 (`scripts/pp_probe/boundary_band.py`, `edge_sweep.py`; Gemini30 not run -- its pool needs
+the Roboflow exports, not on this container). IoU recomputed ignoring a band around the TRUE boundary:
+
+| split | IoU | ignore 2 px | 4 px | 8 px | error px within 4 px of the true edge | polygon vertices / label vertices |
+|---|---|---|---|---|---|---|
+| val | 0.9059 | 0.9388 | 0.9419 | 0.9404 | 35% | 4.7x |
+| HF14 | 0.9258 | 0.9509 | 0.9549 | 0.9581 | 38% | 6.4x |
+
+A third of the error pixels sit within 4 px of the edge, nearly all of it inside 2 px: edge jitter at the scale of hand-label
+precision, not an offset -- dilating or eroding the mask by 1-2 px only loses (val: -1 px 0.8974, +1 px 0.9052). Simplifying
+the polygons is nearly free: approxPolyDP eps 1 -> 2 halves the vertices (val 4.7x -> 2.8x of the label's, IoU +0.0003; HF14
+6.9x -> 3.7x, -0.0013); eps 3 -> 2.1-2.3x for -0.001 / -0.0026.
