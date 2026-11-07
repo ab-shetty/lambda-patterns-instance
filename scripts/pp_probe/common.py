@@ -14,9 +14,12 @@ MAPS = Path("data/floz-diag/xblend-kq30-kms30")
 def jobs(split):
     fix = split == "hf14fix2"
     fixes = json.load(open("eval_labels/hf14_fixes_v2.json")) if fix else {}
-    if split.startswith("gemini30"):   # gemini30b: 30 more Gemini sheets, automatic boxes (no hand boxes)
+    if split.startswith("gemini30") or split == "gemdev":
+        # gemini30b: 30 more Gemini sheets; gemdev: all 139 hand-labelled Gemini sheets outside Gemini30, the post-processing
+        # dev set (xblend never trained on them; the gem* models did). Both automatic boxes (no hand boxes)
         pool_dir = Path({"gemini30": "data/eval_pools/gemini30_s20261006",
-                         "gemini30b": "data/eval_pools/gemini30b_s20261022"}[split]); recs = {}
+                         "gemini30b": "data/eval_pools/gemini30b_s20261022",
+                         "gemdev": "data/roboflow/floz-gen-gemini-r234-no30-clean"}[split]); recs = {}
         for i, f in enumerate(sorted((pool_dir / "annotations").glob("*.json"))):
             ann = json.loads(f.read_text())
             recs[i] = {"image_path": str(pool_dir / "images" / ann["image"]["file_name"]), "annotations": ann["annotations"],
