@@ -2943,3 +2943,46 @@ Gemini30 0.011 (its pattern lines are ink too, so it bridges into neighbours). T
 labels ("4:12", under the 3-character word rule) and vent / skylight symbols, not on words Tesseract reads.
 Tesseract note: one thread per process (OMP_THREAD_LIMIT=1) -- unset, 3 processes x all cores ran a single sheet for 20+ min;
 set, the 58 eval sheets take ~4 min on 4 cores.
+
+### 2026-11-09 (GH200) -- "train for vertices": --edge-weight 4 / 10 on the gem_s7 recipe: no vertex or boundary gain
+
+`train_refunet.py --edge-weight W --edge-px 3` (extra BCE weight within 3 px of the target boundary), exact gem_s7 recipe (gemho_mix
+pool rebuilt with `run_gemini_holdout.sh` steps 1-3, seed 7, longswiss-swa37-41 init, dr + nodr, blend50), vs gemho_gem_s7 (Hub).
+gemedge4 scored / mapped on CPU (gem_s7 CPU vs GPU agrees to 0.0003); gemedge10 on GPU. Probes: `scripts/pp_probe/run_probes.sh`.
+
+| @4096, polygons (eps 2 + snap) | Gemini30 | val | HF14 | fix v2 |
+|---|---|---|---|---|
+| raw IoU gem_s7 / edge4 / edge10 | 0.8818 / 0.8834 / 0.8802 | 0.8974 / 0.8959 / 0.8949 | 0.9183 / 0.9167 / 0.9171 | 0.9265 / 0.9243 / 0.9292 |
+| vertices / label (median) | 3.44 / 3.20 / 3.19 | 2.73 / 2.75 / 2.25 | 2.80 / 3.10 / 3.50 | |
+| our vertices (median) | 207 / 193 / 212 | 138 / 130 / 141 | 110 / 105 / 113 | |
+| band-2 gap | 0.0201 / 0.0197 / 0.0195 | 0.0334 / 0.0333 / 0.0336 | 0.0255 / 0.0258 / 0.0261 | |
+
+All IoU differences within noise (paired p >= 0.17). Gate (vertices/label -15% or band-2 gap -0.005, no split > -0.003): **fails at
+both weights.** Val's -18% at weight 10 is a median-of-ratios artefact (raw counts rise on all three splits; HF14's ratio +25%).
+The loss reaches only jitter along true edges; the extra vertices are mostly interior notches, holes and spill pieces.
+Maps on floz-diag `gemho_gem_s7/`, `gemedge4_s7/`, `gemedge10_s7/`. Not published to the model Hub.
+
+### 2026-11-09 (CPU) -- vertex / IoU trade-off curve (`scripts/pp_probe/curve.py`): simplification is the lever, the tail is not
+
+The user, 2026-11-09: ~3x the labeller's vertices is a product failure, not a side metric (now in PROJECT_UNDERSTANDING.md).
+Every vertex lever alone and stacked, on the saved @4096 maps (rows `scripts/pp_probe/rows_curve_<model>_<split>_<shard>.json`,
+table `python3 scripts/pp_probe/curve.py --summary <model>`). gemho_gem_s7, IoU change / vertices-per-label median (p90):
+
+| | Gemini30 | val | HF14 |
+|---|---|---|---|
+| default (eps 2 + snap) | 0.8904 / 3.44 (26.0) | 0.9042 / 2.73 (6.2) | 0.9203 / 2.80 (18.7) |
+| eps 3 | -0.0006 / 2.54 (19.7) | -0.0010 / 2.11 (4.6) | -0.0014 / 2.25 (13.4) |
+| eps 4 | -0.0013 / 2.20 (16.0) | -0.0018 / 1.67 (3.7) | -0.0020 / 2.00 (10.8) |
+| eps 8 | -0.0056 / 1.53 (8.3) | -0.0083 / 1.23 (2.3) | -0.0058 / 1.50 (6.3) |
+| eps 4 + merge | -0.0036 / 2.00 (15.0) | -0.0023 / 1.59 (3.3) | -0.0044 / 1.85 (9.9) |
+| fill holes <= 16k px alone | -0.0088 / 3.44 | -0.0007 / 2.65 | +0.0008 / 2.80 |
+| close r 6 alone | -0.0030 / 4.20 | +0.0007 / 2.25 | +0.0022 / 2.88 |
+| drop pieces < 1% alone | +0.0025 / 3.21 | -0.0045 / 2.43 | +0.0003 / 2.60 |
+| all strong (eps 6, merge, holes 64k, close 10, pieces < 2%) | -0.0423 / 1.50 (5.2) | -0.0655 / 1.00 (2.0) | -0.0191 / 1.04 (3.5) |
+
+- Douglas-Peucker tolerance carries it: eps 4 cuts the median ratio 30-40% for ~-0.002; eps 8 reaches ~1.5x on every split
+  for -0.006..-0.008. The 2026-11-07 choice of eps 2 was made IoU-first.
+- The tail (p90 10-26x on Gemini30 / HF14) shrinks with eps but stays: those are notches / holes. Hole filling costs Gemini30
+  (its holes are real -- skylights, other materials) and closing bridges to neighbours there, while both are neutral-to-positive
+  on real sheets. Any-angle merge adds little beyond eps 4 for 2-3x its IoU cost.
+- gemedge4 has the same curve shifted ~0.1-0.2x lower at every level; not a separate lever.
