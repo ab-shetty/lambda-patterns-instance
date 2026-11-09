@@ -1,12 +1,24 @@
 # Handoff
 
-Last updated: 2026-10-22 (close-out, GH200)
+Last updated: 2026-11-09 (edge-weight test + vertex curve, GH200)
 
 Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDING.md` defines the task and the metric;
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
 Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
 
-## Where we are (2026-10-22): closed out
+## 2026-11-09: vertices are now a primary metric
+
+The user: polygons with ~3x the labeller's vertices are a product failure even at 0.92 IoU (PROJECT_UNDERSTANDING.md). Report
+vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next to IoU.
+- **Training for vertices failed**: `--edge-weight 4` and `10` (gem_s7 recipe) leave vertex count and boundary error unchanged
+  (synth_progress 2026-11-09). Do not retry loss reweighting near the true boundary.
+- **The trade-off curve** (`scripts/pp_probe/curve.py`): Douglas-Peucker eps is the lever -- eps 4 cuts the median ratio 30-40%
+  for ~-0.002 IoU, eps 8 gets ~1.5x on every split for -0.006..-0.008. The p90 tail (10-26x, notches / holes) needs something
+  else: hole filling and closing help real sheets but hurt Gemini30.
+- **Next**: the user picks a point on the curve (eps 4 or 8 as the `polygonize.py` default?); then attack the tail -- e.g. a hole /
+  notch rule that tells a skylight (keep) from slope text (fill), judged per split on vertices AND IoU.
+
+## Where we were (2026-10-22): closed out
 
 Best: `abshetty/floz-refunet-swint-gem2s-x` (0.25 gem_s7 + 0.25 gem_s8 + 0.5 xblend-kq30-kms30), with `-gk-x` and `-gke-x` published
 beside it (all pass the gate; within noise of each other). Raw @4096: fix v2 0.9320, Gemini30 0.8891, val 0.8990, HF14 0.9235; with the
