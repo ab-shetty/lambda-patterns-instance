@@ -10,7 +10,7 @@ from polygonize import probs_to_polygons, rasterize
 common.WITH_BOX[0] = True
 split = sys.argv[1]
 common.MAPS = Path(sys.argv[2] if len(sys.argv) > 2 else "data/floz-diag/xblend-kq30-kms30")
-KS = (2, 4, 8, 16)
+KS = tuple(int(k) for k in sys.argv[3].split(",")) if len(sys.argv) > 3 else (2, 4, 8, 16)
 rows = []
 for job in common.jobs(split):
     idx, img, _, qs = common.load(job)
