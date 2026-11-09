@@ -48,6 +48,30 @@ CFG = {  # cumulative ladder L0..L7, then single levers off the default
     "a tau.95":              dict(adapt=0.95),
     "a tau.98+blur4":        dict(adapt=0.98, blur=4),
     "a tau.97+minf.01":      dict(adapt=0.97, minf=0.01),
+    # rhole: fill irregular holes (area / min-area rectangle < r), keep rectangle-like ones (skylights); f = max hole share
+    "r rect.8":              dict(rhole=(0.8, 1.0)),
+    "r rect.7":              dict(rhole=(0.7, 1.0)),
+    "r rect.8 f.05":         dict(rhole=(0.8, 0.05)),
+    "r rect.8+tau.97":       dict(rhole=(0.8, 1.0), adapt=0.97),
+    "r rect.8+tau.95":       dict(rhole=(0.8, 1.0), adapt=0.95),
+    "r rect.8 f.05+tau.97":  dict(rhole=(0.8, 0.05), adapt=0.97),
+    "r rect.8+tau.97+minf.01": dict(rhole=(0.8, 1.0), adapt=0.97, minf=0.01),
+    # inlet: irregular gaps between each piece and its convex hull (dropouts reaching the edge), on top of the hole rule
+    "i inlet.8 f.05":        dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05)),
+    "i inlet.8 f.02":        dict(rhole=(0.8, 0.05), inlet=(0.8, 0.02)),
+    "i inlet.7 f.05":        dict(rhole=(0.8, 0.05), inlet=(0.7, 0.05)),
+    "i inlet.8 f.05+tau.97": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.97),
+    "i inlet.8 f.02+tau.97": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.02), adapt=0.97),
+    "i inlet.8 f.05+tau.97+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.97, minf=0.01),
+    "i inlet.8 f.05+tau.95+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.01),
+    # pmin: fill a gap only if its mean probability >= pmin (a dropout the model was unsure about, not a true gap)
+    "p .05 inlet+tau.95+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.01, pmin=0.05),
+    "p .10 inlet+tau.95+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.01, pmin=0.10),
+    "p .15 inlet+tau.95+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.01, pmin=0.15),
+    "p .20 inlet+tau.95+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.01, pmin=0.20),
+    "p .10 inlet+tau.97+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.97, minf=0.01, pmin=0.10),
+    "p .10 inlet f.1+tau.95+minf.01": dict(rhole=(0.8, 0.1), inlet=(0.8, 0.1), adapt=0.95, minf=0.01, pmin=0.10),
+    "p .10 inlet":           dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), pmin=0.10),
 }
 ONLY = None
 
@@ -118,6 +142,61 @@ def adaptive_ring(q, tau, eps0):
     return best
 
 
+def fill_irregular_holes(m, rect_min=0.8, max_frac=1.0, P=None, pmin=0.0):
+    """Fill a hole (background component not touching the border) unless it is rectangle-like: area / its min-area rotated
+    rectangle >= rect_min keeps it (skylights, insets of another material). max_frac: never fill a hole larger than this
+    share of the mask's area. Blotchy confidence dropouts inside a correct region are irregular and get filled."""
+    n, lab, st, _ = cv2.connectedComponentsWithStats((~m).astype(np.uint8), connectivity=4)
+    h, w = m.shape
+    tot = max(1, int(m.sum()))
+    fill = np.zeros(n, bool)
+    for i in range(1, n):
+        x, y, ww, hh, a = st[i]
+        if x == 0 or y == 0 or x + ww == w or y + hh == h or a > max_frac * tot:
+            continue
+        sub = (lab[y:y + hh, x:x + ww] == i).astype(np.uint8)
+        cs, _ = cv2.findContours(sub, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cs:
+            continue
+        rw, rh = cv2.minAreaRect(max(cs, key=cv2.contourArea))[1]
+        fill[i] = a / max(1.0, rw * rh) < rect_min
+        if fill[i] and pmin > 0:
+            fill[i] = P[y:y + hh, x:x + ww][sub.astype(bool)].mean() >= pmin
+    return m | fill[lab]
+
+
+def fill_irregular_inlets(m, rect_min=0.8, max_frac=0.05, P=None, pmin=0.0):
+    """Per piece: the gap between its convex hull and the mask, split into components; fill a component unless it is
+    rectangle-like (an L-shaped region's notch, an inset of another material) or larger than max_frac of the piece. Catches
+    dropouts that reach the piece's edge (inlets), which a hole rule cannot see."""
+    out = m.copy()
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
+    for i in range(1, n):
+        x, y, ww, hh, a = st[i]
+        if a < 64:
+            continue
+        piece = (lab[y:y + hh, x:x + ww] == i).astype(np.uint8)
+        cs, _ = cv2.findContours(piece, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        hull = np.zeros_like(piece); cv2.fillPoly(hull, [cv2.convexHull(np.vstack(cs))], 1)
+        gap = (hull & (1 - piece)).astype(np.uint8)
+        k, gl, gs, _ = cv2.connectedComponentsWithStats(gap, connectivity=4)
+        sub = out[y:y + hh, x:x + ww]
+        for j in range(1, k):
+            ga = gs[j, 4]
+            if ga > max_frac * a or ga < 4:
+                continue
+            gx, gy, gw, gh = gs[j, :4]
+            g = (gl[gy:gy + gh, gx:gx + gw] == j).astype(np.uint8)
+            gc, _ = cv2.findContours(g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            rw, rh = cv2.minAreaRect(max(gc, key=cv2.contourArea))[1]
+            if ga / max(1.0, rw * rh) < rect_min:
+                sel = gl == j
+                if pmin > 0 and P[y:y + hh, x:x + ww][sel].mean() < pmin:
+                    continue
+                sub[sel] = True
+    return out
+
+
 def polys_from(P, s, c):
     from polygonize import _fill_holes, snap_ring, clean_ring
     if c.get("blur"):
@@ -130,6 +209,10 @@ def polys_from(P, s, c):
         k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
         m = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_CLOSE, k).astype(bool)
         m = _fill_holes(m, c["hole"] / s / s)
+    if c.get("rhole"):
+        m = fill_irregular_holes(m, *c["rhole"], P=P, pmin=c.get("pmin", 0.0))
+    if c.get("inlet"):
+        m = fill_irregular_inlets(m, *c["inlet"], P=P, pmin=c.get("pmin", 0.0))
     n, lab, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
     if n > 1:
         keep = np.zeros(n, bool); keep[1:] = st[1:, 4] >= c["minf"] * st[1:, 4].sum(); m = keep[lab]
