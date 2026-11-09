@@ -104,6 +104,11 @@ def parse_args():
     p.add_argument("--bce-other-weight", type=float, default=1.0,
                    help="BCE weight on pixels of the plan's OTHER labelled families (look-alike negatives); "
                         "1 = plain BCE (default, unchanged)")
+    p.add_argument("--refine-head", type=int, default=0,
+                   help="swin: channels of the full-resolution refinement head (0 = none; zero-initialised, so "
+                        "--init-from a checkpoint without it starts unchanged)")
+    p.add_argument("--train-only", default="",
+                   help="comma list of parameter-name prefixes to train (e.g. 'refine.'); everything else frozen")
     p.add_argument("--edge-weight", type=float, default=1.0,
                    help="BCE weight on pixels within --edge-px of the target's boundary (2026-11-07, the vertex test: the "
                         "polygons the user edits come from that boundary). 1 = off")
@@ -355,7 +360,8 @@ def main():
                             decoder=args.swin_decoder,
                             roi_ref=args.roi_ref,
                             roi_mode=args.roi_ref_mode,
-                            roi_min_cells=args.roi_min_cells).to(device)
+                            roi_min_cells=args.roi_min_cells,
+                            refine=args.refine_head).to(device)
     else:
         model = RefUNet(args.width, pretrained=args.init_from is None and not args.no_pretrained,
                         corr_grid=args.corr_grid,
@@ -373,7 +379,7 @@ def main():
         # weights are the zero-initialised roi_proj, so the model starts
         # exactly where the checkpoint left off. Anything else missing is an error.
         missing, unexpected = model.load_state_dict(checkpoint["model"], strict=False)
-        if unexpected or any(not k.startswith("roi_proj.") for k in missing):
+        if unexpected or any(not k.startswith(("roi_proj.", "refine.")) for k in missing):
             raise SystemExit(f"--init-from mismatch: missing={missing} unexpected={unexpected}")
         # Hub checkpoints (hf_ckpt_to_pth.py) carry epoch None: restart epochs then count from 0.
         last = checkpoint.get("actual_epoch", checkpoint.get("epoch"))
@@ -394,8 +400,16 @@ def main():
     # measured 23.0 ms -> 2.2 ms per step for clip+step, ~9.5 s/epoch. Same
     # algorithm, but the reduction order differs, so it rides with --compile
     # rather than silently changing the default recipe's last decimals.
+    if args.train_only:
+        # --train-only: freeze everything but the named parameters (the refinement-head A/B: same base, only the head learns)
+        prefixes = tuple(x for x in args.train_only.split(",") if x)
+        for name, prm in base_model.named_parameters():
+            prm.requires_grad_(name.startswith(prefixes))
+        print(f"--train-only {prefixes}: {sum(p.numel() for p in base_model.parameters() if p.requires_grad)} trainable params")
+    groups = [{**g, "params": [q for q in g["params"] if q.requires_grad]}
+              for g in base_model.parameter_groups(args.lr, args.backbone_lr_mult)]
     optimizer = torch.optim.AdamW(
-        base_model.parameter_groups(args.lr, args.backbone_lr_mult),
+        [g for g in groups if g["params"]],
         fused=args.compile,
         weight_decay=args.weight_decay)
     schedule_epochs = args.schedule_epochs or args.epochs

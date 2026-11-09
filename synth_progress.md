@@ -3063,3 +3063,16 @@ roof) and val 13 (the wider bottom strip, also taken out of its family); v2's HF
 neither prediction nor target, and a question whose box is mostly inside one is dropped (val 13 q7). The evaluator
 (`--label-fixes`) and pp_probe (split `valfix3`) apply them. gem2s-x, product stack (ms+cc): **val 0.9058 -> 0.9445** (71 q);
 with low_vertex 0.9341 at 1.00x vertices / label. Remaining val gap to 0.95: 0.0055, almost all in the 4 px edge band.
+
+### 2026-11-09: where the real-sheet edge error is, and a full-resolution refinement head
+
+- Most of the remaining real-sheet loss is within 1 px of the label edge (boundary_band, ignoring 1 px: val v3 0.935 -> 0.967,
+  HF14 fix v2 0.934 -> 0.955). `scripts/pp_probe/edgeink.py`: 60% of the error within 2 px is the prediction falling SHORT, and
+  labels take 56-61% of the stroke pixels on their own edge where the prediction takes 48-52%. Small sheets lose more of it
+  than large ones (val 0.056 vs 0.021), so it is not only the stride-4 grid on large sheets.
+- CPU: growing the product mask 1 px into touching ink (`scripts/pp_probe/inkgrow.py`) val +0.0031 (46 up / 11 down), HF14 fix
+  v2 +0.0017, Gemini30 -0.0027 (138 down: Gemini labels follow another stroke convention). Not adopted; like the guided filter
+  and BPR before it, CPU edge work tops out at a few thousandths.
+- `--refine-head C` (RefSwinUNet `refine`): after the stride-4 logits are upsampled, a 4-conv full-resolution head on
+  [image, upsampled logits] adds a correction (receptive field 13 input px; last conv zero-initialised, so any checkpoint loads
+  into it unchanged -- checked identical output). `--train-only refine.` freezes the rest for a clean A/B on one base.

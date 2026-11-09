@@ -45,7 +45,7 @@ class RefSwinUNet(nn.Module):
 
     def __init__(self, width=128, pretrained=True, backbone="swin_b",
                  corr_grid=0, decoder="baseline", roi_ref=False, roi_mode="replace",
-                 roi_min_cells=0.0):
+                 roi_min_cells=0.0, refine=0):
         super().__init__()
         # roi_ref (2026-09-27, diagnostic): take each level's prototype from
         # the IMAGE's own features inside the user's box instead of from the
@@ -99,6 +99,28 @@ class RefSwinUNet(nn.Module):
             nn.Conv2d(width, width, 3, padding=1, bias=False),
             nn.GroupNorm(8, width), nn.GELU(),
             nn.Conv2d(width, 1, 1))
+        # refine > 0 (2026-11-09): a full-resolution head after the stride-4 logits are upsampled. The output grid is 4 input
+        # px (~2 native px on a small sheet, ~6 on a 6000 px one) and most of the real-sheet loss is within 1 px of the label
+        # edge, on drawn strokes; this sees the image at full resolution and adds a correction to the upsampled logits.
+        # The last conv is zero-initialised, so a checkpoint loads into it unchanged. Receptive field 13 input px.
+        self.refine_ch = int(refine)
+        if self.refine_ch:
+            c = self.refine_ch
+            self.refine = nn.Sequential(
+                nn.Conv2d(4, c, 3, padding=1), nn.GELU(),
+                nn.Conv2d(c, c, 3, padding=2, dilation=2), nn.GELU(),
+                nn.Conv2d(c, c, 3, padding=3, dilation=3), nn.GELU(),
+                nn.Conv2d(c, 1, 1))
+            nn.init.zeros_(self.refine[-1].weight); nn.init.zeros_(self.refine[-1].bias)
+
+    def refined(self, logits, image):
+        """Upsample the stride-4 logits to the image and, with `refine`, add the full-resolution correction."""
+        up = F.interpolate(logits, size=image.shape[-2:], mode="bilinear", align_corners=False)
+        if not self.refine_ch:
+            return up
+        if image.shape[0] != up.shape[0]:
+            image = image.expand(up.shape[0], -1, -1, -1)
+        return up + self.refine(torch.cat([image.to(up.dtype), up], 1))
 
     def features(self, x):
         """Four NCHW feature maps at strides 4/8/16/32, matching `RefUNet`."""
@@ -149,8 +171,7 @@ class RefSwinUNet(nn.Module):
         if self.roi_ref and ref_box is not None:
             prototypes = self.roi_prototypes(image_features, ref_box, prototypes)
         logits = self.decode(image_features, prototypes, reference_features)
-        out = F.interpolate(logits, size=image_size, mode="bilinear",
-                            align_corners=False)
+        out = self.refined(logits, image)
         if return_aux:
             return out, None
         return out
@@ -159,19 +180,18 @@ class RefSwinUNet(nn.Module):
         """K questions per image (`--refs-per-image`): `references` is
         [B*K, 3, R, R], plan-major. The image runs through the backbone ONCE;
         only the conditioning and decoder repeat per question."""
-        image_size = image.shape[-2:]
         image_features = [f.repeat_interleave(k, 0) for f in self.features(image)]
         reference_features = self.features(references)
         prototypes = [f.mean((-2, -1)) for f in reference_features]
         if self.roi_ref and boxes is not None:
             prototypes = self.roi_prototypes(image_features, boxes, prototypes)
         logits = self.decode(image_features, prototypes, reference_features)
-        return F.interpolate(logits, size=image_size, mode="bilinear",
-                             align_corners=False)
+        return self.refined(logits, image.repeat_interleave(k, 0) if self.refine_ch else image)
 
-    def forward_cached(self, image_features, image_size, references, boxes=None):
+    def forward_cached(self, image_features, image_size, references, boxes=None, image=None):
         """Evaluation: K questions on one image whose `features` were computed ONCE
-        (batch 1). Same maths as `forward` per question; the backbone is skipped."""
+        (batch 1). Same maths as `forward` per question; the backbone is skipped.
+        `image` (the normalised input, batch 1) is needed only with `refine`."""
         k = references.shape[0]
         image_features = [f.expand(k, -1, -1, -1) for f in image_features]
         reference_features = self.features(references)
@@ -179,6 +199,8 @@ class RefSwinUNet(nn.Module):
         if self.roi_ref and boxes is not None:
             prototypes = self.roi_prototypes(image_features, boxes, prototypes)
         logits = self.decode(image_features, prototypes, reference_features)
+        if self.refine_ch:
+            return self.refined(logits, image)
         return F.interpolate(logits, size=image_size, mode="bilinear",
                              align_corners=False)
 

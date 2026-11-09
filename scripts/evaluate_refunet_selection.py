@@ -79,7 +79,8 @@ def load_refunet(checkpoint_path, device):
                             decoder=str(args.get("swin_decoder", "baseline")),
                             roi_ref=bool(args.get("roi_ref", False)),
                             roi_mode=str(args.get("roi_ref_mode", "replace")),
-                            roi_min_cells=float(args.get("roi_min_cells", 0.0) or 0.0)).to(device)
+                            roi_min_cells=float(args.get("roi_min_cells", 0.0) or 0.0),
+                            refine=int(args.get("refine_head", 0) or 0)).to(device)
     else:
         # `anchor` must be rebuilt from the saved args: it widens the stem to 4
         # channels, so an anchored checkpoint cannot load into a default model.
@@ -299,7 +300,7 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
                             if cached:
                                 if (hf, k) not in feats:
                                     feats[(hf, k)] = model.features(img_t)
-                                logit = model.forward_cached(feats[(hf, k)], img_t.shape[-2:], ref_t, box_t)
+                                logit = model.forward_cached(feats[(hf, k)], img_t.shape[-2:], ref_t, box_t, image=img_t)
                             else:
                                 logit = model(img_t, ref_t, ref_box=box_t)
                             prob = _dihedral_inv(logit.sigmoid().float(), hf, k)[:, 0]
