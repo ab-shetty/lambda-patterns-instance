@@ -34,7 +34,9 @@ def budget(m, tgt, anyann):
     far_fp = fp & ~near
     b["other_fam"] = far_fp & anyann
     n, cc = cv2.connectedComponents((far_fp & ~anyann).astype(np.uint8), connectivity=8)
-    touch = cv2.dilate((m & tgt).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+    # a spill crosses the 4 px edge band before it gets here: connected = within the band + 2 px of a correct region, through
+    # the predicted mask
+    touch = cv2.dilate((m & tgt).astype(np.uint8), np.ones((13, 13), np.uint8)).astype(bool) & m
     if n > 1:
         hit = np.zeros(n, bool); hit[np.unique(cc[touch & (cc > 0)])] = True; hit[0] = False
         b["spill"] = hit[cc]
