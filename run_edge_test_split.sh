@@ -30,8 +30,9 @@ for job in "hf14:--indices $HF14" "hf14fix2:--indices $HF14 --label-fixes eval_l
   OUT=$O/blend50_${job%%:*}_4096.json
   [ -f $OUT ] || CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=12 python3 scripts/evaluate_refunet_selection.py --checkpoint $B ${job#*:} \
     --image-max-size 4096 --ref-size 224 --mask-thresh 0.35 --workers 0 --metrics-out $OUT > $O/${job%%:*}.log 2>&1 &
+  PIDS="${PIDS:-} $!"
 done
-wait
+wait $PIDS   # not a bare wait: that also waits for the weight-10 job started above (stalled the 2026-11-09 run)
 echo "== $T scored (CPU) $(date +%H:%M)"
 for sp in hf14 hf14fix2 val gemini30; do echo "$sp $(python3 -c "import json;print(round(json.load(open('$O/blend50_${sp}_4096.json'))['mean_iou'],4))")"; done
 # maps: 4 at a time on CPU (cpu_maps.sh runs 2)
@@ -42,8 +43,8 @@ one() {
   CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=12 python3 scripts/evaluate_refunet_selection.py --checkpoint $B $a \
     --image-max-size $sz --ref-size 224 --mask-thresh 0.35 --workers 0 --save-probs $d/probs --metrics-out $d/metrics.json > $d/log.txt 2>&1
 }
-one gemini30 4096 & one val 4096 & one hf14 4096 & one gemini30 2048 & wait
-one val 2048 & one hf14 2048 & wait
+one gemini30 4096 & p1=$!; one val 4096 & p2=$!; one hf14 4096 & p3=$!; one gemini30 2048 & p4=$!; wait $p1 $p2 $p3 $p4
+one val 2048 & p1=$!; one hf14 2048 & p2=$!; wait $p1 $p2
 echo "== $T maps (CPU) $(date +%H:%M)"
 scripts/pp_probe/run_probes.sh $M
 echo "EDGE4 CPU SIDE DONE $(date +%H:%M)"
