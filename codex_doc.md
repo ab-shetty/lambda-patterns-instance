@@ -16,11 +16,11 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
   for ~-0.002 IoU, eps 8 gets ~1.5x on every split for -0.006..-0.008. The p90 tail (10-26x, notches / holes) needs something
   else: hole filling and closing help real sheets but hurt Gemini30.
 - **The user's aspirational target: <= 1.2x vertices / label at >= 0.95 mIoU.**
-- **~1.2x is reached** by filling irregular holes and inlets (convex-hull gaps) that the model was unsure about (mean P >= 0.05),
-  then per-outline adaptive eps (tau .95) and dropping pieces < 0.5%: gem_s7 1.22x / 1.20x / 1.22x at -0.0071 / -0.0094 / -0.0047
-  IoU (Gemini30 / val / HF14); transfers to two other models. The tail was dropouts inside correct regions, not edges.
-- **Next**: (1) confirm on gemdev (maps for the 139 Gemini sheets outside Gemini30) -- the rules were designed on the eval sheets;
-  (2) port to `scripts/polygonize.py` behind a flag and re-score the full stack (ms + cc); (3) win back the ~0.005-0.009 IoU: a
+- **~1.2x is reached, and holds on unseen sheets**: fill irregular holes and inlets (convex-hull gaps) the model was unsure about
+  (mean P >= 0.05), Douglas-Peucker 12 px + axis snap, drop pieces < 0.5% (`curve.py` "e .05 inlet+eps12+minf.005"): gemdev (xblend,
+  unseen) 1.23x / -0.0082, Gemini30 1.17x / -0.0065, val 1.00x / -0.0089, HF14 1.15x / -0.0061. The tail was dropouts inside
+  correct regions, not edges. (The adaptive-eps variant looked better on the eval sheets but did not transfer to gemdev.)
+- **Next**: (1) the user picks the trade; (2) port to `scripts/polygonize.py` behind a flag and re-score the full stack (ms + cc); (3) win back the ~0.005-0.009 IoU: a
   better gap classifier than shape + mean P (e.g. ink / texture match to the reference inside the gap); (4) 0.95 mIoU is a model
   problem -- ignoring 2 px around every true edge still gives Gemini30 0.91, so the rest is wrong / missing regions.
 

@@ -3035,3 +3035,22 @@ Transfers to the other two models' maps unchanged (gemedge4 / gemedge10, gate .0
 at -0.0077 / -0.0067; HF14 1.07x / 1.05x at -0.0025 / -0.0043). Caveat: designed while looking at these eval sheets (same sheets
 for all three models); confirm on gemdev (the 139 Gemini sheets outside Gemini30) before adopting. Latency: 0.07-0.12 s per
 question (median, max 0.48 s) vs 0.03-0.05 s for the default. Not yet in `polygonize.py`.
+
+### 2026-11-09 (GH200 + CPU) -- gemdev check (unseen sheets): fills + fixed eps 12 hold at ~1.2x
+
+gemdev = the 139 hand-labelled Gemini sheets outside Gemini30, 900 questions, automatic boxes, scored with **xblend-kq30-kms30**
+(never trained on them; the gem* models did). New maps @4096 on floz-diag-local `xblend-kq30-kms30/gemdev_4096/` (raw 0.80-0.83 per
+quarter; one quarter OOMed with 4 jobs on the GPU and was re-run alone). On gemdev the adaptive-eps recipes lose their tail
+advantage (balanced: 1.57x, p90 7.6 = plain eps 8's p90), so part of that was fitted to the eval sheets. **Fills + a fixed eps
+transfer:**
+
+| fills (P >= .05) + eps + pieces < 0.5%, IoU change / v-l median (p90) | gemdev (xblend) | Gemini30 | val | HF14 (gem_s7) |
+|---|---|---|---|---|
+| default | 0.8187 / 4.58 (21.0) | 0.8904 / 3.44 (26.0) | 0.9042 / 2.73 (6.2) | 0.9203 / 2.80 (18.7) |
+| eps 8, no fills | -0.0032 / 1.78 (7.1) | -0.0045 / 1.46 (8.0) | -0.0082 / 1.17 (2.3) | -0.0056 / 1.42 (5.8) |
+| fills + eps 8 | -0.0057 / 1.53 (5.3) | -0.0062 / 1.34 (4.7) | -0.0082 / 1.13 (1.9) | -0.0037 / 1.35 (3.9) |
+| **fills + eps 12** | **-0.0082 / 1.23 (3.9)** | **-0.0065 / 1.17 (3.6)** | **-0.0089 / 1.00 (1.6)** | **-0.0061 / 1.15 (2.9)** |
+
+**Candidate polygon default: gated irregular hole + inlet fill, Douglas-Peucker 12 px + axis snap, drop pieces < 0.5%** --
+~1.2x the labeller's vertices on all four splits (incl. the unseen one) for 0.006-0.009 IoU. Not yet in `polygonize.py`; the
+user decides the trade. The 0.95 mIoU half of the target is a model problem (see above).

@@ -76,6 +76,12 @@ CFG = {  # cumulative ladder L0..L7, then single levers off the default
     "q .05 inlet+tau.96":    dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.96, pmin=0.05),
     "q .05 inlet+tau.96+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.96, minf=0.005, pmin=0.05),
     "q .05 inlet+tau.95+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.005, pmin=0.05),
+    "e eps8+minf.005":       dict(eps=8.0, minf=0.005),
+    "e .05 inlet+eps8":      dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), eps=8.0, pmin=0.05),
+    "e .05 inlet+eps8+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), eps=8.0, minf=0.005, pmin=0.05),
+    "e .05 inlet+eps6+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), eps=6.0, minf=0.005, pmin=0.05),
+    "e .05 inlet+eps12+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), eps=12.0, minf=0.005, pmin=0.05),
+    "e .05 inlet+eps8+tau.95+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), eps=8.0, adapt=0.95, minf=0.005, pmin=0.05),
 }
 ONLY = None
 
@@ -241,7 +247,7 @@ def polys_from(P, s, c):
 
 def summary(model, pre=""):
     print(f"model {model} | vertices = ours / labeller's, per question | IoU = rasterised polygons, mean")
-    for split in ("gemini30", "val", "hf14"):
+    for split in ("gemini30", "val", "hf14", "gemdev"):
         rows = sum((json.load(open(f)) for f in sorted(glob.glob(f"scripts/pp_probe/rows_curve{pre}_{model}_{split}*.json"))), [])
         rows = [r for r in rows if r["label"] > 0]
         if not rows:
