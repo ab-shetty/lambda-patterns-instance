@@ -1,0 +1,42 @@
+gemini30 eps 2: 195 q | vertices on main outer / main holes / other pieces: all 29/10/61%  worst quarter (>= 10.6x) 28/11/61%
+   holes: ours 384 over 195 q (labels 0); hole area as share of answer: median 0.0052; holes < 0.1% of answer: 6% of holes, 5% of hole vertices; < 1%: 60% / 50%
+   worst: sheet 18 q 0 61.1x  label 16 | main outer 33 holes 0 (0) other 945 (26 pieces)
+   worst: sheet 0 q 0 54.3x  label 14 | main outer 343 holes 50 (3) other 367 (3 pieces)
+   worst: sheet 17 q 2 40.1x  label 86 | main outer 196 holes 51 (2) other 3204 (12 pieces)
+   worst: sheet 18 q 4 39.8x  label 20 | main outer 488 holes 126 (2) other 182 (4 pieces)
+   worst: sheet 19 q 0 39.3x  label 38 | main outer 125 holes 0 (0) other 1369 (19 pieces)
+val eps 2: 72 q | vertices on main outer / main holes / other pieces: all 21/20/59%  worst quarter (>= 4.1x) 34/9/57%
+   holes: ours 164 over 72 q (labels 0); hole area as share of answer: median 0.0179; holes < 0.1% of answer: 0% of holes, 0% of hole vertices; < 1%: 4% / 3%
+   worst: sheet 8 q 1 15.2x  label 10 | main outer 110 holes 0 (0) other 42 (1 pieces)
+   worst: sheet 8 q 0 13.3x  label 10 | main outer 91 holes 0 (0) other 42 (1 pieces)
+   worst: sheet 4 q 1 7.4x  label 30 | main outer 124 holes 34 (2) other 64 (3 pieces)
+   worst: sheet 6 q 1 6.6x  label 34 | main outer 65 holes 68 (3) other 91 (3 pieces)
+   worst: sheet 5 q 0 6.3x  label 67 | main outer 35 holes 62 (2) other 324 (6 pieces)
+hf14 eps 2: 51 q | vertices on main outer / main holes / other pieces: all 29/8/63%  worst quarter (>= 8.0x) 26/11/63%
+   holes: ours 27 over 51 q (labels 0); hole area as share of answer: median 0.0179; holes < 0.1% of answer: 0% of holes, 0% of hole vertices; < 1%: 37% / 38%
+   worst: sheet 7 q 0 25.8x  label 10 | main outer 21 holes 237 (3) other 0 (0 pieces)
+   worst: sheet 18 q 8 24.6x  label 8 | main outer 6 holes 0 (0) other 191 (6 pieces)
+   worst: sheet 0 q 1 22.6x  label 14 | main outer 61 holes 52 (1) other 204 (5 pieces)
+   worst: sheet 0 q 0 22.1x  label 14 | main outer 61 holes 65 (2) other 184 (4 pieces)
+   worst: sheet 2 q 0 19.8x  label 27 | main outer 39 holes 15 (1) other 481 (7 pieces)
+gemini30 eps 8: 195 q | vertices on main outer / main holes / other pieces: all 28/10/61%  worst quarter (>= 4.0x) 28/10/62%
+   holes: ours 369 over 195 q (labels 0); hole area as share of answer: median 0.0050; holes < 0.1% of answer: 9% of holes, 7% of hole vertices; < 1%: 58% / 49%
+   worst: sheet 18 q 0 20.1x  label 16 | main outer 20 holes 0 (0) other 301 (26 pieces)
+   worst: sheet 0 q 0 18.1x  label 14 | main outer 124 holes 23 (3) other 106 (3 pieces)
+   worst: sheet 18 q 4 14.7x  label 20 | main outer 190 holes 44 (2) other 59 (4 pieces)
+   worst: sheet 19 q 0 14.2x  label 38 | main outer 48 holes 0 (0) other 490 (19 pieces)
+   worst: sheet 17 q 8 13.0x  label 86 | main outer 53 holes 4 (1) other 1057 (11 pieces)
+val eps 8: 72 q | vertices on main outer / main holes / other pieces: all 20/16/64%  worst quarter (>= 1.9x) 30/8/62%
+   holes: ours 164 over 72 q (labels 0); hole area as share of answer: median 0.0196; holes < 0.1% of answer: 0% of holes, 0% of hole vertices; < 1%: 4% / 3%
+   worst: sheet 8 q 0 5.1x  label 10 | main outer 43 holes 0 (0) other 8 (1 pieces)
+   worst: sheet 8 q 1 4.8x  label 10 | main outer 40 holes 0 (0) other 8 (1 pieces)
+   worst: sheet 19 q 8 4.0x  label 4 | main outer 16 holes 0 (0) other 0 (0 pieces)
+   worst: sheet 10 q 4 2.7x  label 13 | main outer 4 holes 0 (0) other 31 (5 pieces)
+   worst: sheet 13 q 1 2.4x  label 16 | main outer 14 holes 0 (0) other 25 (1 pieces)
+hf14 eps 8: 51 q | vertices on main outer / main holes / other pieces: all 30/8/62%  worst quarter (>= 3.0x) 28/10/63%
+   holes: ours 27 over 51 q (labels 0); hole area as share of answer: median 0.0175; holes < 0.1% of answer: 0% of holes, 0% of hole vertices; < 1%: 37% / 36%
+   worst: sheet 7 q 0 9.7x  label 10 | main outer 13 holes 84 (3) other 0 (0 pieces)
+   worst: sheet 0 q 0 8.4x  label 14 | main outer 23 holes 25 (2) other 70 (4 pieces)
+   worst: sheet 0 q 1 7.9x  label 14 | main outer 23 holes 15 (1) other 72 (5 pieces)
+   worst: sheet 2 q 0 6.9x  label 27 | main outer 13 holes 5 (1) other 169 (7 pieces)
+   worst: sheet 18 q 8 6.5x  label 8 | main outer 4 holes 0 (0) other 48 (3 pieces)

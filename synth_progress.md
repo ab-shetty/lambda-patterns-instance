@@ -2986,3 +2986,26 @@ table `python3 scripts/pp_probe/curve.py --summary <model>`). gemho_gem_s7, IoU 
   (its holes are real -- skylights, other materials) and closing bridges to neighbours there, while both are neutral-to-positive
   on real sheets. Any-angle merge adds little beyond eps 4 for 2-3x its IoU cost.
 - gemedge4 has the same curve shifted ~0.1-0.2x lower at every level; not a separate lever.
+
+### 2026-11-09 (CPU, cont.) -- where the vertices are; blur; per-outline adaptive eps (gemho_gem_s7 maps)
+
+User's aspirational target (2026-11-09): **vertices / label <= 1.2x at mIoU >= 0.95.**
+- **Not fragmentation** (`scripts/pp_probe/frag.py`): our on-target pieces are <= the label's polygon count (median 3 vs 7 Gemini30,
+  ~1:1 real). ~50% of vertices sit on correct secondary regions, 38% on the main piece, 5-11% on spill: the excess is vertices
+  per outline (texture sawtooth, notches), not pieces. (`tail.py`: holes carry only 8-20%.)
+- **Blur before threshold** (sigma 2-16, 4096-scale px): shrinks the tail (Gemini30 p90 26x -> 9.8x at 16) but rounds corners, so
+  the median rises and <= 1.5x collapses; eps 8 + blur 8 1.48x / -0.023 Gemini30. Not a lever on its own.
+- **Adaptive eps per outline** (`curve.py` `a tau.*`: coarsest eps in 2..48 keeping the ring's own IoU >= tau):
+
+| gemho_gem_s7 | Gemini30 | val | HF14 |
+|---|---|---|---|
+| default | 0.8904 / 3.44 (p90 26.0) | 0.9042 / 2.73 (6.2) | 0.9203 / 2.80 (18.7) |
+| tau 0.98 | -0.0018 / 2.29 (15.1) | -0.0018 / 1.64 (4.0) | -0.0019 / 1.98 (11.5) |
+| tau 0.97 | -0.0035 / 1.80 (12.8) | -0.0041 / 1.49 (3.3) | -0.0036 / 1.77 (8.7) |
+| tau 0.95 | -0.0072 / 1.47 (11.2) | -0.0089 / 1.22 (3.0) | -0.0065 / 1.50 (6.6) |
+| tau 0.97 + drop pieces < 1% | -0.0010 / 1.73 (10.8) | -0.0086 / 1.39 (2.6) | -0.0034 / 1.29 (8.7) |
+
+  About the same frontier as a fixed eps (eps 8: -0.0056 / 1.53 on Gemini30); the per-outline choice does not beat it by much. 1.2x
+  is reached only on val (tau 0.95). The p90 tail (9-13x on Gemini30 / HF14) survives every polygon-side lever.
+- **0.95 mIoU is a model problem**: ignoring 2 px around every true edge gives 0.9105 / 0.9376 / 0.9458 -- a perfect boundary
+  still leaves Gemini30 ~0.91; the rest is wrong / missing regions.

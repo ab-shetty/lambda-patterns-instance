@@ -14,7 +14,7 @@ sys.path.insert(0, "scripts/pp_probe"); sys.path.insert(0, "scripts"); sys.path.
 import numpy as np, cv2
 from pathlib import Path
 
-B = dict(eps=2.0, merge=None, hole=4096, close=0, minf=0.002)
+B = dict(eps=2.0, merge=None, hole=4096, close=0, minf=0.002, blur=0)
 CFG = {  # cumulative ladder L0..L7, then single levers off the default
     "L0 default":            {},
     "L1 eps3":               dict(eps=3.0),
@@ -32,7 +32,24 @@ CFG = {  # cumulative ladder L0..L7, then single levers off the default
     "s close6":              dict(close=6),
     "s minf.01":             dict(minf=0.01),
     "s minf.03":             dict(minf=0.03),
+    # blur: Gaussian sigma (4096-scale px) on the probability map before thresholding -- removes the texture sawtooth itself
+    "b blur2":               dict(blur=2),
+    "b blur4":               dict(blur=4),
+    "b blur8":               dict(blur=8),
+    "b blur16":              dict(blur=16),
+    "b eps4+blur4":          dict(eps=4.0, blur=4),
+    "b eps4+blur8":          dict(eps=4.0, blur=8),
+    "b eps8+blur8":          dict(eps=8.0, blur=8),
+    "b eps4+blur8+minf.01":  dict(eps=4.0, blur=8, minf=0.01),
+    # adapt: per-outline eps, coarsest keeping the ring's own IoU >= tau
+    "a tau.99":              dict(adapt=0.99),
+    "a tau.98":              dict(adapt=0.98),
+    "a tau.97":              dict(adapt=0.97),
+    "a tau.95":              dict(adapt=0.95),
+    "a tau.98+blur4":        dict(adapt=0.98, blur=4),
+    "a tau.97+minf.01":      dict(adapt=0.97, minf=0.01),
 }
+ONLY = None
 
 
 # label_vertices / merge_ring copied from vertcount.py / vertfix.py: both run their whole script on import
@@ -74,8 +91,38 @@ def merge(polys, frac, cap):
     return out
 
 
+ADAPT_EPS = (2, 3, 4, 6, 8, 12, 16, 24, 32, 48)
+
+
+def adaptive_ring(q, tau, eps0):
+    """Coarsest Douglas-Peucker eps (then axis snap) whose filled ring keeps IoU >= tau with the ring's own filled contour:
+    per-outline tolerance instead of one eps for the sheet. Rectangles collapse to 4 vertices; textured edges take what they can."""
+    from polygonize import snap_ring, clean_ring
+    x, y, w, h = cv2.boundingRect(q)
+    pad = 2; off = np.array([x - pad, y - pad])
+    ref = np.zeros((h + 2 * pad, w + 2 * pad), np.uint8)
+    cv2.drawContours(ref, [q - off], -1, 1, -1)
+    ra = ref.sum()
+    best = np.round(clean_ring(snap_ring(cv2.approxPolyDP(q, eps0, True)[:, 0, :], 6.0))).astype(int)
+    for e in ADAPT_EPS:
+        if e <= eps0:
+            continue
+        cand = np.round(clean_ring(snap_ring(cv2.approxPolyDP(q, e, True)[:, 0, :], 6.0))).astype(int)
+        if len(cand) < 3:
+            break
+        m = np.zeros_like(ref); cv2.fillPoly(m, [(cand - off).astype(np.int32)], 1)
+        inter = (m & ref).sum(); uni = (m | ref).sum()
+        if uni == 0 or inter / uni < tau:
+            break
+        best = cand
+    return best
+
+
 def polys_from(P, s, c):
     from polygonize import _fill_holes, snap_ring, clean_ring
+    if c.get("blur"):
+        sg = c["blur"] / s
+        P = cv2.GaussianBlur(P, (0, 0), sg)
     m = P > 0.35
     m = _fill_holes(m, c["hole"] / s / s)
     if c["close"]:
@@ -89,7 +136,10 @@ def polys_from(P, s, c):
     cs, hier = cv2.findContours(m.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
     if hier is None:
         return []
-    ps = [np.round(clean_ring(snap_ring(cv2.approxPolyDP(q, c["eps"], True)[:, 0, :], 6.0))).astype(int) for q in cs]
+    if c.get("adapt"):
+        ps = [adaptive_ring(q, c["adapt"], c["eps"]) for q in cs]
+    else:
+        ps = [np.round(clean_ring(snap_ring(cv2.approxPolyDP(q, c["eps"], True)[:, 0, :], 6.0))).astype(int) for q in cs]
     out, index = [], {}
     for j, hh in enumerate(hier[0]):
         if hh[3] == -1 and len(ps[j]) >= 3:
@@ -102,10 +152,10 @@ def polys_from(P, s, c):
     return out
 
 
-def summary(model):
+def summary(model, pre=""):
     print(f"model {model} | vertices = ours / labeller's, per question | IoU = rasterised polygons, mean")
     for split in ("gemini30", "val", "hf14"):
-        rows = sum((json.load(open(f)) for f in sorted(glob.glob(f"scripts/pp_probe/rows_curve_{model}_{split}*.json"))), [])
+        rows = sum((json.load(open(f)) for f in sorted(glob.glob(f"scripts/pp_probe/rows_curve{pre}_{model}_{split}*.json"))), [])
         rows = [r for r in rows if r["label"] > 0]
         if not rows:
             continue
@@ -113,6 +163,8 @@ def summary(model):
         base = np.array([r["L0 default"][0] for r in rows])
         print(f"\n{split} ({len(rows)} q)  {'config':<15} {'IoU':>7} {'dIoU':>8} {'v/l med':>8} {'p75':>6} {'p90':>6} {'<=1.5x':>7} {'<=2x':>6}")
         for name in CFG:
+            if name not in rows[0]:
+                continue
             a = np.array([r[name] for r in rows], float); x = a[:, 1] / lab
             print(f"{'':>{len(split) + 9}}{name:<15} {a[:, 0].mean():7.4f} {a[:, 0].mean() - base.mean():+8.4f} {np.median(x):8.2f} "
                   f"{np.percentile(x, 75):6.2f} {np.percentile(x, 90):6.2f} {100 * np.mean(x <= 1.5):6.0f}% {100 * np.mean(x <= 2):5.0f}%")
@@ -120,10 +172,12 @@ def summary(model):
 
 if __name__ == "__main__":
     if sys.argv[1] == "--summary":
-        summary(sys.argv[2]); sys.exit()
+        summary(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else ""); sys.exit()
     import common
     from polygonize import rasterize
     common.WITH_BOX[0] = True
+    import os
+    ONLY = [n for n in CFG if os.environ.get("CURVE_ONLY") and any(n.startswith(x) for x in os.environ["CURVE_ONLY"].split(","))] or None
     split, maps = sys.argv[1], sys.argv[2]
     shard, nsh = (int(sys.argv[3]), int(sys.argv[4])) if len(sys.argv) > 4 else (0, 1)
     common.MAPS = Path(maps)
@@ -138,11 +192,14 @@ if __name__ == "__main__":
             P = cv2.resize(p4.astype(np.float32) / 255, (w, h), interpolation=cv2.INTER_LINEAR)
             r = {"sheet": idx, "q": ref, "label": label_vertices(job[1], cat)}
             for name, c in CFG.items():
+                if ONLY and name not in ONLY:
+                    continue
                 polys = polys_from(P, s, {**B, **c})
                 M = rasterize(polys, (h, w)).astype(bool)
                 r[name] = (float((M & tgt).sum() / max(1, (M | tgt).sum())),
                            int(sum(len(p["outer"]) + sum(len(x) for x in p["holes"]) for p in polys)))
             rows.append(r)
     tag = Path(maps).name
-    json.dump(rows, open(f"scripts/pp_probe/rows_curve_{tag}_{split}{'_%d' % shard if nsh > 1 else ''}.json", "w"))
+    pre = os.environ.get("CURVE_TAG", "")
+    json.dump(rows, open(f"scripts/pp_probe/rows_curve{pre}_{tag}_{split}{'_%d' % shard if nsh > 1 else ''}.json", "w"))
     print("done", split, tag, shard, len(rows))
