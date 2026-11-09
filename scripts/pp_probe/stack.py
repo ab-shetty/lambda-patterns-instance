@@ -19,8 +19,11 @@ common.WITH_BOX[0] = True
 T = 0.35
 
 
+CUR = [None]      # (sheet, question) being scored: its label-fix v3 ignore pixels are left out of the prediction
+
+
 def iou(a, b):
-    return float((a & b).sum() / max(1, (a | b).sum()))
+    return common.masked_iou(a, b, CUR[0])
 
 
 def colour_cut(img, m, box, t=6.0, adapt=False):
@@ -118,8 +121,9 @@ def sheet(job, maps, split):
     h, w = img.shape[:2]
     rows = []
     for ref, cat, tgt, p4, box in qs:
-        # fix v2 uses the HF14 maps (common.jobs does the same for the 4096 ones)
-        f2 = Path(maps) / f"{'hf14' if split.startswith('hf14') else split}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz"
+        CUR[0] = (idx, ref)
+        # label-fix splits use their base split's maps (common.jobs does the same for the 4096 ones)
+        f2 = Path(maps) / f"{common.map_split(split)}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz"
         P4 = cv2.resize(p4, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
         s = p4.shape[1] / w
         pp, pl = probs_to_polygons(p4, (h, w)), probs_to_polygons(p4, (h, w), low_vertex=True)

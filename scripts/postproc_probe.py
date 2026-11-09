@@ -116,7 +116,7 @@ def sheet_job(args):
         anyann |= render_instance_mask(a["segmentation"], h0, w0).astype(bool)
     rows = []
     for ref_idx, cat, box, _, _ in sh["questions"]:
-        bits, n = sh["targets"][cat]
+        bits, n = sh["targets"][cat][:2]
         tgt = np.unpackbits(bits, count=h0 * w0).reshape(h0, w0).astype(bool)
         p = np.load(Path(mapdir) / f"{idx:03d}_{ref_idx:03d}.npz")["prob"].astype(np.float32) / 255
         r = {"image": idx, "ref": ref_idx}

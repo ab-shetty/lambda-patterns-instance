@@ -73,7 +73,7 @@ def main():
                 return out
 
             for ref_idx, cat, (x, y, w, h), _, _ in sh["questions"]:
-                bits, _ = sh["targets"][cat]
+                bits, _ = sh["targets"][cat][:2]
                 tgt = np.unpackbits(bits, count=h0 * w0).reshape(h0, w0).astype(bool)
                 P0 = ask([(x, y, w, h)])[0]
                 A = P0 > T

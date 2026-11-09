@@ -3054,3 +3054,12 @@ transfer:**
 **Candidate polygon default: gated irregular hole + inlet fill, Douglas-Peucker 12 px + axis snap, drop pieces < 0.5%** --
 ~1.2x the labeller's vertices on all four splits (incl. the unseen one) for 0.006-0.009 IoU. Not yet in `polygonize.py`; the
 user decides the trade. The 0.95 mIoU half of the target is a model problem (see above).
+
+### 2026-11-09: label fixes v3 (the user's Roboflow edits) and ignore regions
+
+`eval_labels/real_fixes_v3.json` (`scripts/make_real_fixes_v3.py`, from Roboflow `floz-eval28-reference` via the REST API):
+val 17's band under the roof added to its siding family; ignore regions (either answer acceptable) on val 9 / 10 (lower porch
+roof) and val 13 (the wider bottom strip, also taken out of its family); v2's HF14 fixes carried over. Ignore pixels count for
+neither prediction nor target, and a question whose box is mostly inside one is dropped (val 13 q7). The evaluator
+(`--label-fixes`) and pp_probe (split `valfix3`) apply them. gem2s-x, product stack (ms+cc): **val 0.9058 -> 0.9445** (71 q);
+with low_vertex 0.9341 at 1.00x vertices / label. Remaining val gap to 0.95: 0.0055, almost all in the 4 px edge band.

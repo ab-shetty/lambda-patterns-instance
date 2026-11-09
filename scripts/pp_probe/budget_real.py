@@ -66,12 +66,15 @@ if __name__ == "__main__":
         idx, img, anyann, qs = common.load(job)
         h, w = img.shape[:2]
         for ref, cat, tgt, p4, box in qs:
-            sp = "hf14" if split.startswith("hf14") else split
+            sp = common.map_split(split)
             p2 = np.load(maps / f"{sp}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz")["prob"]
             P = 0.7 * cv2.resize(p4, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255 + \
                 0.3 * cv2.resize(p2, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
             m = to_mask(P, p4.shape[1] / w, img, box)
-            base, gain = budget(m, tgt, anyann & ~tgt)
+            if common.IGNORE.get((idx, ref)) is not None:       # label fixes v3: either-way pixels count for neither side
+                m = m & ~common.IGNORE[(idx, ref)]
+            ign = common.IGNORE.get((idx, ref))
+            base, gain = budget(m, tgt, anyann & ~tgt & (True if ign is None else ~ign))
             rows.append({"sheet": idx, "q": ref, "cat": cat, "iou": base, **gain})
     json.dump(rows, open(f"scripts/pp_probe/rows_budget_real_{split}.json", "w"))
     mi = np.mean([r["iou"] for r in rows])

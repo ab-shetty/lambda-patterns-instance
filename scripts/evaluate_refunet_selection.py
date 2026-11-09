@@ -118,13 +118,17 @@ def _prepare_sheet(job):
     excl = exclusion_mask(rec.get("ref_exclude"), h0, w0)
     # --label-fixes: extra TARGET pixels per category (missed labels); the masks
     # above, which the reference boxes are sampled from, are left as they are
-    fix_masks = {}
+    # v3 (2026-11-09): "subtract" removes TARGET pixels; "ignore" marks pixels where either answer is acceptable --
+    # they count for neither prediction nor target, and a question whose box is mostly inside one is dropped
+    fix_masks, sub_masks, ign_masks = {}, {}, {}
     for fx in fixes:
-        if "polygon" not in fx:
+        key = next((k for k in ("polygon", "subtract", "ignore") if k in fx), None)
+        if key is None:
             continue
         m = np.zeros((h0, w0), np.uint8)
-        cv2.fillPoly(m, [np.round(np.array(fx["polygon"], np.float64)).astype(np.int32)], 1)
-        fix_masks[fx["category"]] = fix_masks.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
+        cv2.fillPoly(m, [np.round(np.array(fx[key], np.float64)).astype(np.int32)], 1)
+        bucket = {"polygon": fix_masks, "subtract": sub_masks, "ignore": ign_masks}[key]
+        bucket[fx["category"]] = bucket.get(fx["category"], np.zeros((h0, w0), bool)) | m.astype(bool)
     scale = image_max_size / max(h0, w0)
     nh, nw = max(1, round(h0 * scale)), max(1, round(w0 * scale))
     image = cv2.resize(image0, (nw, nh), interpolation=cv2.INTER_LINEAR)
@@ -145,6 +149,9 @@ def _prepare_sheet(job):
             x, y, w, h = (int(round(v)) for v in ov[str(ref_idx)])
             x, y = max(0, min(x, w0 - 1)), max(0, min(y, h0 - 1))
             w, h = max(1, min(w, w0 - x)), max(1, min(h, h0 - y))
+        ign_q = ign_masks.get(category, ign_masks.get("*"))
+        if ign_q is not None and ign_q[y:y + h, x:x + w].mean() > 0.5:
+            continue            # the reference sits on an either-way area: an ill-posed question
         crop = image0[y:y + h, x:x + w]
         if not crop.size:
             continue
@@ -172,19 +179,28 @@ def _prepare_sheet(job):
         target = np.logical_or.reduce([m for m, c in zip(masks0, categories) if c == category])
         if category in fix_masks:
             target = target | fix_masks[category]
-        targets[category] = (np.packbits(target), int(target.sum()))
+        if category in sub_masks:
+            target = target & ~sub_masks[category]
+        ign = ign_masks.get(category)                      # "*": every family on the sheet
+        if "*" in ign_masks:
+            ign = ign_masks["*"] if ign is None else ign | ign_masks["*"]
+        if ign is not None:
+            target = target & ~ign
+        targets[category] = (np.packbits(target), int(target.sum()), None if ign is None else np.packbits(ign))
     return dict(image_idx=image_idx, h0=h0, w0=w0, nh=nh, nw=nw, image=image,
                 questions=questions, targets=targets)
 
 
 def _score_question(job):
     """IoU of one prediction at native resolution (and the optional probability map)."""
-    pred_small, prob_u8, (h0, w0), (target_bits, target_pixels), save_path = job
+    pred_small, prob_u8, (h0, w0), (target_bits, target_pixels, ignore_bits), save_path = job
     if save_path:
         # Inference-resolution probability, quantised to uint8, for offline
         # ensembling / threshold sweeps (scripts/ensemble_selection.py).
         np.savez_compressed(save_path, prob=prob_u8)
     prediction = cv2.resize(pred_small, (w0, h0), interpolation=cv2.INTER_NEAREST).astype(bool)
+    if ignore_bits is not None:
+        prediction &= ~np.unpackbits(ignore_bits, count=h0 * w0).reshape(h0, w0).astype(bool)
     target = np.unpackbits(target_bits, count=h0 * w0).reshape(h0, w0).astype(bool)
     return int((prediction & target).sum()), int(prediction.sum()), target_pixels
 

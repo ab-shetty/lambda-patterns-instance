@@ -98,7 +98,7 @@ def _build_sheet(args):
         p = np.load(f)["prob"]
         if img is None:
             img = sheet_inputs(img0, p)
-        bits, _ = sh["targets"][cat]
+        bits, _ = sh["targets"][cat][:2]
         t0 = np.unpackbits(bits, count=sh["h0"] * sh["w0"]).reshape(sh["h0"], sh["w0"])
         t = cv2.resize(t0, (p.shape[1], p.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
         for src, n in ((p, per_q), (None, per_q // 4), ("corrupt", per_q // 3)):

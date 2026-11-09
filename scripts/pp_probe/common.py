@@ -11,9 +11,27 @@ VAL = [4, 5, 6, 8, 9, 10, 13, 15, 17, 19, 20, 21, 22, 26]
 WITH_BOX = [False]      # pmap.py sets True to also get the reference box (native x, y, w, h)
 MAPS = Path("data/floz-diag/xblend-kq30-kms30")
 
+IGNORE = {}            # (sheet, question) -> the either-way pixels of that question's family (label fixes v3), or None
+
+
+def masked_iou(m, tgt, key):
+    """IoU with the question's ignore pixels (if any) out of the prediction; load() already took them out of the target."""
+    ign = IGNORE.get(key)
+    if ign is not None:
+        m = m & ~ign
+    return float((m & tgt).sum() / max(1, (m | tgt).sum()))
+
+
+def map_split(split):
+    """The maps a split is scored from: label-fix variants share their base split's maps."""
+    return "hf14" if split.startswith("hf14") else "val" if split.startswith("val") else split
+
+
 def jobs(split):
-    fix = split == "hf14fix2"
-    fixes = json.load(open("eval_labels/hf14_fixes_v2.json")) if fix else {}
+    # hf14fix2: HF14 with label fixes v2; valfix3: val with the 2026-11-09 Roboflow fixes (eval_labels/real_fixes_v3.json:
+    # sheet 17's band added, ignore regions on 9 / 10 / 13; v3 also holds v2's HF14 fixes)
+    fixes = (json.load(open("eval_labels/hf14_fixes_v2.json")) if split == "hf14fix2" else
+             json.load(open("eval_labels/real_fixes_v3.json")) if split in ("valfix3", "hf14fix3") else {})
     if split.startswith("gemini30") or split == "gemdev":
         # gemini30b: 30 more Gemini sheets; gemdev: all 139 hand-labelled Gemini sheets outside Gemini30, the post-processing
         # dev set (xblend never trained on them; the gem* models did). Both automatic boxes (no hand boxes)
@@ -28,7 +46,7 @@ def jobs(split):
     else:
         recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
         hb = hand_boxes(); idxs = HF14 if split.startswith("hf14") else VAL
-    mapdir = MAPS / f"{'hf14' if split.startswith('hf14') else split}_4096" / "probs"
+    mapdir = MAPS / f"{map_split(split)}_4096" / "probs"
     return [(i, {k: recs[i][k] for k in ("image", "image_path", "annotations", "ref_exclude") if k in recs[i]},
              hb.get(str(i), {}), fixes.get(str(i), []), str(mapdir)) for i in idxs]
 
@@ -46,8 +64,9 @@ def load(job):
     for a in anns: anyann |= render_instance_mask(a["segmentation"], h0, w0).astype(bool)
     qs = []
     for ref_idx, cat, box, _, _ in sh["questions"]:
-        bits, n = sh["targets"][cat]
+        bits, n, ign = sh["targets"][cat]
         tgt = np.unpackbits(bits, count=h0 * w0).reshape(h0, w0).astype(bool)
+        IGNORE[(idx, ref_idx)] = None if ign is None else np.unpackbits(ign, count=h0 * w0).reshape(h0, w0).astype(bool)
         p = np.load(Path(mapdir) / f"{idx:03d}_{ref_idx:03d}.npz")["prob"]
         qs.append((ref_idx, cat, tgt, p) if not WITH_BOX[0] else (ref_idx, cat, tgt, p, box))
     return idx, img, anyann, qs
