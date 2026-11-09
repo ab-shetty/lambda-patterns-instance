@@ -15,8 +15,14 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 - **The trade-off curve** (`scripts/pp_probe/curve.py`): Douglas-Peucker eps is the lever -- eps 4 cuts the median ratio 30-40%
   for ~-0.002 IoU, eps 8 gets ~1.5x on every split for -0.006..-0.008. The p90 tail (10-26x, notches / holes) needs something
   else: hole filling and closing help real sheets but hurt Gemini30.
-- **Next**: the user picks a point on the curve (eps 4 or 8 as the `polygonize.py` default?); then attack the tail -- e.g. a hole /
-  notch rule that tells a skylight (keep) from slope text (fill), judged per split on vertices AND IoU.
+- **The user's aspirational target: <= 1.2x vertices / label at >= 0.95 mIoU.**
+- **~1.2x is reached** by filling irregular holes and inlets (convex-hull gaps) that the model was unsure about (mean P >= 0.05),
+  then per-outline adaptive eps (tau .95) and dropping pieces < 0.5%: gem_s7 1.22x / 1.20x / 1.22x at -0.0071 / -0.0094 / -0.0047
+  IoU (Gemini30 / val / HF14); transfers to two other models. The tail was dropouts inside correct regions, not edges.
+- **Next**: (1) confirm on gemdev (maps for the 139 Gemini sheets outside Gemini30) -- the rules were designed on the eval sheets;
+  (2) port to `scripts/polygonize.py` behind a flag and re-score the full stack (ms + cc); (3) win back the ~0.005-0.009 IoU: a
+  better gap classifier than shape + mean P (e.g. ink / texture match to the reference inside the gap); (4) 0.95 mIoU is a model
+  problem -- ignoring 2 px around every true edge still gives Gemini30 0.91, so the rest is wrong / missing regions.
 
 ## Where we were (2026-10-22): closed out
 

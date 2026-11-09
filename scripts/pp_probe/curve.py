@@ -72,6 +72,10 @@ CFG = {  # cumulative ladder L0..L7, then single levers off the default
     "p .10 inlet+tau.97+minf.01": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.97, minf=0.01, pmin=0.10),
     "p .10 inlet f.1+tau.95+minf.01": dict(rhole=(0.8, 0.1), inlet=(0.8, 0.1), adapt=0.95, minf=0.01, pmin=0.10),
     "p .10 inlet":           dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), pmin=0.10),
+    "q .05 inlet+tau.95":    dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, pmin=0.05),
+    "q .05 inlet+tau.96":    dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.96, pmin=0.05),
+    "q .05 inlet+tau.96+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.96, minf=0.005, pmin=0.05),
+    "q .05 inlet+tau.95+minf.005": dict(rhole=(0.8, 0.05), inlet=(0.8, 0.05), adapt=0.95, minf=0.005, pmin=0.05),
 }
 ONLY = None
 

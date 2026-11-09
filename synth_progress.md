@@ -3009,3 +3009,29 @@ User's aspirational target (2026-11-09): **vertices / label <= 1.2x at mIoU >= 0
   is reached only on val (tau 0.95). The p90 tail (9-13x on Gemini30 / HF14) survives every polygon-side lever.
 - **0.95 mIoU is a model problem**: ignoring 2 px around every true edge gives 0.9105 / 0.9376 / 0.9458 -- a perfect boundary
   still leaves Gemini30 ~0.91; the rest is wrong / missing regions.
+
+### 2026-11-09 (CPU, cont.) -- the tail is dropouts inside correct regions; shape + probability fill reaches ~1.2x
+
+Rendering the worst questions (`data/diag/tail_viz/`, red ours / blue vertices / green label) showed it: on Gemini30 17 (hip roof,
+2,761 vertices vs 86) the outer outlines are clean; the vertices are on **blotchy dropouts inside correct roof planes** --
+enclosed holes and, mostly, **inlets** reaching the plane's edge along the ridge / hip lines. The label's only holes are the
+rectangular skylights. New levers in `curve.py`:
+- `rhole` -- fill holes that are not rectangle-like (area / min-area rectangle < 0.8) and < 5% of the answer; skylights stay.
+- `inlet` -- per piece, the gaps between the piece and its convex hull; fill the irregular ones (< 0.8 rectangularity, < 5% of the
+  piece). A real L-shaped notch or an inset of another material is rectangle-like and stays.
+- `pmin` -- fill a gap only if its mean probability >= pmin: a dropout the model was unsure about, not a true gap. Cuts the cost
+  of the fills by more than half.
+
+| gemho_gem_s7, IoU change / vertices-label median (p90) | Gemini30 | val | HF14 |
+|---|---|---|---|
+| default | 0.8904 / 3.44 (26.0) | 0.9042 / 2.73 (6.2) | 0.9203 / 2.80 (18.7) |
+| holes + inlets, no gate, + tau .95 + pieces < 1% | -0.0154 / 1.09 (3.6) | -0.0224 / 1.15 (1.8) | -0.0115 / 1.02 (4.6) |
+| same, gate P >= .05 | -0.0058 / 1.20 (3.5) | -0.0139 / 1.11 (1.8) | -0.0051 / 1.09 (4.9) |
+| **gate P >= .05, tau .95, pieces < 0.5% (balanced)** | **-0.0071 / 1.22 (4.6)** | **-0.0094 / 1.20 (1.8)** | **-0.0047 / 1.22 (4.9)** |
+| gate P >= .10, tau .97, pieces < 1% (gentle) | -0.0021 / 1.48 (6.2) | -0.0086 / 1.37 (2.1) | -0.0021 / 1.28 (7.0) |
+| gated fills alone (P >= .10, no tau / pieces) | -0.0013 / 2.89 | +0.0009 / 2.28 | +0.0017 / 2.41 |
+
+Transfers to the other two models' maps unchanged (gemedge4 / gemedge10, gate .05 + tau .95 + pieces < 1%: Gemini30 1.19x / 1.20x
+at -0.0077 / -0.0067; HF14 1.07x / 1.05x at -0.0025 / -0.0043). Caveat: designed while looking at these eval sheets (same sheets
+for all three models); confirm on gemdev (the 139 Gemini sheets outside Gemini30) before adopting. Latency: 0.07-0.12 s per
+question (median, max 0.48 s) vs 0.03-0.05 s for the default. Not yet in `polygonize.py`.
