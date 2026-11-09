@@ -81,11 +81,7 @@ reproduces the old behaviour for historical checks.
 
 ## Current target and result
 
-**Target since 2026-11-09 (the user): mIoU >= 0.95 on the real sheets (val and HF14; fix v2 labels where they apply) AND
-polygon vertices <= 1.2x the labeller's (median per question, `scripts/pp_probe/vertcount.py`), both measured on the product
-output (polygons + post-processing). Gemini30 stays a check, not the target.** Status at the time it was set (gem2s-x, product
-stack, 2 px + snap polygons): val 0.906, HF14 0.927, fix v2 0.937 at ~2.7-2.9x vertices; the `low_vertex` polygons reach ~1.0-1.15x
-for -0.006..-0.009 IoU.
+**Target since 2026-11-09 (the user): mIoU >= 0.95 on the real sheets and <= 1.2x the labeller's vertices, on the product output.**
 
 The original target was **reference-conditioned union IoU >= 0.65** on the real
 HF14 holdout, at any checkpoint within ten training epochs. It was set against
