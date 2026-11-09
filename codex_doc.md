@@ -15,7 +15,8 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 - **The trade-off curve** (`scripts/pp_probe/curve.py`): Douglas-Peucker eps is the lever -- eps 4 cuts the median ratio 30-40%
   for ~-0.002 IoU, eps 8 gets ~1.5x on every split for -0.006..-0.008. The p90 tail (10-26x, notches / holes) needs something
   else: hole filling and closing help real sheets but hurt Gemini30.
-- **The user's aspirational target: <= 1.2x vertices / label at >= 0.95 mIoU.**
+- **The target (the user, 2026-11-09): >= 0.95 mIoU on the real sheets (val, HF14 / fix v2) AND <= 1.2x vertices / label**, on
+  the product output. Gemini30 is a check, no longer the target (PROJECT_UNDERSTANDING.md).
 - **~1.2x is reached, and holds on unseen sheets**: fill irregular holes and inlets (convex-hull gaps) the model was unsure about
   (mean P >= 0.05), Douglas-Peucker 12 px + axis snap, drop pieces < 0.5% (`curve.py` "e .05 inlet+eps12+minf.005"): gemdev (xblend,
   unseen) 1.23x / -0.0082, Gemini30 1.17x / -0.0065, val 1.00x / -0.0089, HF14 1.15x / -0.0061. The tail was dropouts inside
