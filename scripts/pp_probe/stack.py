@@ -4,6 +4,8 @@
   ms      multi-scale map 0.7 x 4096 + 0.3 x 2048 (synth_progress 2026-10-20: never hurts), then polygons
   cc      chromaticity colour cut (pp_probe/colourcut.py, threshold 6, colour sheets only), then polygons
   ms+cc   both, then polygons
+  *_lv    the same with polygonize's low_vertex option (2026-11-09: irregular hole / inlet fill gated on P >= 0.05, before the
+          colour cut; Douglas-Peucker 12 px; pieces < 0.5%). v_<key>: polygon vertices; label_v: the labeller's.
 Usage: python3 scripts/pp_probe/stack.py SPLIT [MAPS_DIR]   (MAPS_DIR holds {split}_4096/probs and {split}_2048/probs;
 default the current best's maps). Rows -> scripts/pp_probe/rows_stack_{tag}_{split}.json."""
 import json, sys
@@ -11,7 +13,8 @@ from pathlib import Path
 import cv2, numpy as np
 sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0]); sys.path.insert(0, 'scripts'); sys.path.insert(0, '.')
 import common
-from polygonize import probs_to_polygons, rasterize, _fill_holes
+from polygonize import probs_to_polygons, rasterize, _fill_holes, fill_gaps, LOW_VERTEX
+from curve import label_vertices
 common.WITH_BOX[0] = True
 T = 0.35
 
@@ -89,17 +92,25 @@ def colour_add(img, m, box, t=2.0):
     return m | (closed & (d < t))
 
 
-def to_mask(P_native, s, img=None, box=None, add=False, paper=False, adapt=False):
+def nv(polys):
+    return sum(len(p["outer"]) + sum(len(x) for x in p["holes"]) for p in polys)
+
+
+def to_mask(P_native, s, img=None, box=None, add=False, paper=False, adapt=False, lv=False, out=None, key=None):
     m = _fill_holes(P_native > T, 4096 / s / s)
+    if lv:
+        m = fill_gaps(m, P_native)
     if img is not None:
         m = colour_cut(img, m, box, adapt=adapt)
         if paper:
             m = paper_cut(img, m, box)
         if add:
             m = colour_add(img, m, box)
-    u8 = (np.clip(P_native, 0, 1) * 255).astype(np.uint8)
     # polygons from the (possibly cut) mask: run the production step on a map that is 1 inside, 0 outside
-    return rasterize(probs_to_polygons(np.where(m, 255, 0).astype(np.uint8), m.shape), m.shape)
+    polys = probs_to_polygons(np.where(m, 255, 0).astype(np.uint8), m.shape, **(LOW_VERTEX if lv else {}))
+    if out is not None:
+        out["v_" + key] = nv(polys)
+    return rasterize(polys, m.shape)
 
 
 def sheet(job, maps, split):
@@ -111,15 +122,18 @@ def sheet(job, maps, split):
         f2 = Path(maps) / f"{'hf14' if split.startswith('hf14') else split}_2048" / "probs" / f"{idx:03d}_{ref:03d}.npz"
         P4 = cv2.resize(p4, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
         s = p4.shape[1] / w
-        r = {"sheet": idx, "q": ref,
+        pp, pl = probs_to_polygons(p4, (h, w)), probs_to_polygons(p4, (h, w), low_vertex=True)
+        r = {"sheet": idx, "q": ref, "label_v": label_vertices(job[1], cat),
              "base": iou(cv2.resize(p4, (w, h), interpolation=cv2.INTER_NEAREST) > int(T * 255), tgt),
-             "poly": iou(rasterize(probs_to_polygons(p4, (h, w)), (h, w)), tgt),
+             "poly": iou(rasterize(pp, (h, w)), tgt), "v_poly": nv(pp),
+             "poly_lv": iou(rasterize(pl, (h, w)), tgt), "v_poly_lv": nv(pl),
              "cc": iou(to_mask(P4, s, img, box), tgt)}
         if f2.exists():
             p2 = np.load(f2)["prob"]
             P = 0.7 * P4 + 0.3 * cv2.resize(p2, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
             r["ms"] = iou(to_mask(P, s), tgt)
-            r["ms+cc"] = iou(to_mask(P, s, img, box), tgt)
+            r["ms+cc"] = iou(to_mask(P, s, img, box, out=r, key="ms+cc"), tgt)
+            r["ms+cc_lv"] = iou(to_mask(P, s, img, box, lv=True, out=r, key="ms+cc_lv"), tgt)
             r["ms+cc+paper"] = iou(to_mask(P, s, img, box, paper=True), tgt)
             r["ms+acc+paper"] = iou(to_mask(P, s, img, box, paper=True, adapt=True), tgt)
         rows.append(r)
@@ -133,6 +147,11 @@ if __name__ == "__main__":
     R = [r for job in common.jobs(split) for r in sheet(job, maps, split)]
     tag = Path(maps).name
     json.dump(R, open(f"scripts/pp_probe/rows_stack_{tag}_{split}.json", "w"))
-    keys = [k for k in ("base", "poly", "ms", "cc", "ms+cc", "ms+cc+paper", "ms+acc+paper") if k in R[0]]
+    keys = [k for k in ("base", "poly", "poly_lv", "ms", "cc", "ms+cc", "ms+cc_lv", "ms+cc+paper", "ms+acc+paper") if k in R[0]]
     print(split, tag, " ".join(f"{k} {np.mean([r[k] for r in R]):.4f}" for k in keys),
           "| vs poly:", " ".join(f"{k} {np.mean([r[k] - r['poly'] for r in R]):+.4f}" for k in keys if k not in ("base", "poly")))
+    L = [r for r in R if r["label_v"] > 0]
+    def ratio(k):
+        return np.array([r["v_" + k] / r["label_v"] for r in L])
+    print("   vertices / label, median (p90):", " ".join(
+        f"{k} {np.median(ratio(k)):.2f}x ({np.percentile(ratio(k), 90):.1f}x)" for k in ("poly", "poly_lv", "ms+cc", "ms+cc_lv") if "v_" + k in L[0]))

@@ -20,9 +20,18 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
   (mean P >= 0.05), Douglas-Peucker 12 px + axis snap, drop pieces < 0.5% (`curve.py` "e .05 inlet+eps12+minf.005"): gemdev (xblend,
   unseen) 1.23x / -0.0082, Gemini30 1.17x / -0.0065, val 1.00x / -0.0089, HF14 1.15x / -0.0061. The tail was dropouts inside
   correct regions, not edges. (The adaptive-eps variant looked better on the eval sheets but did not transfer to gemdev.)
-- **Next**: (1) the user picks the trade; (2) port to `scripts/polygonize.py` behind a flag and re-score the full stack (ms + cc); (3) win back the ~0.005-0.009 IoU: a
-  better gap classifier than shape + mean P (e.g. ink / texture match to the reference inside the gap); (4) 0.95 mIoU is a model
-  problem -- ignoring 2 px around every true edge still gives Gemini30 0.91, so the rest is wrong / missing regions.
+- **Ported, not yet scored** (VM ended): `scripts/polygonize.py` `probs_to_polygons(..., low_vertex=True)` (off by default; `fill_gaps`
+  + `LOW_VERTEX` settings; identical to curve.py's candidate on 23 / 23 val questions). `scripts/pp_probe/stack.py` now also reports
+  `poly_lv` and `ms+cc_lv` (gap fill before the colour cut) with vertices / label for every variant. First thing to run on a new VM:
+  ```bash
+  set -a; . ~/.env; set +a
+  python3 -c "from huggingface_hub import snapshot_download as d; d('abshetty/floz-diag', repo_type='dataset', allow_patterns=['gem2s_x/*'], local_dir='data/floz-diag')"
+  for s in gemini30 val hf14 hf14fix2; do PYTHONPATH=. python3 scripts/pp_probe/stack.py $s data/floz-diag/gem2s_x & done; wait
+  ```
+  Compare `ms+cc` vs `ms+cc_lv` (IoU and vertices / label); if the user takes the trade, flip `low_vertex` to the default.
+- **Next**: (1) the user picks the trade from that table; (2) win back the ~0.005-0.009 IoU: a better gap classifier than shape + mean P
+  (e.g. ink / texture match to the reference inside the gap); (3) 0.95 mIoU is a model problem -- ignoring 2 px around every true
+  edge still gives Gemini30 0.91, so the rest is wrong / missing regions.
 
 ## Where we were (2026-10-22): closed out
 
