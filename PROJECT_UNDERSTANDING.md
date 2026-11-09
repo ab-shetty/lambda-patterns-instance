@@ -17,6 +17,11 @@ and the frontend draws polygons over every section with that pattern inside
 that search area. Each training and evaluation image stands for one such
 search area, so whole-image scoring matches the product.
 
+Users edit those polygons, so their vertex count is a product requirement, not a side metric: polygons
+carrying several times the vertices a human labeller would place (about 3x at the median as of 2026-11, far
+more around text and on diagonal edges) are a serious failure even at high IoU, and vertices per labelled
+vertex should be reported alongside IoU.
+
 ## Meaning of pattern labels
 
 Labels such as `pattern1`, `pattern2`, etc. are grouping IDs local to a single
