@@ -1,0 +1,2 @@
+valfix3 refine32_s7 base 0.9389 poly 0.9441 poly_lv 0.9326 ms 0.9445 cc 0.9441 ms+cc 0.9443 ms+cc_lv 0.9335 ms+cc+paper 0.9443 ms+acc+paper 0.9440 | vs poly: poly_lv -0.0116 ms +0.0004 cc -0.0001 ms+cc +0.0002 ms+cc_lv -0.0106 ms+cc+paper +0.0002 ms+acc+paper -0.0001
+   vertices / label, median (p90): poly 2.62x (5.5x) poly_lv 1.00x (1.5x) ms+cc 2.50x (4.9x) ms+cc_lv 1.00x (1.5x)
