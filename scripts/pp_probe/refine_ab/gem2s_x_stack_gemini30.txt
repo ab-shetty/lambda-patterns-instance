@@ -1,0 +1,2 @@
+gemini30 gem2s_x base 0.8894 poly 0.8974 poly_lv 0.8889 ms 0.9037 cc 0.9056 ms+cc 0.9119 ms+cc_lv 0.9041 ms+cc+paper 0.9179 ms+acc+paper 0.9257 | vs poly: poly_lv -0.0084 ms +0.0063 cc +0.0082 ms+cc +0.0145 ms+cc_lv +0.0068 ms+cc+paper +0.0206 ms+acc+paper +0.0283
+   vertices / label, median (p90): poly 4.22x (16.7x) poly_lv 1.15x (3.0x) ms+cc 3.69x (16.3x) ms+cc_lv 1.05x (2.8x)

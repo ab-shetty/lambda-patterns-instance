@@ -1,0 +1,3 @@
+gemini30: error px within 2 px of the true edge: fp_ink 41%  fp_paper 31%  fn_ink 18%  fn_paper 10%
+  edge-stroke pixels inside: label 0.50, prediction 0.64
+  small (<= 4096 px): 195 q, IoU 0.9119, IoU lost to the 2 px band 0.0265
