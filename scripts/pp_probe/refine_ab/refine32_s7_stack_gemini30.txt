@@ -1,0 +1,2 @@
+gemini30 refine32_s7 base 0.8898 poly 0.8977 poly_lv 0.8903 ms 0.9040 cc 0.9060 ms+cc 0.9122 ms+cc_lv 0.9048 ms+cc+paper 0.9182 ms+acc+paper 0.9258 | vs poly: poly_lv -0.0074 ms +0.0064 cc +0.0083 ms+cc +0.0145 ms+cc_lv +0.0071 ms+cc+paper +0.0205 ms+acc+paper +0.0282
+   vertices / label, median (p90): poly 4.03x (17.0x) poly_lv 1.15x (3.0x) ms+cc 3.54x (16.2x) ms+cc_lv 1.03x (2.7x)
