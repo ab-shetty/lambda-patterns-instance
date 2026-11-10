@@ -1,0 +1,1 @@
+hf14fix2 51 q | iou 0.9338 band1 0.9551 band2 0.9600 band4 0.9640 | error px within 4px of true edge 39.5% | vertices pred/true median 3.12

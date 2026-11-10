@@ -1,0 +1,1 @@
+valfix3 71 q | iou 0.9352 band1 0.9671 band2 0.9730 band4 0.9773 | error px within 4px of true edge 59.5% | vertices pred/true median 2.38

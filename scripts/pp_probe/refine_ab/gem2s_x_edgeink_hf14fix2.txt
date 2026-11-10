@@ -1,0 +1,4 @@
+hf14fix2: error px within 2 px of the true edge: fp_ink 19%  fp_paper 18%  fn_ink 28%  fn_paper 35%
+  edge-stroke pixels inside: label 0.61, prediction 0.52
+  large (> 4096 px): 19 q, IoU 0.9430, IoU lost to the 2 px band 0.0223
+  small (<= 4096 px): 32 q, IoU 0.9313, IoU lost to the 2 px band 0.0327
