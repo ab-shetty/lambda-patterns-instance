@@ -1,0 +1,1 @@
+gemini30 195 q | iou 0.8977 band1 0.9162 band2 0.9187 band4 0.9211 | error px within 4px of true edge 20.6% | vertices pred/true median 3.98
