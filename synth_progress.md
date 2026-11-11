@@ -3122,3 +3122,19 @@ ground line) carries 0.023 of 0.054 loss. hf14fix2 -- three questions carry 0.01
 roof looks like the same shingle), 14 q0 (label also takes the band on the second elevation; we miss it), 27 q2; 2 q1 misses
 siding in cast shadow. val 5 q2 excludes the darker porch roof (same ambiguity as the val 9 / 10 ignore regions). 18, 14 and 5
 are for the user to review in Roboflow.
+
+### 2026-11-11: label fixes v4 (Roboflow is the single source again)
+
+v2's two HF14 fixes were only in `eval_labels/hf14_fixes_v2.json`; Roboflow still had the original labels (and on sheet 14 a
+pattern2 rectangle on the window-09 panel that v3 never read). Pushed v2 into Roboflow (`scripts/push_v2_to_roboflow.py`, read
+back identical; backups `eval_labels/roboflow_backup_2026-11-11/`), removed the stale pattern2 rectangle (the user: the panel is
+the horizontal lap siding, pattern1), and the user made HF14 18's right roof (running-bond tile vs the left roof's speckled
+shingle, same dark grey) an ignore region. `make_real_fixes_v3.py --roboflow-only` -> `eval_labels/real_fixes_v4.json` (val
+sheets identical to v3); splits `valfix4` / `hf14fix4`. gem2s-x, product stack:
+
+| | ms+cc | ms+cc_lv | ms3+cc_v2 (product v2) |
+|---|---|---|---|
+| valfix4 (71 q) | 0.9442 / 2.36x | 0.9338 / 1.00x | 0.9495 / 1.13x |
+| hf14fix4 (50 q) | 0.9413 / 2.88x | 0.9361 / 1.05x | **0.9457 / 1.17x** |
+
+HF14 18 q8 0.680 -> 0.974; q9 (the right roof's own question) is dropped (its box is inside the ignore region).

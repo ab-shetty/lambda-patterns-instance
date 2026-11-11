@@ -1,0 +1,4 @@
+Using the latest cached version of the dataset since abshetty/floz-synth-v5 couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'real-world-test' at data/abshetty___floz-synth-v5/real-world-test/0.0.0/967e3e9c54c394c7119246f615901cb7d36e2f85 (last modified on Tue Nov 10 21:51:07 2026).
+valfix4 gem2s_x base 0.9389 poly 0.9445 poly_lv 0.9339 ms 0.9444 cc 0.9443 ms+cc 0.9442 ms+cc_lv 0.9338 ms3+cc_v2 0.9495 ms+cc+paper 0.9442 ms+acc+paper 0.9440 | vs poly: poly_lv -0.0105 ms -0.0000 cc -0.0001 ms+cc -0.0002 ms+cc_lv -0.0107 ms3+cc_v2 +0.0050 ms+cc+paper -0.0002 ms+acc+paper -0.0005
+   vertices / label, median (p90): poly 2.62x (5.4x) poly_lv 1.00x (1.5x) ms+cc 2.36x (4.6x) ms+cc_lv 1.00x (1.5x) ms3+cc_v2 1.13x (2.0x)

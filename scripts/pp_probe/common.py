@@ -31,7 +31,8 @@ def jobs(split):
     # hf14fix2: HF14 with label fixes v2; valfix3: val with the 2026-11-09 Roboflow fixes (eval_labels/real_fixes_v3.json:
     # sheet 17's band added, ignore regions on 9 / 10 / 13; v3 also holds v2's HF14 fixes)
     fixes = (json.load(open("eval_labels/hf14_fixes_v2.json")) if split == "hf14fix2" else
-             json.load(open("eval_labels/real_fixes_v3.json")) if split in ("valfix3", "hf14fix3") else {})
+             json.load(open("eval_labels/real_fixes_v3.json")) if split in ("valfix3", "hf14fix3") else
+             json.load(open("eval_labels/real_fixes_v4.json")) if split in ("valfix4", "hf14fix4") else {})
     if split.startswith("gemini30") or split == "gemdev":
         # gemini30b: 30 more Gemini sheets; gemdev: all 139 hand-labelled Gemini sheets outside Gemini30, the post-processing
         # dev set (xblend never trained on them; the gem* models did). Both automatic boxes (no hand boxes)

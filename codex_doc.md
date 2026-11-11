@@ -16,7 +16,13 @@ the real-sheet edge convention.
   pieces < 0.5%, polygons grown 1 px: valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x** (current ms+cc_lv: 0.9338 / 1.00x,
   0.9308 / 1.05x). Costs ~2.5x the compute of today's two scales (the user has not decided on latency). The scale part holds on
   gemdev; the offset loses on Gemini (opposite label convention) and eps 6 is ~1.5x vertices on Gemini sheets.
-- **Next**: (1) the user reviews hf14 18 q8, hf14 14 q0 and val 5 q2 in Roboflow (worth up to ~0.012 on hf14fix2);
+- **Label fixes v4 (2026-11-11)**: Roboflow `floz-eval28-reference` is the single source again -- v2 pushed into it
+  (`scripts/push_v2_to_roboflow.py`, backups `eval_labels/roboflow_backup_2026-11-11/`), sheet 14's stale pattern2 rectangle on
+  the window-09 panel removed, and the user made HF14 18's right roof an ignore region. `make_real_fixes_v3.py --roboflow-only`
+  -> `eval_labels/real_fixes_v4.json`; pp_probe splits `valfix4` / `hf14fix4` (50 q: 18's right-roof question is dropped).
+  Product v2 (`stack.py` ms3+cc_v2): **valfix4 0.9495 / 1.13x, hf14fix4 0.9457 / 1.17x**. hf14 14 q0 is a model miss (the
+  right elevation's top band, same hatch as the reference), not a label question.
+- **Next**: (1) the user reviews val 5 q2 (darker porch roof, same ambiguity as val 9 / 10) in Roboflow;
   (2) port the configuration into `polygonize.py` (eps / offset options) and the evaluator (three scales) and score end to end;
   (3) model work for the rest of hf14fix2 (cast shadows on 2 q1; 27 q2) -- labelling more real / Gemini sheets is the only
   training lever that has ever moved results beyond seed noise; (4) a per-sheet eps if Gemini-like sheets must also stay <= 1.2x.

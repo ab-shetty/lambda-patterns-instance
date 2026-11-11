@@ -5,7 +5,9 @@ image's current Roboflow boxes (every polygon kept, coordinates unchanged) plus 
 compared polygon by polygon. Backups of the pre-push annotations: eval_labels/roboflow_backup_2026-11-11/.
   18: the right-roof polygon (over HF annotation 9) pattern3 -> pattern3b   (v2 "reassign")
   14: + pattern1 rectangle [[4895,926],[5042,926],[5042,985],[4895,985]] (v2: panel under window 09)
-Usage: python3 scripts/push_v2_to_roboflow.py SHEET [--dry-run]"""
+  14b: drop the old pattern2 rectangle on that same panel (Roboflow had it pattern2, v2 pattern1; the user, 2026-11-11: keep
+       the one that matches the other horizontal lap-siding panels, i.e. pattern1). Built from eval_14_after_v2push.json.
+Usage: python3 scripts/push_v2_to_roboflow.py SHEET|14b [--dry-run]"""
 import json, os, sys, glob, subprocess, tempfile
 sys.path.insert(0, "."); sys.path.insert(0, "scripts")
 import numpy as np, cv2
@@ -31,10 +33,12 @@ def sig(boxes):
     return sorted((b_label, tuple(tuple(np.round(p, 1)) for p in pts)) for b_label, pts in boxes)
 
 
-sheet, dry = int(sys.argv[1]), "--dry-run" in sys.argv
+step, dry = sys.argv[1], "--dry-run" in sys.argv
+sheet = int(step.rstrip("b"))
 files = {14: "WULmP5UDWIg4LMKW2MoQ", 18: "xGTk41KmyVJVBoaeYgSg"}
 img_id = files[sheet]
-im = json.load(open(f"eval_labels/roboflow_backup_2026-11-11/eval_{sheet}.json"))["image"]
+src = "eval_14_after_v2push.json" if step == "14b" else f"eval_{sheet}.json"
+im = json.load(open(f"eval_labels/roboflow_backup_2026-11-11/{src}"))["image"]
 an = im["annotation"]; h, w = int(an["height"]), int(an["width"])
 boxes = [(b["label"], pts_of(b)) for b in an["boxes"]]
 if sheet == 18:
@@ -53,6 +57,11 @@ if sheet == 18:
     assert len(hits) == 1, f"expected one right-roof polygon, found {hits}"
     j = hits[0]; boxes[j] = ("pattern3b", boxes[j][1])
     want = boxes
+elif step == "14b":
+    drop = [j for j, (lab, p) in enumerate(boxes) if lab == "pattern2" and 4890 <= np.array(p)[:, 0].min() <= 4900
+            and 920 <= np.array(p)[:, 1].min() <= 930 and np.array(p)[:, 0].max() < 5050]
+    assert len(drop) == 1, drop
+    want = [b for j, b in enumerate(boxes) if j != drop[0]]
 elif sheet == 14:
     want = boxes + [("pattern1", [[4895., 926.], [5042., 926.], [5042., 985.], [4895., 985.]])]
 cats = sorted({l for l, _ in want})

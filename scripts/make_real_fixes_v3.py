@@ -11,7 +11,10 @@ edits are applied at scoring time (evaluate_refunet_selection.py --label-fixes, 
                             roof), and for the families it is not ambiguous for the model does not select it anyway.
 Roboflow is read through the REST API (no export version needed; the agent proxy authenticates):
     python3 scripts/make_real_fixes_v3.py [--api-dir data/roboflow/eval28-api] [--out eval_labels/real_fixes_v3.json]
-v2's HF14 fixes (sheets 14, 18) are carried over unchanged, so v3 = v2 + the val edits."""
+v2's HF14 fixes (sheets 14, 18) are carried over unchanged, so v3 = v2 + the val edits.
+--roboflow-only (v4, 2026-11-11): v2 now lives in Roboflow too (scripts/push_v2_to_roboflow.py), so every sheet comes from
+Roboflow alone -- the user's later edits on 14 / 18 count (v4: 18's right roof is an ignore region instead of pattern3b):
+    python3 scripts/make_real_fixes_v3.py --roboflow-only --refetch --out eval_labels/real_fixes_v4.json"""
 import argparse, glob, json, os, subprocess, sys
 sys.path.insert(0, "."); sys.path.insert(0, "scripts")
 import numpy as np, cv2
@@ -23,11 +26,12 @@ PROJ = "https://api.roboflow.com/perceive-ai/floz-eval28-reference"
 
 def fetch(api_dir):
     os.makedirs(api_dir, exist_ok=True)
+    q = f"?api_key={os.environ['ROBOFLOW_API_KEY']}" if os.environ.get("ROBOFLOW_API_KEY") else ""   # no agent proxy on a bare VM
     s = f"{api_dir}/search.json"
-    subprocess.run(["curl", "-sS", "-m", "120", "-X", "POST", f"{PROJ}/search", "-H", "Content-Type: application/json",
+    subprocess.run(["curl", "-sS", "-m", "120", "-X", "POST", f"{PROJ}/search{q}", "-H", "Content-Type: application/json",
                     "-d", '{"limit":100,"fields":["id","name"]}', "-o", s], check=True)
     for r in json.load(open(s))["results"]:
-        subprocess.run(["curl", "-sS", "-m", "60", f"{PROJ}/images/{r['id']}", "-o", f"{api_dir}/img_{r['id']}.json"], check=True)
+        subprocess.run(["curl", "-sS", "-m", "60", f"{PROJ}/images/{r['id']}{q}", "-o", f"{api_dir}/img_{r['id']}.json"], check=True)
 
 
 def poly_of(bx):
@@ -47,11 +51,12 @@ def main():
     ap.add_argument("--api-dir", default="data/roboflow/eval28-api")
     ap.add_argument("--out", default="eval_labels/real_fixes_v3.json")
     ap.add_argument("--refetch", action="store_true")
+    ap.add_argument("--roboflow-only", action="store_true", help="no v2 carry-over: Roboflow is the single source (v4)")
     a = ap.parse_args()
     if a.refetch or not glob.glob(f"{a.api_dir}/img_*.json"):
         fetch(a.api_dir)
     recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
-    v2 = json.load(open("eval_labels/hf14_fixes_v2.json"))
+    v2 = {} if a.roboflow_only else json.load(open("eval_labels/hf14_fixes_v2.json"))
     out = {"_doc": __doc__.split("\n\n")[0] + " Regenerate with scripts/make_real_fixes_v3.py.",
            **{k: v for k, v in v2.items() if not k.startswith("_")}}
     for f in sorted(glob.glob(f"{a.api_dir}/img_*.json")):

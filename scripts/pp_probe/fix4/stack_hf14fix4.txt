@@ -1,0 +1,2 @@
+hf14fix4 gem2s_x base 0.9384 poly 0.9398 poly_lv 0.9354 ms 0.9410 cc 0.9400 ms+cc 0.9413 ms+cc_lv 0.9361 ms3+cc_v2 0.9457 ms+cc+paper 0.9413 ms+acc+paper 0.9414
+   vertices / label, median (p90): poly 3.20x (16.3x) poly_lv 1.08x (2.5x) ms+cc 2.88x (12.8x) ms+cc_lv 1.05x (2.6x) ms3+cc_v2 1.17x (4.2x)
