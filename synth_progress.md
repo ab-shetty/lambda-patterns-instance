@@ -3118,8 +3118,7 @@ offset: valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x** (from ms+cc_lv 0.9338 
 (Gemini convention). Not yet in `polygonize.py` / the evaluator.
 
 **What is left** (`render_q.py`, `data/diag/residual_viz/`): valfix3 -- sheet 17 (10 questions at ~0.915, thin excess strip on the
-ground line) carries 0.023 of 0.054 loss. hf14fix2 -- three questions carry 0.016: 18 q8 (MODEL error: the reference is the speckled
-shingle roof, the model also takes the other elevation's running-bond tile roof -- different at native resolution,
-split by the user's fix v2 on 2026-10-14), 14 q0 (label also takes the band on the second elevation; we miss it), 27 q2; 2 q1 misses
-siding in cast shadow. val 5 q2 excludes the darker porch roof (same ambiguity as the val 9 / 10 ignore regions). 14 and 5 are
-for the user to review in Roboflow (18 was checked: the label is right).
+ground line) carries 0.023 of 0.054 loss. hf14fix2 -- three questions carry 0.016: 18 q8 (label has the left roof only; the right
+roof looks like the same shingle), 14 q0 (label also takes the band on the second elevation; we miss it), 27 q2; 2 q1 misses
+siding in cast shadow. val 5 q2 excludes the darker porch roof (same ambiguity as the val 9 / 10 ignore regions). 18, 14 and 5
+are for the user to review in Roboflow.

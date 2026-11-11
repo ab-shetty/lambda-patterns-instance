@@ -16,8 +16,7 @@ the real-sheet edge convention.
   pieces < 0.5%, polygons grown 1 px: valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x** (current ms+cc_lv: 0.9338 / 1.00x,
   0.9308 / 1.05x). Costs ~2.5x the compute of today's two scales (the user has not decided on latency). The scale part holds on
   gemdev; the offset loses on Gemini (opposite label convention) and eps 6 is ~1.5x vertices on Gemini sheets.
-- **Next**: (1) the user reviews hf14 14 q0 and val 5 q2 in Roboflow (hf14 18 q8 is a model error, not a label one: speckled
-  shingle vs running-bond tile, both dark grey -- 0.007 of hf14fix2's 0.0093 gap);
+- **Next**: (1) the user reviews hf14 18 q8, hf14 14 q0 and val 5 q2 in Roboflow (worth up to ~0.012 on hf14fix2);
   (2) port the configuration into `polygonize.py` (eps / offset options) and the evaluator (three scales) and score end to end;
   (3) model work for the rest of hf14fix2 (cast shadows on 2 q1; 27 q2) -- labelling more real / Gemini sheets is the only
   training lever that has ever moved results beyond seed noise; (4) a per-sheet eps if Gemini-like sheets must also stay <= 1.2x.
