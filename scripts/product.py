@@ -4,8 +4,8 @@
     blend         equal mean of the maps at SCALES (long side 5120 / 4096 / 3072), each linearly upsampled to native size
     product_mask  threshold 0.35, holes <= 4096 px at 4096 scale filled, confidence gaps filled (polygonize.fill_gaps), the
                   chromaticity colour cut against the reference box, snapped to the drawing's cells (polygonize.snap_to_cells)
-    polygons      traced, pieces < 0.5% dropped, Douglas-Peucker 6 px + axis snap, every polygon grown 1 native px outward
-                  (the real-sheet labels put the edge on the outer side of the stroke)
+    polygons      traced, pieces < 0.5% dropped, Douglas-Peucker 6 native px + axis snap, every polygon grown 1 native px
+                  outward (the real-sheet labels put the edge on the outer side of the stroke)
 Numbers (gem2s-x, synth_progress 2026-11-11): valfix4 0.9511 / 1.06x the labeller's vertices, hf14fix4 0.9473 / 1.24x. Tuned on
 the real eval sheets; the scales and cell snap hold on gemdev, the 1 px offset is the opposite of Gemini's label convention.
 
@@ -23,6 +23,8 @@ from polygonize import (T, LOW_VERTEX, PRODUCT_V2, _fill_holes, fill_gaps, snap_
 
 SCALES = (5120, 4096, 3072)
 REF_SCALE = 4096           # the hole-fill size is set at this inference scale, as in every probe
+EPS_FLOOR = 4.0            # scaled eps never below 4 native px: without it a 1000-2000 px sheet simplifies at 1.5-3 px and its
+                           # outlines stay jagged (valfix4 1.31x, hf14fix4 1.38x vertices / label)
 
 
 def colour_cut(img, m, box, t=6.0):
@@ -60,10 +62,17 @@ def product_mask(P, img, box):
     return snap_to_cells(colour_cut(img, m, box), img, s)
 
 
-def product_polygons(maps, img, box):
+def product_eps(hw, scaled=False):
+    """Douglas-Peucker tolerance in native px: 6 (v3). scaled (tried 2026-11-11, not the default): PRODUCT_V2's 6 px is at the 4096 inference
+    scale, so a 6000 px sheet simplifies at ~9 native px; never below EPS_FLOOR. Worse than 6 px everywhere (valfix4 1.18x,
+    hf14fix4 1.37x, Gemini30 1.61x vertices / label vs 1.06x / 1.24x / 1.50x at the same IoU)."""
+    return max(EPS_FLOOR, PRODUCT_V2["eps"] * max(hw) / REF_SCALE) if scaled else PRODUCT_V2["eps"]
+
+
+def product_polygons(maps, img, box, scaled_eps=False):
     """maps: {scale: prob_u8 at that inference scale}; img: native BGR sheet; box: the reference (x, y, w, h), native px."""
     m = product_mask(blend(maps, img.shape[:2]), img, box)
-    return offset_polys(mask_to_polygons(m, LOW_VERTEX["min_frac"], PRODUCT_V2["eps"]), PRODUCT_V2["offset"])
+    return offset_polys(mask_to_polygons(m, LOW_VERTEX["min_frac"], product_eps(img.shape[:2], scaled_eps)), PRODUCT_V2["offset"])
 
 
 def nverts(polys):
@@ -75,6 +84,7 @@ def main():
     ap.add_argument("split")
     ap.add_argument("maps")
     ap.add_argument("--out", default="")
+    ap.add_argument("--scaled-eps", action="store_true", help="eps scaled with the sheet's size (product_eps; not the default)")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent / "pp_probe"))
     import common
@@ -87,7 +97,7 @@ def main():
         for ref, cat, tgt, p4, box in qs:
             maps = {z: (p4 if z == 4096 else np.load(Path(a.maps) / f"{common.map_split(a.split)}_{z}" / "probs" /
                                                        f"{idx:03d}_{ref:03d}.npz")["prob"]) for z in SCALES}
-            polys = product_polygons(maps, img, box)
+            polys = product_polygons(maps, img, box, scaled_eps=a.scaled_eps)
             m = rasterize(polys, img.shape[:2])
             rows.append({"sheet": idx, "q": ref, "iou": common.masked_iou(m, tgt, (idx, ref)), "vertices": nverts(polys),
                          "label_vertices": label_vertices(job[1], cat)})

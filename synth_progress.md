@@ -3198,3 +3198,12 @@ scores the polygons with the label fixes and ignore regions. Checks on gem2s-x: 
 hf14fix4 0.9473 / 1.24x, identical to stack.py ms3+cc_v3; the evaluator's scorer on the same maps identical; model -> polygons
 on CPU for val 20 / 21 identical to the probe per question (IoU and vertex count). 5120 on CPU peaked at 5.4 GB on those small
 sheets; large sheets need the GPU. `vertcount.py`'s script body is now under a main guard (importing it ran the whole script).
+
+### 2026-11-11 (CPU) -- per-question simplification (handoff item 4): the HF14 median sits on a cliff
+
+`scripts/pp_probe/epscurve.py` (product v3 mask, eps 4-20): one eps for all cannot serve both splits (eps 8: hf14fix4 1.15x but
+valfix4 -0.003). Label-free rule tried: eps = 6 px at the 4096 inference scale, floor 4 native px (`product.product_eps`,
+`--scaled-eps`): valfix4 0.9508 / 1.18x, hf14fix4 0.9476 / 1.37x, Gemini30 0.8995 / 1.61x -- worse than fixed 6 px (1.06x /
+1.24x / 1.50x); without the floor 1.31x / 1.38x / 1.66x. Not the default. The HF14 number is fragile: sorted per-question
+ratios jump from 1.18x to 1.36x right at the median (48-52% of questions <= 1.2x under every rule tried), so one question
+flips "median <= 1.2x". The half above it (1.36x-4.3x) is what to attack, not the eps.
