@@ -22,6 +22,9 @@ the real-sheet edge convention.
   -> `eval_labels/real_fixes_v4.json`; pp_probe splits `valfix4` / `hf14fix4` (50 q: 18's right-roof question is dropped).
   Product v2 (`stack.py` ms3+cc_v2): **valfix4 0.9495 / 1.13x, hf14fix4 0.9457 / 1.17x**. hf14 14 q0 is a model miss (the
   right elevation's top band, same hatch as the reference), not a label question.
+- **PRODUCT_V3 (cell snap, `polygonize.snap_to_cells`)**: valfix4 **0.9511 / 1.06x** (target met), hf14fix4 0.9473 / 1.24x
+  (0.0027 short, vertices just over); +0.0002 Gemini30, +0.0019 gemdev. A per-question eps (val has vertex headroom, hf14 not)
+  is the open knob.
 - **Next**: (1) the user reviews val 5 q2 (darker porch roof, same ambiguity as val 9 / 10) in Roboflow;
   (2) port the configuration into `polygonize.py` (eps / offset options) and the evaluator (three scales) and score end to end;
   (3) model work for the rest of hf14fix2 (cast shadows on 2 q1; 27 q2) -- labelling more real / Gemini sheets is the only

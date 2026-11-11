@@ -18,6 +18,11 @@ its settings; fill_gaps(m, P) is the fill on its own (stack.py runs it before th
 0.003-0.007 on the real sheets; 6 stays <= 1.2x there) + every polygon offset 1 native px outward (the real-sheet labels put the
 edge on the outer side of the boundary stroke; Gemini labels do not, -0.007 there). With the 5120+4096+3072 map blend:
 valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x vertices / label. offset_polys(polys, d) is the offset on its own.
+2026-11-11 (scripts/pp_probe/cellsnap.py rounds 1-3): PRODUCT_V3 = PRODUCT_V2 after snapping the mask to the drawing's cells
+(non-ink regions, ink = darker than the 9 px local max by > 40): a cell >= 80% selected is taken whole, one <= 20% selected is
+dropped, cells under 1000 px or over 15% of the sheet are left alone, then holes refilled -- snap_to_cells(m, img, s). On
+gem2s-x 3-scale maps vs PRODUCT_V2: valfix4 +0.0016 (0.9511 / 1.06x), hf14fix4 +0.0016 (0.9473 / 1.20x), Gemini30 +0.0002,
+gemdev (xblend, unseen) +0.0019 (487 up / 161 down). Lower take thresholds gain more on the real sheets but lose on Gemini.
 rasterize(polys, hw) turns the output back into a mask (for scoring)."""
 import cv2
 import numpy as np
@@ -25,6 +30,7 @@ import numpy as np
 T = 0.35
 LOW_VERTEX = dict(eps=12.0, min_frac=0.005)
 PRODUCT_V2 = dict(low_vertex=True, eps=6.0, offset=1.0)
+CELL_SNAP = dict(ink_t=40, hi=0.8, lo=0.2, min_px=1000, max_frac=0.15)
 
 
 def _fill_holes(b, max_area):
@@ -129,6 +135,26 @@ def probs_to_polygons(prob_u8, native_hw, thresh=T, hole_px=4096, min_frac=0.002
         min_frac = LOW_VERTEX["min_frac"]
     polys = mask_to_polygons(m, min_frac, eps, snap_deg)
     return offset_polys(polys, offset) if offset else polys
+
+
+def snap_to_cells(m, img, s=1.0, ink_t=CELL_SNAP["ink_t"], hi=CELL_SNAP["hi"], lo=CELL_SNAP["lo"],
+                  min_px=CELL_SNAP["min_px"], max_frac=CELL_SNAP["max_frac"]):
+    """Snap a native-resolution mask to the drawing's cells (4-connected non-ink regions; ink = darker than the 9 px local
+    maximum by > ink_t). Cells with coverage >= hi are taken whole, <= lo dropped; ink pixels whose 3x3 neighbourhood is
+    mostly selected join (strokes between taken cells); holes up to 4096 px at inference scale s are refilled."""
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    ink = (cv2.dilate(g, np.ones((9, 9), np.uint8)).astype(np.int16) - g) > ink_t
+    n, lab = cv2.connectedComponents((~ink).astype(np.uint8), connectivity=4)
+    tot = np.bincount(lab.ravel(), minlength=n).astype(np.float64)
+    c = np.bincount(lab.ravel(), weights=m.ravel().astype(np.float64), minlength=n) / np.maximum(tot, 1)
+    ok = (tot >= min_px) & (tot <= max_frac * lab.size)
+    ok[0] = False
+    out = m.copy()
+    out[(ok & (c >= hi))[lab]] = True
+    out[(ok & (c <= lo) & (c > 0))[lab]] = False
+    out[ink] = m[ink]
+    out |= ink & (cv2.blur(out.astype(np.float32), (3, 3)) >= 0.5)
+    return _fill_holes(out, 4096 / s / s)
 
 
 def offset_polys(polys, d):

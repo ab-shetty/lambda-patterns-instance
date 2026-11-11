@@ -1,0 +1,60 @@
+valfix4 gem2s_x 71 q   IoU / vertices-label median; change vs product v2 (off1 = with the 1 px offset)
+  v2                     0.9443  +0.0000 (0 up / 0 down)  1.13x
+  v2 off1                0.9495  +0.0000 (0 up / 0 down)  1.13x
+  A40 hi.6 lo.2 min500 f 0.9463  +0.0020 (40 up / 5 down)  1.06x
+  A40 hi.6 lo.2 min500 f off1 0.9512  +0.0017 (32 up / 8 down)  1.06x
+  A40 hi.6 lo.2 min1k f  0.9460  +0.0017 (30 up / 5 down)  1.08x
+  A40 hi.6 lo.2 min1k f off1 0.9511  +0.0016 (31 up / 7 down)  1.08x
+  A40 hi.6 lo.2 min2k f  0.9453  +0.0010 (22 up / 5 down)  1.08x
+  A40 hi.6 lo.2 min2k f off1 0.9505  +0.0010 (25 up / 7 down)  1.08x
+  A40 hi.7 lo.2 min500 f 0.9462  +0.0019 (40 up / 5 down)  1.04x
+  A40 hi.7 lo.2 min500 f off1 0.9513  +0.0017 (32 up / 7 down)  1.04x
+  A40 hi.7 lo.2 min2k f  0.9453  +0.0010 (22 up / 5 down)  1.06x
+  A40 hi.7 lo.2 min2k f off1 0.9505  +0.0010 (26 up / 6 down)  1.06x
+  A40 hi.8 lo.2 min1k f  0.9458  +0.0015 (30 up / 5 down)  1.06x
+  A40 hi.8 lo.2 min1k f off1 0.9511  +0.0016 (31 up / 6 down)  1.06x
+hf14fix4 gem2s_x 50 q   IoU / vertices-label median; change vs product v2 (off1 = with the 1 px offset)
+  v2                     0.9438  +0.0000 (0 up / 0 down)  1.12x
+  v2 off1                0.9457  +0.0000 (0 up / 0 down)  1.12x
+  A40 hi.6 lo.2 min500 f 0.9462  +0.0023 (19 up / 9 down)  1.23x
+  A40 hi.6 lo.2 min500 f off1 0.9480  +0.0023 (19 up / 9 down)  1.23x
+  A40 hi.6 lo.2 min1k f  0.9460  +0.0022 (19 up / 9 down)  1.23x
+  A40 hi.6 lo.2 min1k f off1 0.9478  +0.0021 (20 up / 8 down)  1.23x
+  A40 hi.6 lo.2 min2k f  0.9455  +0.0016 (17 up / 10 down)  1.20x
+  A40 hi.6 lo.2 min2k f off1 0.9472  +0.0015 (17 up / 9 down)  1.20x
+  A40 hi.7 lo.2 min500 f 0.9458  +0.0019 (19 up / 9 down)  1.23x
+  A40 hi.7 lo.2 min500 f off1 0.9476  +0.0019 (20 up / 9 down)  1.23x
+  A40 hi.7 lo.2 min2k f  0.9451  +0.0013 (18 up / 10 down)  1.20x
+  A40 hi.7 lo.2 min2k f off1 0.9469  +0.0012 (18 up / 9 down)  1.20x
+  A40 hi.8 lo.2 min1k f  0.9455  +0.0016 (19 up / 9 down)  1.20x
+  A40 hi.8 lo.2 min1k f off1 0.9473  +0.0016 (19 up / 8 down)  1.20x
+gemini30 gem2s_x 195 q   IoU / vertices-label median; change vs product v2 (off1 = with the 1 px offset)
+  v2                     0.9073  +0.0000 (0 up / 0 down)  1.50x
+  v2 off1                0.8995  +0.0000 (0 up / 0 down)  1.50x
+  A40 hi.6 lo.2 min500 f 0.9050  -0.0022 (79 up / 68 down)  1.43x
+  A40 hi.6 lo.2 min500 f off1 0.8970  -0.0024 (70 up / 70 down)  1.43x
+  A40 hi.6 lo.2 min1k f  0.9051  -0.0022 (75 up / 65 down)  1.43x
+  A40 hi.6 lo.2 min1k f off1 0.8971  -0.0024 (66 up / 67 down)  1.43x
+  A40 hi.6 lo.2 min2k f  0.9046  -0.0026 (68 up / 64 down)  1.47x
+  A40 hi.6 lo.2 min2k f off1 0.8967  -0.0028 (57 up / 67 down)  1.47x
+  A40 hi.7 lo.2 min500 f 0.9061  -0.0012 (81 up / 63 down)  1.44x
+  A40 hi.7 lo.2 min500 f off1 0.8982  -0.0013 (73 up / 59 down)  1.44x
+  A40 hi.7 lo.2 min2k f  0.9056  -0.0017 (71 up / 59 down)  1.47x
+  A40 hi.7 lo.2 min2k f off1 0.8977  -0.0018 (62 up / 60 down)  1.47x
+  A40 hi.8 lo.2 min1k f  0.9076  +0.0003 (90 up / 48 down)  1.47x
+  A40 hi.8 lo.2 min1k f off1 0.8996  +0.0002 (79 up / 50 down)  1.47x
+gemdev xblend-kq30-kms30 900 q   IoU / vertices-label median; change vs product v2 (off1 = with the 1 px offset)
+  v2                     0.8218  +0.0000 (0 up / 0 down)  1.61x
+  v2 off1                0.8149  +0.0000 (0 up / 0 down)  1.61x
+  A40 hi.6 lo.2 min500 f 0.8225  +0.0008 (438 up / 261 down)  1.55x
+  A40 hi.6 lo.2 min500 f off1 0.8154  +0.0005 (417 up / 275 down)  1.55x
+  A40 hi.6 lo.2 min1k f  0.8225  +0.0007 (427 up / 247 down)  1.56x
+  A40 hi.6 lo.2 min1k f off1 0.8154  +0.0005 (425 up / 260 down)  1.56x
+  A40 hi.6 lo.2 min2k f  0.8223  +0.0005 (407 up / 229 down)  1.59x
+  A40 hi.6 lo.2 min2k f off1 0.8153  +0.0004 (396 up / 240 down)  1.59x
+  A40 hi.7 lo.2 min500 f 0.8235  +0.0017 (486 up / 199 down)  1.57x
+  A40 hi.7 lo.2 min500 f off1 0.8165  +0.0015 (463 up / 212 down)  1.57x
+  A40 hi.7 lo.2 min2k f  0.8232  +0.0014 (449 up / 181 down)  1.59x
+  A40 hi.7 lo.2 min2k f off1 0.8162  +0.0013 (432 up / 186 down)  1.59x
+  A40 hi.8 lo.2 min1k f  0.8238  +0.0020 (500 up / 154 down)  1.60x
+  A40 hi.8 lo.2 min1k f off1 0.8168  +0.0019 (487 up / 161 down)  1.60x

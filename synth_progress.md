@@ -3138,3 +3138,22 @@ sheets identical to v3); splits `valfix4` / `hf14fix4`. gem2s-x, product stack:
 | hf14fix4 (50 q) | 0.9413 / 2.88x | 0.9361 / 1.05x | **0.9457 / 1.17x** |
 
 HF14 18 q8 0.680 -> 0.974; q9 (the right roof's own question) is dropped (its box is inside the ignore region).
+
+### 2026-11-11: snapping to the drawing's cells (`cellsnap.py`, PRODUCT_V3)
+
+Cells = 4-connected non-ink regions (ink: darker than the 9 px local max by > 40; the thin-stroke detector `ink_map_v2` breaks
+regions, -0.02). On product v2's mask before tracing: a cell >= hi selected is taken whole, <= lo dropped; cells under min_px or
+over 15% of the sheet left alone; holes refilled. Three rounds (valfix4 tuning; hf14fix4 / Gemini30 / gemdev checks), with the
+1 px offset, change vs product v2:
+
+| rule | valfix4 | hf14fix4 | Gemini30 | gemdev (unseen) |
+|---|---|---|---|---|
+| take only, hi .5, min 500 | +0.0007 | +0.0023 | -0.0057 | -0.0032 (122 up / 482 down) |
+| hi .5 lo .2, min 500 | +0.0016 | +0.0028 (1.41x) | -0.0044 | -0.0006 |
+| hi .6 lo .2, min 500 | +0.0017 | +0.0023 (1.23x) | -0.0024 | +0.0005 |
+| **hi .8 lo .2, min 1000** | **+0.0016** | **+0.0016** | **+0.0002** | **+0.0019 (487 up / 161 down)** |
+
+Low take thresholds over-grow on Gemini renders (the labels' other convention again); hi .8 only completes cells the model has
+nearly committed to. In `polygonize.py` as `snap_to_cells` / `CELL_SNAP`, scored by `stack.py` ms3+cc_v3 (gem2s-x):
+**valfix4 0.9511 / 1.06x, hf14fix4 0.9473 / 1.24x** (vertices counted on the final, offset polygons; the probe counted before
+the offset, 1.20x). One eps does not meet both: eps 7 + simplify 1 px gives hf14fix4 1.17x but valfix4 0.9493 (`v3verts.py`).
