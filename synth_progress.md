@@ -3076,3 +3076,49 @@ with low_vertex 0.9341 at 1.00x vertices / label. Remaining val gap to 0.95: 0.0
 - `--refine-head C` (RefSwinUNet `refine`): after the stride-4 logits are upsampled, a 4-conv full-resolution head on
   [image, upsampled logits] adds a correction (receptive field 13 input px; last conv zero-initialised, so any checkpoint loads
   into it unchanged -- checked identical output). `--train-only refine.` freezes the rest for a clean A/B on one base.
+
+### 2026-11-10/11 (GH200 + CPU) -- refinement head fails; the product output gains 0.016 / 0.010 from the polygon and scale steps
+
+**Refinement head A/B** (`run_refine_ab.sh`, gem_s7 recipe on gemho_mix rebuilt on this VM: kq pool 17,906 sheets exactly, mix
+20,408; INIT gem2s-x, BATCH 4, max 3072; 19,713 trainable params). Product IoU (stack ms+cc) / vertices-label vs gem2s-x re-scored
+on this VM (valfix3 0.9442 / 2.36x, hf14fix2 0.9357 / 2.88x, Gemini30 0.9119 / 3.69x):
+
+| | valfix3 | hf14fix2 | Gemini30 |
+|---|---|---|---|
+| refine32_s7 (head only) | 0.9443 (+0.0001) | 0.9348 (-0.0009) | 0.9122 (+0.0003) |
+| refine32e4_s7 (+ edge weight 4, 3 px) | 0.9451 (+0.0009) | 0.9343 (-0.0014) | -- |
+
+Both fail the gate (>= +0.005 on both real splits); band1 flat or down, so the head does not resolve edges; step 4 (unfrozen) not
+run. Raw @4096 within +-0.001. Probe lines `scripts/pp_probe/refine_ab/`, maps floz-diag `refine32_s7/`, `refine32e4_s7/`.
+
+**Where ms+cc_lv loses** (`lvdecomp.py`, gem2s-x): fills and pieces < 0.5% cost ~0; eps 12 and the edge convention carry it.
+eps 6 (still <= 1.2x on the real sheets) +0.0070 valfix3 / +0.0033 hf14fix2; a 1 px outward offset of the polygons +0.0074 /
++0.0030 (2 px break-even, 3 px loses) -- the real labels sit on the outer side of the boundary stroke. **Gemini30 takes the
+opposite convention: offset -0.0072 (158 / 195 down)**, ink-only growth -0.0015..-0.0021 (`edgeoff.py`); no sheet-style gate
+(colourfulness) separates them. eps 6 is 1.49x on Gemini30, 1.59x on gemdev. The user (2026-11-11): the product follows the
+real-sheet labels.
+
+**Multi-scale** (`msweep.py`; maps 3072 / 5120 / 6144 via `scripts/gpu_maps_sizes.sh`). Single scale peaks at 4096 (HF14 0.924,
+5120 0.922, 6144 0.917). In the blend, eps-6 low-vertex output, change vs 0.7 x 4096 + 0.3 x 2048:
+
+| | valfix3 | hf14fix2 | Gemini30 | gemdev (xblend, unseen) | compute (4096^2 = 1) |
+|---|---|---|---|---|---|
+| 5120+4096+3072 (equal) | +0.0035 | +0.0048 | +0.0006 | +0.0035 (474 up / 352 down) | 3.1 (prod 1.25) |
+| 5120+4096+2048 | +0.0022 | +0.0041 | +0.0013 | +0.0039 | 2.8 |
+| 4096+3072+2048 (equal) | -0.0015 | -0.0011 | +0.0041 | +0.0092 | 1.8 |
+| 5120+2048 / 5120+3072 / 5120+4096 | +0.002 | +0.004..+0.007 | -0.003..-0.007 | -0.002..+0.003 | 1.8-2.6 |
+
+Gemini renders prefer the small scales and real sheets the large; a native-size gate does not separate them (val's 2.2k px sheets
+still want 5120). Map ensembles of gem2s-x + gk-x / gke-x (`ensemble.py`): real sheets -0.0013..+0.0007 -- the models agree.
+Threshold 0.30-0.45 and eps 5 / 8 on the 3-scale blend (`tune3s.py`): 0.35 / eps 6 is the real-sheet optimum within 1.2x.
+
+**Best product output found (inference only, gem2s-x): 5120+4096+3072, threshold 0.35, gap fills, eps 6, pieces < 0.5%, 1 px
+offset: valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x** (from ms+cc_lv 0.9338 / 1.00x, 0.9308 / 1.05x). Gemini30 0.8997 (vs
+0.9044) and > 1.2x there. Chosen while looking at the eval sheets; the scale part is confirmed on gemdev, the offset cannot be
+(Gemini convention). Not yet in `polygonize.py` / the evaluator.
+
+**What is left** (`render_q.py`, `data/diag/residual_viz/`): valfix3 -- sheet 17 (10 questions at ~0.915, thin excess strip on the
+ground line) carries 0.023 of 0.054 loss. hf14fix2 -- three questions carry 0.016: 18 q8 (label has the left roof only; the right
+roof looks like the same shingle), 14 q0 (label also takes the band on the second elevation; we miss it), 27 q2; 2 q1 misses
+siding in cast shadow. val 5 q2 excludes the darker porch roof (same ambiguity as the val 9 / 10 ignore regions). 18, 14 and 5
+are for the user to review in Roboflow.

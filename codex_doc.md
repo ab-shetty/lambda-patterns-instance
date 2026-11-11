@@ -1,10 +1,27 @@
 # Handoff
 
-Last updated: 2026-11-09 (edge-weight test + vertex curve, GH200)
+Last updated: 2026-11-11 (refinement head A/B, product-output levers, GH200)
 
 Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDING.md` defines the task and the metric;
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
 Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
+
+## 2026-11-11: 0.95 within reach on val from inference changes; hf14fix2 needs label review + model work
+
+Target (the user): >= 0.95 mIoU on valfix3 and hf14fix2 at <= 1.2x vertices / label, on the product output; the product follows
+the real-sheet edge convention.
+- **Refinement head (`--refine-head 32`, base frozen, +- edge weight) fails the gate**: product IoU within +-0.0014. Do not
+  unfreeze it without a new reason (synth_progress 2026-11-10/11).
+- **Best product output (gem2s-x, no retraining): 5120+4096+3072 equal blend, threshold 0.35, low-vertex gap fills, eps 6,
+  pieces < 0.5%, polygons grown 1 px: valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x** (current ms+cc_lv: 0.9338 / 1.00x,
+  0.9308 / 1.05x). Costs ~2.5x the compute of today's two scales (the user has not decided on latency). The scale part holds on
+  gemdev; the offset loses on Gemini (opposite label convention) and eps 6 is ~1.5x vertices on Gemini sheets.
+- **Next**: (1) the user reviews hf14 18 q8, hf14 14 q0 and val 5 q2 in Roboflow (worth up to ~0.012 on hf14fix2);
+  (2) port the configuration into `polygonize.py` (eps / offset options) and the evaluator (three scales) and score end to end;
+  (3) model work for the rest of hf14fix2 (cast shadows on 2 q1; 27 q2) -- labelling more real / Gemini sheets is the only
+  training lever that has ever moved results beyond seed noise; (4) a per-sheet eps if Gemini-like sheets must also stay <= 1.2x.
+- Probes: `scripts/pp_probe/{lvdecomp,edgeoff,msweep,ensemble,tune3s,render_q}.py`; maps 3072 / 5120 / 6144 for gem2s_x and
+  gemdev 2048-5120 for xblend on floz-diag.
 
 ## 2026-11-09: vertices are now a primary metric
 
