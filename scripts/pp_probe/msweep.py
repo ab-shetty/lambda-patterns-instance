@@ -15,6 +15,11 @@ BLENDS = {
     "5120+4096+2048":   {5120: 0.3, 4096: 0.4, 2048: 0.3},
     "5120+4096+3072":   {5120: 1 / 3, 4096: 1 / 3, 3072: 1 / 3},
     "6144+4096+2048":   {6144: 0.3, 4096: 0.4, 2048: 0.3},
+    # two-scale, cheaper (compute in 4096^2 units: prod 1.25, 5120+4096+3072 3.1)
+    "5120+2048":        {5120: 0.7, 2048: 0.3},   # 1.81
+    "5120+3072":        {5120: 0.5, 3072: 0.5},   # 2.13
+    "5120+4096":        {5120: 0.5, 4096: 0.5},   # 2.56
+    "4096+3072+2048 eq": {4096: 1 / 3, 3072: 1 / 3, 2048: 1 / 3},   # 1.81
 }
 
 
@@ -22,6 +27,10 @@ def summary(tag, split):
     R = [r for f in sorted(glob.glob(f"scripts/pp_probe/rows_msweep_{tag}_{split}*.json")) for r in json.load(open(f))]
     b = "4096+2048 (prod)"
     print(f"{split} {tag} {len(R)} q   eps6 / eps6+off1, change vs prod blend")
+    if "cur eps12" in R[0]:
+        L = [r for r in R if r.get("label_v", 0) > 0]
+        print(f"  {'current product (eps 12)':24s} {np.mean([r['cur eps12'] for r in R]):.4f}  "
+              f"{np.mean([r['cur eps12'] - r[b] for r in R]):+.4f} vs eps6  {np.median([r['v_cur eps12'] / r['label_v'] for r in L]):.2f}x")
     for k in BLENDS:
         if k not in R[0]:
             continue
@@ -67,6 +76,9 @@ if __name__ == "__main__":
                 r[name] = iou(base, tgt)
                 r["v_" + name] = nv(mask_to_polygons(m, 0.005, 6, 6.0))
                 r[name + " off1"] = iou(cv2.dilate(base.astype(np.uint8), k3).astype(bool), tgt)
+                if name == "4096+2048 (prod)":   # the current product output (ms+cc_lv: eps 12) as the reference row
+                    pl = mask_to_polygons(m, 0.005, 12, 6.0)
+                    r["cur eps12"], r["v_cur eps12"] = iou(rasterize(pl, (h, w)), tgt), nv(pl)
             rows.append(r)
     suf = f"_{shard}" if nsh > 1 else ""
     json.dump(rows, open(f"scripts/pp_probe/rows_msweep_{maps.name}_{split}{suf}.json", "w"))
