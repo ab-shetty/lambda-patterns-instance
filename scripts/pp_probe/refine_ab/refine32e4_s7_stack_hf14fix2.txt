@@ -1,0 +1,4 @@
+Using the latest cached version of the dataset since abshetty/floz-synth-v5 couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'real-world-test' at data/abshetty___floz-synth-v5/real-world-test/0.0.0/967e3e9c54c394c7119246f615901cb7d36e2f85 (last modified on Tue Nov 10 21:51:07 2026).
+hf14fix2 refine32e4_s7 base 0.9313 poly 0.9326 poly_lv 0.9299 ms 0.9341 cc 0.9328 ms+cc 0.9343 ms+cc_lv 0.9315 ms+cc+paper 0.9343 ms+acc+paper 0.9343 | vs poly: poly_lv -0.0026 ms +0.0015 cc +0.0002 ms+cc +0.0017 ms+cc_lv -0.0010 ms+cc+paper +0.0017 ms+acc+paper +0.0018
+   vertices / label, median (p90): poly 3.21x (16.0x) poly_lv 1.12x (2.6x) ms+cc 2.99x (13.8x) ms+cc_lv 1.00x (2.2x)

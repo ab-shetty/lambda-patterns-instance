@@ -1,0 +1,6 @@
+Using the latest cached version of the dataset since abshetty/floz-synth-v5 couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'real-world-test' at data/abshetty___floz-synth-v5/real-world-test/0.0.0/967e3e9c54c394c7119246f615901cb7d36e2f85 (last modified on Tue Nov 10 21:51:07 2026).
+valfix3: error px within 2 px of the true edge: fp_ink 23%  fp_paper 17%  fn_ink 31%  fn_paper 28%
+  edge-stroke pixels inside: label 0.56, prediction 0.50
+  large (> 4096 px): 32 q, IoU 0.9574, IoU lost to the 2 px band 0.0211
+  small (<= 4096 px): 39 q, IoU 0.9350, IoU lost to the 2 px band 0.0547
