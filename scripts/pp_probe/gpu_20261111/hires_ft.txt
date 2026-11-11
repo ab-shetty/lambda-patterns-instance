@@ -1,0 +1,44 @@
+== maps 05:29
+valfix4 hrft_s7_ft 71 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.9488  +0.0000 (0 up / 0 down)  1.01x  compute 3.13
+  v1 4096+2048         0.9479  -0.0008 (21 up / 35 down)  1.12x  compute 1.25
+hf14fix4 hrft_s7_ft 50 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.9143  +0.0000 (0 up / 0 down)  1.50x  compute 3.13
+  v1 4096+2048         0.9068  -0.0075 (18 up / 20 down)  1.38x  compute 1.25
+gemini30 hrft_s7_ft 195 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.8905  +0.0000 (0 up / 0 down)  1.33x  compute 3.13
+  v1 4096+2048         0.8861  -0.0044 (61 up / 106 down)  1.27x  compute 1.25
+valfix4 hrft_s7_b50 71 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.9495  +0.0000 (0 up / 0 down)  1.08x  compute 3.13
+  v1 4096+2048         0.9484  -0.0011 (13 up / 47 down)  1.15x  compute 1.25
+hf14fix4 hrft_s7_b50 50 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.9361  +0.0000 (0 up / 0 down)  1.54x  compute 3.13
+  v1 4096+2048         0.9281  -0.0080 (19 up / 20 down)  1.48x  compute 1.25
+gemini30 hrft_s7_b50 195 q   product v3 pipeline; change vs the v3 blend; compute (4096^2 = 1)
+  v3 5120+4096+3072    0.9040  +0.0000 (0 up / 0 down)  1.38x  compute 3.13
+  v1 4096+2048         0.9007  -0.0033 (60 up / 101 down)  1.38x  compute 1.25
+HIRES FT DONE 05:30
+data/floz-diag/hrft_s7_b50/gemini30_2048/ 0.8893
+data/floz-diag/hrft_s7_b50/gemini30_3072/ 0.8883
+data/floz-diag/hrft_s7_b50/gemini30_4096/ 0.8935
+data/floz-diag/hrft_s7_b50/gemini30_5120/ 0.8904
+data/floz-diag/hrft_s7_b50/hf14_2048/ 0.861
+data/floz-diag/hrft_s7_b50/hf14_3072/ 0.8899
+data/floz-diag/hrft_s7_b50/hf14_4096/ 0.9061
+data/floz-diag/hrft_s7_b50/hf14_5120/ 0.9125
+data/floz-diag/hrft_s7_b50/val_2048/ 0.8586
+data/floz-diag/hrft_s7_b50/val_3072/ 0.8956
+data/floz-diag/hrft_s7_b50/val_4096/ 0.9006
+data/floz-diag/hrft_s7_b50/val_5120/ 0.8978
+data/floz-diag/hrft_s7_ft/gemini30_2048/ 0.8836
+data/floz-diag/hrft_s7_ft/gemini30_3072/ 0.8828
+data/floz-diag/hrft_s7_ft/gemini30_4096/ 0.884
+data/floz-diag/hrft_s7_ft/gemini30_5120/ 0.8826
+data/floz-diag/hrft_s7_ft/hf14_2048/ 0.8507
+data/floz-diag/hrft_s7_ft/hf14_3072/ 0.8683
+data/floz-diag/hrft_s7_ft/hf14_4096/ 0.8829
+data/floz-diag/hrft_s7_ft/hf14_5120/ 0.89
+data/floz-diag/hrft_s7_ft/val_2048/ 0.8549
+data/floz-diag/hrft_s7_ft/val_3072/ 0.9006
+data/floz-diag/hrft_s7_ft/val_4096/ 0.8996
+data/floz-diag/hrft_s7_ft/val_5120/ 0.8968

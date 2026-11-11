@@ -25,6 +25,9 @@ the real-sheet edge convention.
 - **PRODUCT_V3 (cell snap, `polygonize.snap_to_cells`)**: valfix4 **0.9511 / 1.06x** (target met), hf14fix4 0.9473 / 1.24x
   (0.0027 short, vertices just over); +0.0002 Gemini30, +0.0019 gemdev. A per-question eps (val has vertex headroom, hf14 not)
   is the open knob.
+- **GPU checks 2026-11-11**: flip TTA does not beat the 3-scale blend at equal compute; v3 holds on gk-x / gke-x (valfix4 0.9511
+  on all three); latency ~1.16 s -> ~1.47 s per query (CPU post-processing dominates); a high-resolution fine-tune (3072-4096)
+  fails on HF14 (blend -0.011) like `--hires-crop` before -- do not retry training at large sizes without a new idea.
 - **Next**: (1) the user reviews val 5 q2 (darker porch roof, same ambiguity as val 9 / 10) in Roboflow;
   (2) port the configuration into `polygonize.py` (eps / offset options) and the evaluator (three scales) and score end to end;
   (3) model work for the rest of hf14fix2 (cast shadows on 2 q1; 27 q2) -- labelling more real / Gemini sheets is the only

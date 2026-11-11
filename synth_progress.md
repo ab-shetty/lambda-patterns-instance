@@ -3171,3 +3171,20 @@ Sibling models (maps 3072 / 5120 for gk-x, gke-x): v3 vs v1 blend valfix4 +0.001
 Latency per query (GH200, batch 1, bf16, a fresh sheet per query): model passes v1 0.14 s -> v3 0.33 s; CPU post-processing
 (colour cut, fills, tracing; single thread) v1 1.02 s, v2 0.99 s, v3 1.14 s (max 3.3-3.8 s on the largest sheet). End to end
 ~1.16 s -> ~1.47 s (+27%): the CPU side dominates; the extra scales cost +0.19 s.
+
+### 2026-11-11 (GH200): high-resolution fine-tune of gem2s-x fails (`run_hires_ft.sh`)
+
+One arm from gem2s-x on gemho_hr6k (4000 random kq synthetic + all 2502 Gemini holdout records of gemho_mix), sheets drawn at
+3072..4096, batch 2, lr 5e-5 (backbone x0.1), one epoch (25 min; per-step loss noisy at batch 2, no divergence). Raw @4096: the
+fine-tune HF14 0.8829 (gem2s-x 0.924), val 0.8996, Gemini30 0.884; 0.5 with gem2s-x HF14 0.9061, val 0.9006, Gemini30 0.8935.
+Product v3 (vs gem2s-x 0.9511 / 0.9473 / 0.8996):
+
+| | valfix4 | hf14fix4 | Gemini30 |
+|---|---|---|---|
+| fine-tune | 0.9488 / 1.01x | 0.9143 / 1.50x | 0.8905 |
+| 0.5 + gem2s-x | 0.9495 / 1.08x | 0.9361 / 1.54x | 0.9040 |
+
+Fails the gate on HF14 (-0.011 for the blend) and HF14's outlines get noisier (1.5x vertices). Same direction as the 2026-10
+`--hires-crop` screen (HF14 -0.007): training on large sheets hurts the real HF14 sheets even though inferring large helps.
+Untested guess: half of HF14 is 1-2k px sheets that inference upscales, a regime training at 3072-4096 never shows. Maps on
+floz-diag `hrft_s7_ft/`, `hrft_s7_b50/`; checkpoints not published.
