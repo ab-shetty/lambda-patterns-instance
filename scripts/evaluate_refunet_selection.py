@@ -23,6 +23,7 @@ from refmask2former.ref_dino_unet import BACKBONES as DINO_BACKBONES
 from refmask2former.ref_dino_unet import RefDinoUNet
 
 HOLDOUT = "12,16,27,7,11,25,23,1,18,2,0,3,14,24"
+T_PRODUCT = 0.35        # --product: the threshold scripts/product.py applies; the maps are saved before it
 # Default reference boxes on the real sheets: the hand-reviewed set (moved where the
 # automatic box was unrealistic, the rest kept as drawn). `--boxes auto` = automatic only.
 HAND_BOXES = Path(__file__).resolve().parent.parent / "eval_boxes" / "hand_v1.json"
@@ -330,6 +331,34 @@ def evaluate_model(model, records, indices, image_max_size=1280, ref_size=224,
     return rows
 
 
+def _product_sheet(job):
+    """--product, one sheet: the questions and targets exactly as the evaluator builds them (label fixes and ignore regions
+    included), each question's three saved maps through scripts/product.py, IoU of the rasterised polygons."""
+    import product
+    image_idx, rec, maps_dir, ref_size, scale_matched_ref, ov, fixes = job
+    sh = _prepare_sheet((image_idx, rec, product.REF_SCALE, ref_size, scale_matched_ref, ov, fixes, False))
+    h0, w0 = sh["h0"], sh["w0"]
+    data = rec["image"] if "image" in rec else Path(rec["image_path"]).read_bytes()
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img.shape[:2] != (h0, w0):
+        img = cv2.resize(img, (w0, h0))
+    rows = []
+    for ref_idx, category, box, _, _ in sh["questions"]:
+        maps = {z: np.load(Path(maps_dir) / str(z) / f"{image_idx:03d}_{ref_idx:03d}.npz")["prob"] for z in product.SCALES}
+        polys = product.product_polygons(maps, img, box)
+        pred = product.rasterize(polys, (h0, w0))
+        bits, n, ign = sh["targets"][category]
+        target = np.unpackbits(bits, count=h0 * w0).reshape(h0, w0).astype(bool)
+        if ign is not None:
+            pred &= ~np.unpackbits(ign, count=h0 * w0).reshape(h0, w0).astype(bool)
+        inter = int((pred & target).sum())
+        union = int(pred.sum()) + n - inter
+        rows.append({"image_index": image_idx, "reference_instance": ref_idx, "category": category,
+                     "reference_box_native": list(box), "iou": inter / max(union, 1), "prediction_pixels": int(pred.sum()),
+                     "target_pixels": n, "vertices": product.nverts(polys)})
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True)
@@ -365,6 +394,10 @@ def main():
     parser.add_argument("--save-probs", default="",
                         help="directory: write each question's probability map "
                              "(uint8, inference resolution) as <image>_<question>.npz")
+    parser.add_argument("--product", action="store_true",
+                        help="score the PRODUCT output (scripts/product.py, 2026-11-11): the model at 5120 / 4096 / 3072, maps "
+                             "blended, post-processed and turned into polygons; IoU of those polygons. --image-max-size and "
+                             "--mask-thresh are ignored; maps go under --save-probs (default <metrics-out>.maps)/<scale>/")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
@@ -402,13 +435,33 @@ def main():
         want = box_overrides.get("_meta", {}).get("pool")
         if want and Path(want).resolve() != Path(args.local_pool).resolve():
             raise SystemExit(f"--boxes {boxes_path} is for pool {want}, not {args.local_pool}")
-    rows = evaluate_model(model, records, indices, args.image_max_size,
-                          args.ref_size, args.mask_thresh, device,
-                          scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
-                          tta=args.tta, save_probs=args.save_probs or None,
-                          box_overrides=box_overrides, q_batch=args.q_batch,
-                          label_fixes=json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None,
-                          workers=args.workers)
+    label_fixes = json.loads(Path(args.label_fixes).read_text()) if args.label_fixes else None
+    if args.product:
+        import product
+        maps_dir = Path(args.save_probs or str(args.metrics_out) + ".maps")
+        for z in product.SCALES:
+            (maps_dir / str(z)).mkdir(parents=True, exist_ok=True)
+            evaluate_model(model, records, indices, z, args.ref_size, T_PRODUCT, device,
+                           scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")), tta=args.tta,
+                           save_probs=str(maps_dir / str(z)), box_overrides=box_overrides, q_batch=args.q_batch,
+                           label_fixes=label_fixes, workers=args.workers)
+        jobs = [(i, {k: records[i][k] for k in ("image", "image_path", "annotations", "ref_exclude") if k in records[i]},
+                 str(maps_dir), args.ref_size, bool(ckpt_args.get("scale_matched_ref")),
+                 (box_overrides or {}).get(str(i), {}), (label_fixes or {}).get(str(i), [])) for i in indices]
+        if args.workers > 0:
+            import multiprocessing as mp
+            with mp.get_context("spawn").Pool(args.workers, initializer=_worker_init) as pool:
+                rows = [r for rs in pool.map(_product_sheet, jobs) for r in rs]
+        else:
+            rows = [r for j in jobs for r in _product_sheet(j)]
+        args.image_max_size, args.mask_thresh = "product " + "+".join(map(str, product.SCALES)), T_PRODUCT
+    else:
+        rows = evaluate_model(model, records, indices, args.image_max_size,
+                              args.ref_size, args.mask_thresh, device,
+                              scale_matched_ref=bool(ckpt_args.get("scale_matched_ref")),
+                              tta=args.tta, save_probs=args.save_probs or None,
+                              box_overrides=box_overrides, q_batch=args.q_batch,
+                              label_fixes=label_fixes, workers=args.workers)
     mean_iou = float(np.mean([row["iou"] for row in rows]))
     metrics = {"metric": "reference-conditioned union IoU",
                "checkpoint": args.checkpoint,

@@ -36,6 +36,10 @@ chose to publish all three. `gem2s-x` is the default because HF14 fix v2 is the 
 Hub: `-gemho-gem-s7`, `-gemho-gem-s8`, `-gemkms-s7`, `-geme2-s7` (each a one-epoch restart of longswiss-swa37-41 on the kq pool + the 139
 hand-labelled Gemini r2-r4 sheets outside Gemini30 x18, 50/50 DR / no-DR blend). Rebuild a blend with `scripts/blend_ckpts.py`.
 
+**Product output v3 (2026-11-11, `scripts/product.py`; scored end to end with `evaluate_refunet_selection.py --product`)**:
+the model at 5120 / 4096 / 3072, maps averaged, then gap fill, colour cut, cell snap, polygons at 6 px + axis snap, grown 1 px.
+gem2s-x: valfix4 0.9511 / 1.06x vertices per label, hf14fix4 0.9473 / 1.24x (synth_progress 2026-11-11). The older stack:
+
 **Product output = polygons + multi-scale (0.7 x 4096 + 0.3 x 2048) + chromaticity colour cut** (`scripts/pp_probe/stack.py`, ms+cc;
 fixed before scoring). Not in it: the paper cut and the adaptive colour threshold (designed on Gemini30 19 / 26; on 30 unseen
 Gemini sheets +0.0003 and 8 better / 18 worse, synth_progress 2026-10-22). Since 2026-11-07 the polygons are simplified at 2 px

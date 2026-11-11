@@ -3188,3 +3188,13 @@ Fails the gate on HF14 (-0.011 for the blend) and HF14's outlines get noisier (1
 `--hires-crop` screen (HF14 -0.007): training on large sheets hurts the real HF14 sheets even though inferring large helps.
 Untested guess: half of HF14 is 1-2k px sheets that inference upscales, a regime training at 3072-4096 never shows. Maps on
 floz-diag `hrft_s7_ft/`, `hrft_s7_b50/`; checkpoints not published.
+
+### 2026-11-11 (CPU) -- product v3 ported: `scripts/product.py` + `evaluate_refunet_selection.py --product`
+
+`product.product_polygons({scale: map}, img, box)` is the whole v3 chain (3-scale mean, threshold 0.35, hole + gap fill, colour
+cut, cell snap, polygons at eps 6 + axis snap, +1 px offset); `python3 scripts/product.py SPLIT MAPS` scores saved maps;
+`--product` on the evaluator runs the model at 5120 / 4096 / 3072 (maps under --save-probs or <metrics-out>.maps/<scale>/) and
+scores the polygons with the label fixes and ignore regions. Checks on gem2s-x: from the Hub maps valfix4 0.9511 / 1.06x and
+hf14fix4 0.9473 / 1.24x, identical to stack.py ms3+cc_v3; the evaluator's scorer on the same maps identical; model -> polygons
+on CPU for val 20 / 21 identical to the probe per question (IoU and vertex count). 5120 on CPU peaked at 5.4 GB on those small
+sheets; large sheets need the GPU. `vertcount.py`'s script body is now under a main guard (importing it ran the whole script).
