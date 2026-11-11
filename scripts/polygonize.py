@@ -14,12 +14,17 @@ the previous output.
 fills irregular holes and inlets (convex-hull gaps) whose mean probability is >= 0.05, then simplifies at 12 px and drops pieces
 under 0.5%: ~1.2x the labeller's vertices (median) on Gemini30 / val / HF14 / gemdev for -0.006..-0.009 IoU. LOW_VERTEX holds
 its settings; fill_gaps(m, P) is the fill on its own (stack.py runs it before the colour cut).
+2026-11-11 (synth_progress 2026-11-10/11, scripts/pp_probe/lvdecomp.py / tune3s.py): PRODUCT_V2 = low_vertex at eps 6 (12 cost
+0.003-0.007 on the real sheets; 6 stays <= 1.2x there) + every polygon offset 1 native px outward (the real-sheet labels put the
+edge on the outer side of the boundary stroke; Gemini labels do not, -0.007 there). With the 5120+4096+3072 map blend:
+valfix3 0.9495 / 1.13x, hf14fix2 0.9407 / 1.12x vertices / label. offset_polys(polys, d) is the offset on its own.
 rasterize(polys, hw) turns the output back into a mask (for scoring)."""
 import cv2
 import numpy as np
 
 T = 0.35
 LOW_VERTEX = dict(eps=12.0, min_frac=0.005)
+PRODUCT_V2 = dict(low_vertex=True, eps=6.0, offset=1.0)
 
 
 def _fill_holes(b, max_area):
@@ -111,15 +116,40 @@ def clean_ring(p, tol=1.0):
     return p
 
 
-def probs_to_polygons(prob_u8, native_hw, thresh=T, hole_px=4096, min_frac=0.002, eps=2.0, snap_deg=6.0, low_vertex=False):
+def probs_to_polygons(prob_u8, native_hw, thresh=T, hole_px=4096, min_frac=0.002, eps=2.0, snap_deg=6.0, low_vertex=False,
+                      offset=0.0):
     h0, w0 = native_hw
     s = prob_u8.shape[1] / w0
     P = cv2.resize(prob_u8.astype(np.float32) / 255, (w0, h0), interpolation=cv2.INTER_LINEAR)
     m = _fill_holes(P > thresh, hole_px / s / s)
     if low_vertex:
         m = fill_gaps(m, P)
-        eps, min_frac = LOW_VERTEX["eps"], LOW_VERTEX["min_frac"]
-    return mask_to_polygons(m, min_frac, eps, snap_deg)
+        # low_vertex keeps its own eps unless the caller asks for another (PRODUCT_V2: 6)
+        eps = LOW_VERTEX["eps"] if eps == 2.0 else eps
+        min_frac = LOW_VERTEX["min_frac"]
+    polys = mask_to_polygons(m, min_frac, eps, snap_deg)
+    return offset_polys(polys, offset) if offset else polys
+
+
+def offset_polys(polys, d):
+    """Grow every polygon by d native px (holes shrink by d). Mitre limit 10 so sharp corners stay one vertex (limit 2 bevels
+    them: +4-12% vertices, scripts/pp_probe/offverts.py), then the usual collinear clean-up. Pieces that touch after the offset
+    stay separate polygons -- the frontend draws them as before."""
+    from shapely.geometry import Polygon
+    out = []
+    for p in polys:
+        g = Polygon(p["outer"], p["holes"])
+        if not g.is_valid:
+            g = g.buffer(0)
+        g = g.buffer(d, join_style=2, mitre_limit=10.0)
+        for q in (getattr(g, "geoms", None) or [g]):
+            if q.is_empty or q.area <= 0:
+                continue
+            ring = lambda r: np.round(clean_ring(np.round(np.asarray(r.coords)[:-1]).astype(int))).astype(int).tolist()
+            o = ring(q.exterior)
+            if len(o) >= 3:
+                out.append({"outer": o, "holes": [x for x in (ring(h) for h in q.interiors) if len(x) >= 3]})
+    return out
 
 
 def mask_to_polygons(m, min_frac=0.002, eps=2.0, snap_deg=6.0):
