@@ -3157,3 +3157,17 @@ Low take thresholds over-grow on Gemini renders (the labels' other convention ag
 nearly committed to. In `polygonize.py` as `snap_to_cells` / `CELL_SNAP`, scored by `stack.py` ms3+cc_v3 (gem2s-x):
 **valfix4 0.9511 / 1.06x, hf14fix4 0.9473 / 1.24x** (vertices counted on the final, offset polygons; the probe counted before
 the offset, 1.20x). One eps does not meet both: eps 7 + simplify 1 px gives hf14fix4 1.17x but valfix4 0.9493 (`v3verts.py`).
+
+### 2026-11-11 (GH200): flip TTA vs extra scales, sibling models, latency (`ttasweep.py`, `bench_latency.py`)
+
+All on the full product v3 pipeline (cell snap, eps 6, 1 px offset); compute in 4096^2 units. gem2s-x, change vs the v3 blend
+(5120+4096+3072, 3.1): TTA at equal or higher compute does not beat it on valfix4 (4096t2+2048t2 2.5: -0.0020; 4096t4+2048t2
+4.5: -0.0020; 4096t4 4.0: -0.0023); on hf14fix4 only 4096t4 (+0.0014) and 5120+4096t2+3072 (+0.0013) edge ahead, at more
+compute. 4096t4+2048t2 is the best Gemini30 blend (+0.0049). Extra scales stay the choice.
+
+Sibling models (maps 3072 / 5120 for gk-x, gke-x): v3 vs v1 blend valfix4 +0.0019 / +0.0019 (both 0.9511), hf14fix4 +0.0033 /
++0.0043 (0.9460 / 0.9463), Gemini30 -0.0007 / -0.0005 -- the gain is not gem2s-x specific.
+
+Latency per query (GH200, batch 1, bf16, a fresh sheet per query): model passes v1 0.14 s -> v3 0.33 s; CPU post-processing
+(colour cut, fills, tracing; single thread) v1 1.02 s, v2 0.99 s, v3 1.14 s (max 3.3-3.8 s on the largest sheet). End to end
+~1.16 s -> ~1.47 s (+27%): the CPU side dominates; the extra scales cost +0.19 s.
