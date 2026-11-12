@@ -3225,3 +3225,10 @@ Dropping holes / islands under 1-2% of the mask costs real IoU (val -0.006 / -0.
 re-simplification is now the product default (`product.simplify_small_rings`: rings < 5% of the mask at eps 0.1 x sqrt(area)):
 it cuts total vertices 9-11% on every split at ~0 IoU, but HF14's median stays at 1.23x (50% of questions <= 1.2x): the
 questions at the median are moderate 1.3-2x ones, not the blob cases. eps 7 brings HF14 to 1.16x at valfix4 0.9488.
+
+### 2026-11-12 (CPU) -- GrabCut on the product edge fails (`scripts/pp_probe/grabcut.py`)
+
+Per-sheet inside / outside colour models from the product mask's confident interior / exterior, graph cut re-deciding only
++-3 px around the predicted edge, then the product polygons. First 6 HF14 questions +0.0033 (5 up / 0 down), but in full:
+hf14fix4 -0.0019 (19 up / 25 down; vertices 1.23x -> 1.12x), valfix4 -0.0023 (17 / 34), Gemini30 -0.0014 (76 / 102). Colour
+models do not separate a pattern from its neighbour at the 1-3 px scale (both share line ink and paper); not adopted.
