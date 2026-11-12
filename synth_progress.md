@@ -3207,3 +3207,21 @@ valfix4 -0.003). Label-free rule tried: eps = 6 px at the 4096 inference scale, 
 1.24x / 1.50x); without the floor 1.31x / 1.38x / 1.66x. Not the default. The HF14 number is fragile: sorted per-question
 ratios jump from 1.18x to 1.36x right at the median (48-52% of questions <= 1.2x under every rule tried), so one question
 flips "median <= 1.2x". The half above it (1.36x-4.3x) is what to attack, not the eps.
+
+### 2026-11-12 (CPU) -- HF14's high-vertex questions: small irregular rings; `simplify_small_rings` default in product.py
+
+Rendered the worst (`data/diag/worstv_hf14_*.jpg`): HF14 2 q1 (247 vs 27 label vertices) -- cast shadows cut blobby holes in the
+wall; 0 q1 (90 vs 14) -- blobs on patio furniture / the dining table; 27 q3 (28 vs 4) -- two small false islands; 3 q4 (47 vs
+12) -- collinear runs. `scripts/pp_probe/smallrings.py` on the product v3 mask (IoU / median vertices per label / total):
+
+| | valfix4 | hf14fix4 | Gemini30 |
+|---|---|---|---|
+| v3 (eps 6) | 0.9511 / 1.06x / 1.15x | 0.9473 / 1.24x / 1.77x | 0.8995 / 1.50x / 1.76x |
+| small rings re-simplified (k 0.1) | 0.9506 / 1.00x / 1.02x | 0.9471 / 1.23x / 1.62x | 0.8998 / 1.47x / 1.64x |
+| eps 7 + small rings | 0.9488 / 1.00x / 0.98x | 0.9465 / 1.16x / 1.51x | 0.8997 / 1.39x / 1.55x |
+| eps 8 + small rings | 0.9476 / 1.00x / 0.96x | 0.9462 / 1.15x / 1.42x | 0.8996 / 1.31x / 1.50x |
+
+Dropping holes / islands under 1-2% of the mask costs real IoU (val -0.006 / -0.038: many are true window holes). Small-ring
+re-simplification is now the product default (`product.simplify_small_rings`: rings < 5% of the mask at eps 0.1 x sqrt(area)):
+it cuts total vertices 9-11% on every split at ~0 IoU, but HF14's median stays at 1.23x (50% of questions <= 1.2x): the
+questions at the median are moderate 1.3-2x ones, not the blob cases. eps 7 brings HF14 to 1.16x at valfix4 0.9488.

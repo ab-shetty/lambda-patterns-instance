@@ -5,7 +5,8 @@
     product_mask  threshold 0.35, holes <= 4096 px at 4096 scale filled, confidence gaps filled (polygonize.fill_gaps), the
                   chromaticity colour cut against the reference box, snapped to the drawing's cells (polygonize.snap_to_cells)
     polygons      traced, pieces < 0.5% dropped, Douglas-Peucker 6 native px + axis snap, every polygon grown 1 native px
-                  outward (the real-sheet labels put the edge on the outer side of the stroke)
+                  outward (the real-sheet labels put the edge on the outer side of the stroke); rings under 5% of the mask
+                  re-simplified at 0.1 x sqrt(their area) (simplify_small_rings, 2026-11-12)
 Numbers (gem2s-x, synth_progress 2026-11-11): valfix4 0.9511 / 1.06x the labeller's vertices, hf14fix4 0.9473 / 1.24x. Tuned on
 the real eval sheets; the scales and cell snap hold on gemdev, the 1 px offset is the opposite of Gemini's label convention.
 
@@ -19,7 +20,7 @@ import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from polygonize import (T, LOW_VERTEX, PRODUCT_V2, _fill_holes, fill_gaps, snap_to_cells, mask_to_polygons, offset_polys,
-                        rasterize)
+                        rasterize, snap_ring, clean_ring)
 
 SCALES = (5120, 4096, 3072)
 REF_SCALE = 4096           # the hole-fill size is set at this inference scale, as in every probe
@@ -69,10 +70,33 @@ def product_eps(hw, scaled=False):
     return max(EPS_FLOOR, PRODUCT_V2["eps"] * max(hw) / REF_SCALE) if scaled else PRODUCT_V2["eps"]
 
 
-def product_polygons(maps, img, box, scaled_eps=False):
+SMALL_RING = dict(k=0.1, max_frac=0.05)
+
+
+def simplify_small_rings(polys, total, k=SMALL_RING["k"], max_frac=SMALL_RING["max_frac"]):
+    """A ring (outer or hole) under max_frac of the question's mask area is re-simplified at eps = k x sqrt(its area) (then
+    axis snap): the holes cast shadows / furniture cut and small false islands are traced with tens of vertices for little
+    area (2026-11-12, pp_probe/smallrings.py: total vertices / label hf14fix4 1.77x -> 1.62x, valfix4 1.15x -> 1.02x, Gemini30
+    1.76x -> 1.64x for IoU -0.0002 / -0.0005 / +0.0003)."""
+    out = []
+    for p in polys:
+        rings = []
+        for r in [p["outer"]] + p["holes"]:
+            a = abs(cv2.contourArea(np.asarray(r, np.float32)))
+            if a < max_frac * total and len(r) > 4:
+                q = cv2.approxPolyDP(np.asarray(r, np.int32).reshape(-1, 1, 2), max(PRODUCT_V2["eps"], k * np.sqrt(a)), True)[:, 0, :]
+                q = np.round(clean_ring(snap_ring(q, 6.0))).astype(int)
+                r = q.tolist() if len(q) >= 3 else r
+            rings.append(r)
+        out.append({"outer": rings[0], "holes": rings[1:]})
+    return out
+
+
+def product_polygons(maps, img, box, scaled_eps=False, small_rings=True):
     """maps: {scale: prob_u8 at that inference scale}; img: native BGR sheet; box: the reference (x, y, w, h), native px."""
     m = product_mask(blend(maps, img.shape[:2]), img, box)
-    return offset_polys(mask_to_polygons(m, LOW_VERTEX["min_frac"], product_eps(img.shape[:2], scaled_eps)), PRODUCT_V2["offset"])
+    polys = offset_polys(mask_to_polygons(m, LOW_VERTEX["min_frac"], product_eps(img.shape[:2], scaled_eps)), PRODUCT_V2["offset"])
+    return simplify_small_rings(polys, max(1, int(m.sum()))) if small_rings else polys
 
 
 def nverts(polys):
