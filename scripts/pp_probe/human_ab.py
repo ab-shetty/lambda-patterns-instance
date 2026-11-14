@@ -1,6 +1,7 @@
-"""Visible-error A/B of a post-processing change (human.py's patches, 2026-11-14): product vs fill_gaps pmin 0.1 (regular.py).
+"""Visible-error A/B of a post-processing change (human.py's patches, 2026-11-14): product vs a variant (regular.py): pmin.1 = fill_gaps pmin 0.1 (now the default); rect.9 / rect.8 = drop_islands spares
+rectangular pieces (on top of pmin 0.1).
 Per split: questions with a visible patch, total visible patch area, and the questions whose visible errors changed.
-Usage: python3 scripts/pp_probe/human_ab.py SPLIT [MAPS]"""
+Usage: python3 scripts/pp_probe/human_ab.py SPLIT [MAPS] [VARIANT]"""
 import sys
 from pathlib import Path
 sys.path.insert(0, "scripts/pp_probe"); sys.path.insert(0, "scripts"); sys.path.insert(0, ".")
@@ -13,7 +14,10 @@ if __name__ == "__main__":
     split = sys.argv[1]
     maps = Path(sys.argv[2] if len(sys.argv) > 2 else "data/floz-diag/gem2s_x")
     common.MAPS = maps
-    S = {"base": [], "pmin.1": []}; ch = []
+    var = sys.argv[3] if len(sys.argv) > 3 else "pmin.1"
+    V = {"pmin.1": [("base", 0.05, 0), ("pmin.1", 0.1, 0)], "rect.9": [("base", 0.1, 0), ("rect.9", 0.1, 0.9)],
+         "rect.8": [("base", 0.1, 0), ("rect.8", 0.1, 0.8)]}[var]
+    S = {k: [] for k, _, _ in V}; ch = []
     for job in common.jobs(split):
         idx, img, _, qs = common.load(job)
         h, w = img.shape[:2]
@@ -22,12 +26,12 @@ if __name__ == "__main__":
                   for z in product.SCALES}
             P = product.blend(mp, (h, w)); ign = common.IGNORE.get((idx, ref))
             r = {}
-            for k, pm in (("base", 0.05), ("pmin.1", 0.1)):
-                j = human.judge(regular.polys(regular.mask(P, img, box, pm), P, 0), tgt, ign, (h, w))
+            for k, pm, rect in V:
+                j = human.judge(regular.polys(regular.mask(P, img, box, pm), P, rect), tgt, ign, (h, w))
                 r[k] = (sum(j["miss"]) + sum(j["extra"]), len(j["miss"]) + len(j["extra"]), j["iou"])
                 S[k].append(r[k])
-            if abs(r["base"][0] - r["pmin.1"][0]) > 0.001:
-                ch.append((idx, ref, r["base"], r["pmin.1"]))
+            if abs(r["base"][0] - r[var][0]) > 0.001:
+                ch.append((idx, ref, r["base"], r[var]))
     for k, v in S.items():
         a = np.array(v)
         print(f"{split} {maps.name} {k:7s} mIoU {a[:, 2].mean():.4f}  questions with a visible patch {(a[:, 1] > 0).sum()}  "
