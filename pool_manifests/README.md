@@ -12,6 +12,7 @@ Rebuild a pool without re-mining:
    pools from the 2026-10-14..14f defaults, e.g. `single18kf_s600000`, need `--near-pairs-plan 0` since 2026-10-15 and `--turn-boards 0.6 --pair-turns 0` since 2026-10-15b;
    2026-10-15 pools (`single18kp_*`) need `--turn-boards 0.6 --pair-turns 0`; 2026-10-17 pools (`single18kg_*`)
    need `--gable-pairs 0.4`; 2026-10-15b pools (`single18k{q,ms,w}_*`) build with today's defaults (2026-10-17b)),
+   since 2026-11-14a every pool built at an earlier GEN also needs `--foreground 0`;
    and the older ones need both sets): `revitcur_*` = the 2026-10-02 defaults (since 2026-10-13 also pass
    `--soft-shadows 0`: 0.5 became the default), `revitfail_*` = + `--roof-lines 0.3 --railings 0.15
    --soft-shadows 0.5 --faint-lines 0.2`; base ids 0-1999 n=2000, fresh ids 100000+ with

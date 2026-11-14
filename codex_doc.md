@@ -1,10 +1,19 @@
 # Handoff
 
-Last updated: 2026-11-11 (refinement head A/B, product-output levers, GH200)
+Last updated: 2026-11-14 (foreground A/B, GH200)
 
 Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDING.md` defines the task and the metric;
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
 Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
+
+## 2026-11-14: `--foreground` A/B passes the gate; default 0.4 (GEN 2026-11-14a)
+
+One seed (7), restarts of gem2s-x, product v3: hf14fix4 0.9473 -> **0.9504** (+0.0031, p 0.23), valfix4 0.9517 -> 0.9514,
+Gemini30 0.8990 -> 0.9068 (p 0.046). **But hf14fix4 vertices / label 1.17x -> 1.46x**, and the gain sits on 14 / 12 / 27, not
+on the targeted sheet 02 (synth_progress 2026-11-14). Next: (1) seed 8 of both arms (`SEED=8 ./run_foreground_ab.sh`) before
+trusting +0.003; (2) find why fg outlines carry more vertices on HF14 (render the questions that rose most); (3) the
+deployment latency check on a 16-20 GB card. FreeCAD on this VM: user-local micromamba env, `FREECADCMD=~/fc/bin/freecadcmd`
+(no sudo for /opt/fc).
 
 ## 2026-11-11: 0.95 within reach on val from inference changes; hf14fix2 needs label review + model work
 

@@ -3255,3 +3255,25 @@ Checked on a test wall (`data/diag/fg_test_all.png`); not yet run through FreeCA
   labelled. On 990007 / 008 the footprints touch no label because the walls are plain (unlabelled) stucco, which is correct.
 - `--foreground 0` = no flag = the pre-commit generator (af48afe^), byte for byte (images and annotations, 20 sheets).
 Cosmetic, not fixed: on 990018's right elevation a patio set stands under a deck and is drawn over the railing.
+
+### 2026-11-14 (GH200) -- `--foreground` A/B (`run_foreground_ab.sh`): passes the gate, default 0.4 (GEN 2026-11-14a)
+
+Pools identical but for `--foreground` (ids 700000+, seed 6, N 9000 -> 8,937 sheets; fg = 0.4, so ~26% of sheets, elevations
+only), each + the 2,502 Gemini holdout records (139 sheets x18), one-epoch DR / no-DR restarts of gem2s-x at seed 7, blend50.
+Product v3 (`--product`), vertices / label from `scripts/pp_probe/fgab_summary.py`; paired over fixed questions:
+
+| product | ctl | fg | fg - ctl | paired |
+|---|---|---|---|---|
+| valfix4 (71 q) | 0.9517 / 1.03x | 0.9514 / 1.00x | -0.0003 | p 0.45, 0 up / 2 down |
+| hf14fix4 (50 q) | 0.9473 / 1.17x | **0.9504** / **1.46x** | **+0.0031** | p 0.23, 6 up / 3 down |
+| Gemini30 (195 q) | 0.8990 / 1.32x | 0.9068 / 1.27x | **+0.0078** | p 0.046, 33 up / 20 down |
+
+Raw @4096 (blend50): HF14 0.9261 -> 0.9291, fix v2 0.9331 -> 0.9330, val 0.9019 -> 0.9026, Gemini30 0.8878 -> 0.8959.
+- **Gate (the user, set before the run): hf14fix4 >= +0.002, valfix4 >= -0.002, Gemini30 >= -0.003 -> passes; default 0.4.**
+- The HF14 gain is not where the feature aimed: 14 q0 +0.080 (the second elevation's band), 12 q3 +0.052, 27 q2 +0.037;
+  25 q1 -0.064. Target sheet HF14 02: q1 0.9065 -> 0.9123 (84 -> 90 vertices, label 27), q0 0.9144 -> 0.8991.
+- **Vertices got worse on HF14**: median 1.17x -> 1.46x (questions <= 1.2x 52% -> 40%; total vertices / label 1.50x -> 1.56x).
+  Partly the known median cliff (2026-11-11), but the whole middle of the distribution moved up. Not in the gate; it breaks
+  the <= 1.2x target on hf14fix4.
+- One seed. Seed noise (~0.016) is five times the HF14 difference; only Gemini30 reaches p < 0.05.
+Checkpoints not published (`data/runs/ck_fgab_{ctl,fg}_s7_blend50.pth` on the GH200); maps on floz-diag `fgab_{ctl,fg}_s7/`.

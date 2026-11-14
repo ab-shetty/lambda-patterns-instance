@@ -278,7 +278,7 @@ def house_for(image_id, seed, mw):
 # Bump GEN_VERSION whenever a DEFAULT changes what a pool contains (images or labels). It is
 # written to generation_manifest.json; the run scripts (scripts/pool_guard.sh) refuse to reuse a
 # pool built by an older version instead of silently training on it.
-GEN_VERSION = "2026-10-21a"      # 21a: --base-bands 1 (0 = 20d); 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b);
+GEN_VERSION = "2026-11-14a"      # 11-14a: --foreground 0.4 (0 = 2026-10-21a); 21a: --base-bands 1 (0 = 20d); 20a: --cross-gables 0.4 (0 = 2026-10-17b); 20b: --wall-splits 0.3 (0 = 20a); 20c: --panel-siding 0.12 (0 = 20b);
                                  # 20d: --pattern-drift 0.3 (0 = 20c)
 OPENINGS_PER_FACE = [True]      # --openings-per-face (default 1), set in _init
 # --cut-standing (default 0 since 2026-10-04): posts standing in front of a wall (porch posts,
@@ -335,10 +335,10 @@ PAIR_TURNS = [True]
 # --heavy-pieces P (default 0.4 since 2026-10-14e): on an elevation sheet chosen with P, some surface pieces (thin bands
 # more often) are boxed in a heavy line; see revit_render.compose_revit. 0 = earlier pools.
 HEAVY_PIECES = [0.4]
-# --foreground P (opt-in since 2026-11-14, default 0 = byte-identical pools): a Revit elevation sheet chosen with P gets 1-4
+# --foreground P (default 0.4 since 2026-11-14a, fgab A/B; 0 = earlier pools, byte-identical): a Revit elevation sheet chosen with P gets 1-4
 # objects in front of the house (patio sets, benches, planters, shrubs, grills, a tree, a car), wall labels running on
 # behind them, footprints in ref_exclude; see revit_render.draw_foreground.
-FOREGROUND = [0.0]
+FOREGROUND = [0.4]
 # --gable-pairs P (default 0 since 2026-10-17b; 0.4 on 2026-10-17 -- single18kg: Gemini30 26 +0.11 but 1 -0.32, val 9 -0.06): a colour elevation whose house has a gable (else a second storey) gets,
 # with P, the gable / upper storey in the main wall's style at another chroma (CIEDE2000 6-12, two families: Gemini30 26)
 # or, half the time, a within-family drift (CIEDE2000 0.4-2, one family); see revit_render.gable_pair_planned. 0 = earlier pools.
@@ -1346,7 +1346,7 @@ def _init(out, seed, mw, flags, faces, revit=False, revit_plans=False, shaped=Fa
     TURN_BOARDS[0] = float(flags.pop("turn_boards", 0.9))
     PAIR_TURNS[0] = bool(flags.pop("pair_turns", 1))
     HEAVY_PIECES[0] = float(flags.pop("heavy_pieces", 0.4))
-    FOREGROUND[0] = float(flags.pop("foreground", 0.0))
+    FOREGROUND[0] = float(flags.pop("foreground", 0.4))
     GABLE_PAIRS[0] = float(flags.pop("gable_pairs", 0.0))
     CROSS_GABLES[0] = float(flags.pop("cross_gables", 0.4))
     BASE_BANDS[0] = float(flags.pop("base_bands", 1.0))
@@ -1484,10 +1484,10 @@ def main():
                     help="Revit floor plans: probability a sheet lays each room of a directional floor family "
                          "(planks / plank lines / joists / 45-deg hatch) in its own direction. Default 0.9 since "
                          "2026-10-15b (0.6 on 2026-10-14d..15); 0 = earlier pools")
-    ap.add_argument("--foreground", type=float, default=0.0,
+    ap.add_argument("--foreground", type=float, default=0.4,
                     help="Revit elevations: probability a sheet shows 1-4 objects in front of the house (furniture, "
-                         "planters, shrubs, grill, tree, car), wall labels running on behind them. Default 0 (opt-in, "
-                         "2026-11-14)")
+                         "planters, shrubs, grill, tree, car), wall labels running on behind them. Default 0.4 since "
+                         "2026-11-14a (fgab A/B); 0 = earlier pools")
     ap.add_argument("--heavy-pieces", type=float, default=0.4,
                     help="Revit elevations: probability a sheet boxes some surface pieces (thin bands more often) in a "
                          "heavy line, labels unchanged. Default 0.4 since 2026-10-14e; 0 = earlier pools")
