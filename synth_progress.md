@@ -3353,3 +3353,34 @@ session the same day): they are v3 / v3 + islands without the guard.
   the only changed question improved, 6 q1); hf14fix4 30 -> 31 questions, area 1.71% -> 1.70% (4 better, 2 worse: 18 q0 / q1
   gain a 0.4% patch); Gemini30 visible patch area 8.5% -> 8.0% of the label (159 -> 158 questions; ~55 better, ~10 worse).
   27 q2's door is only partly fixed (visible error 0.103 -> 0.099).
+
+### 2026-11-14 (GH200) -- seed-averaged blends with the current product (islands + SNAP_GUARD); ship fgavg78
+
+`scripts/blend_ckpts.py`: fgavg78 = 0.5 fg s7 + 0.5 fg s8 (blend50s); ctlavg78 = the same for ctl (blend-vs-blend control);
+gem2s_fg = 0.5 gem2s-x + 0.25 fg s7 + 0.25 fg s8. Scored with `evaluate_refunet_selection.py --product` (HEAD has 5c86fdd;
+`scripts/rescore_product.sh`, two GPU jobs at a time: three OOM at 5120). Vertices from `fgab_summary.py`; eps 7 from
+`vertsweep.py eps7+isl5%<.6` on the saved maps (its isl5 rows reproduce the evaluator exactly).
+
+| model | valfix4 | hf14fix4 | mean | Gemini30 | vertices / label hf14fix4 (Gemini30) | eps 7: valfix4 / hf14fix4 vertices |
+|---|---|---|---|---|---|---|
+| **fgavg78** | 0.9514 | **0.9494** | **0.9504** | **0.9114** | 1.33x (1.23x) | 0.9501 / 1.25x |
+| ctlavg78 | 0.9519 | 0.9481 | 0.9500 | 0.9033 | 1.23x (1.23x) | 0.9499 / 1.14x |
+| gem2s_fg | 0.9516 | 0.9484 | 0.9500 | 0.9089 | 1.21x (1.29x) | 0.9500 / 1.17x |
+| gem2s-x | 0.9514 | 0.9460 | 0.9487 | 0.9031 | 1.12x (1.42x) | 0.9495 / 1.12x |
+
+HF14 02 q1 (label 27 vertices): fgavg78 0.9064 / 83, ctlavg78 0.9079 / 101, gem2s_fg 0.8980 / 138, gem2s-x 0.8662 / 221.
+- Blend vs blend, fg - ctl: hf14fix4 +0.0013, valfix4 -0.0005, Gemini30 +0.0081.
+- **Gate (the user): ship = best mean of valfix4 and hf14fix4 with Gemini30 within 0.003 of the best -> fgavg78** (also the best
+  Gemini30). Not published (the user publishes).
+- **eps 7 gate (valfix4 >= 0.950 and hf14fix4 <= 1.2x for the shipped model): fails** (0.9501, 1.25x); eps stays 6.
+**Correction, same day: the table above predates FILL_PMIN 0.1** (d0b844e, made the product default by the parallel CPU session
+while it ran). Rescored on the same maps with `product.py` at HEAD (which reproduces run_stress.sh's "none" rows exactly):
+
+| model | valfix4 | hf14fix4 | mean | Gemini30 | vertices / label hf14fix4 | eps 7: valfix4 / hf14fix4 vertices |
+|---|---|---|---|---|---|---|
+| **fgavg78** | 0.9503 | **0.9498** | **0.9501** | **0.9131** | 1.25x | 0.9495 / 1.21x |
+| ctlavg78 | 0.9510 | 0.9484 | 0.9497 | 0.9053 | 1.23x | -- |
+| gem2s_fg | 0.9506 | 0.9486 | 0.9496 | 0.9112 | 1.21x | -- |
+| gem2s-x | 0.9506 | 0.9459 | 0.9483 | 0.9069 | 1.12x | -- |
+
+Same decisions: **ship fgavg78**; eps 7 fails on both conditions (valfix4 0.9495 < 0.950, hf14fix4 1.21x > 1.2x).

@@ -449,6 +449,8 @@ def main():
         indices = (list(range(len(records))) if args.indices == "all" else
                    [int(value) for value in args.indices.split(",") if value.strip()])
     if args.degrade:
+        if not isinstance(records, dict):   # the HF real-world-test Dataset does not take item assignment
+            records = {i: records[i] for i in indices}
         for i in indices:
             r = records[i]
             data = r["image"] if "image" in r else Path(r["image_path"]).read_bytes()
