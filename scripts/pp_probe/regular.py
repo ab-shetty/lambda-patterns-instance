@@ -26,9 +26,16 @@ def polys(m, P, rect):
                                                    PRODUCT_V2["offset"]), total)
     if not rect:
         return product.drop_islands(ps, P, total)
-    spared = [p for p in ps if rectangularity(p["outer"]) >= rect]
-    rest = product.drop_islands([p for p in ps if rectangularity(p["outer"]) < rect], P, total) if len(ps) > len(spared) else []
-    return spared + rest if spared else product.drop_islands(ps, P, total)
+    # drop_islands with rectangular pieces spared (the same rule otherwise; never every piece)
+    keep = []
+    for p in ps:
+        if len(ps) > 1 and abs(cv2.contourArea(np.asarray(p["outer"], np.float32))) < product.ISLANDS["max_frac"] * total \
+                and rectangularity(p["outer"]) < rect:
+            m = rasterize([p], P.shape)
+            if m.any() and P[m].mean() < product.ISLANDS["p"]:
+                continue
+        keep.append(p)
+    return keep or ps
 
 
 VARIANTS = {"pmin.1": (0.1, 0), "pmin.15": (0.15, 0), "pmin.2": (0.2, 0), "rect.9": (0.05, 0.9), "rect.8": (0.05, 0.8),
