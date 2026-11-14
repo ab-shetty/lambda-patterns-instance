@@ -98,6 +98,33 @@ def load_refunet(checkpoint_path, device):
     return model, checkpoint
 
 
+DEGRADE = ("jpeg50", "jpeg25", "lowres2000", "lowres1400", "scan", "gray")
+
+
+def degrade_bytes(data, kind, seed=0):
+    """--degrade (stress test, 2026-11-14): the sheet as a worse client file, at its NATIVE size so labels, boxes and fixes
+    stay valid. jpegQ: JPEG at quality Q. lowresN: long side down to N px (area) and back up (linear), a low-dpi export.
+    scan: blur sigma 1, grey paper (x0.92 + 8), gamma 1.2, Gaussian noise sigma 6. gray: a black-and-white copy."""
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    h, w = img.shape[:2]
+    if kind.startswith("jpeg"):
+        return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, int(kind[4:])])[1].tobytes()
+    if kind.startswith("lowres"):
+        s = int(kind[6:]) / max(h, w)
+        if s < 1:
+            img = cv2.resize(cv2.resize(img, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA), (w, h),
+                             interpolation=cv2.INTER_LINEAR)
+    elif kind == "scan":
+        f = cv2.GaussianBlur(img, (0, 0), 1.0).astype(np.float32) * 0.92 + 8
+        f = 255 * (f / 255) ** 1.2 + np.random.default_rng(seed).normal(0, 6, img.shape)
+        img = np.clip(f, 0, 255).astype(np.uint8)
+    elif kind == "gray":
+        img = cv2.cvtColor(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+    else:
+        raise ValueError(kind)
+    return cv2.imencode(".png", img)[1].tobytes()
+
+
 def _prepare_sheet(job):
     """CPU half of one sheet: decode, masks, reference boxes and crops, box planes, targets.
     Runs in a worker process when `evaluate_model(workers > 0)`; every step is the same code
@@ -398,6 +425,8 @@ def main():
                         help="score the PRODUCT output (scripts/product.py, 2026-11-11): the model at 5120 / 4096 / 3072, maps "
                              "blended, post-processed and turned into polygons; IoU of those polygons. --image-max-size and "
                              "--mask-thresh are ignored; maps go under --save-probs (default <metrics-out>.maps)/<scale>/")
+    parser.add_argument("--degrade", default="", choices=("",) + DEGRADE,
+                        help="stress test: score every sheet as a degraded copy at native size (degrade_bytes)")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = load_refunet(args.checkpoint, device)
@@ -419,6 +448,12 @@ def main():
                                        config="real-world-test", split="test")
         indices = (list(range(len(records))) if args.indices == "all" else
                    [int(value) for value in args.indices.split(",") if value.strip()])
+    if args.degrade:
+        for i in indices:
+            r = records[i]
+            data = r["image"] if "image" in r else Path(r["image_path"]).read_bytes()
+            records[i] = dict({k: r[k] for k in ("annotations", "ref_exclude") if k in r},
+                              image=degrade_bytes(data, args.degrade, seed=i))
     ckpt_args = checkpoint.get("args", {}) or {}
     if args.save_probs:
         Path(args.save_probs).mkdir(parents=True, exist_ok=True)
