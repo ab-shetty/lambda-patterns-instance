@@ -41,8 +41,11 @@ def drafts(d, images):
     for f in fams:
         if f["pl"]:
             n_conf += 1; label = f"pattern{n_conf}"
-        else:
+        elif f["support"] >= 2 and f["plain"] < 0.5:
             n_unc += 1; label = f"uncertain_{n_unc}"
+        else:
+            continue        # single-box / blank-paper families: left out (the dry run had ~55 such polygons per sheet);
+                            # what they covered is not "covered", so check_here still marks it
         covered |= f["draft"]
         for p in f["polys"]:
             out.append((label, p["outer"]))

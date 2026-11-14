@@ -137,18 +137,38 @@ def probs_to_polygons(prob_u8, native_hw, thresh=T, hole_px=4096, min_frac=0.002
     return offset_polys(polys, offset) if offset else polys
 
 
+_CELLS = {}      # per-sheet cache: the ink map / cells depend only on the image (several questions per sheet reuse them)
+
+
+def sheet_key(img):
+    """Cheap identity of an image array for per-sheet caches: buffer address, shape and a strided sample of the pixels."""
+    return (img.__array_interface__["data"][0], img.shape, hash(img[::97, ::89].tobytes()))
+
+
+def _cells(img, ink_t, min_px, max_frac):
+    key = (sheet_key(img), ink_t, min_px, max_frac)
+    if key not in _CELLS:
+        if len(_CELLS) > 4:
+            _CELLS.clear()
+        g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+        ink = (cv2.dilate(g, np.ones((9, 9), np.uint8)).astype(np.int16) - g) > ink_t
+        n, lab = cv2.connectedComponents((~ink).astype(np.uint8), connectivity=4)
+        tot = np.bincount(lab.ravel(), minlength=n).astype(np.float64)
+        ok = (tot >= min_px) & (tot <= max_frac * lab.size)
+        ok[0] = False
+        _CELLS[key] = (ink, n, lab, tot, ok)
+    return _CELLS[key]
+
+
 def snap_to_cells(m, img, s=1.0, ink_t=CELL_SNAP["ink_t"], hi=CELL_SNAP["hi"], lo=CELL_SNAP["lo"],
                   min_px=CELL_SNAP["min_px"], max_frac=CELL_SNAP["max_frac"]):
     """Snap a native-resolution mask to the drawing's cells (4-connected non-ink regions; ink = darker than the 9 px local
     maximum by > ink_t). Cells with coverage >= hi are taken whole, <= lo dropped; ink pixels whose 3x3 neighbourhood is
-    mostly selected join (strokes between taken cells); holes up to 4096 px at inference scale s are refilled."""
-    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-    ink = (cv2.dilate(g, np.ones((9, 9), np.uint8)).astype(np.int16) - g) > ink_t
-    n, lab = cv2.connectedComponents((~ink).astype(np.uint8), connectivity=4)
-    tot = np.bincount(lab.ravel(), minlength=n).astype(np.float64)
-    c = np.bincount(lab.ravel(), weights=m.ravel().astype(np.float64), minlength=n) / np.maximum(tot, 1)
-    ok = (tot >= min_px) & (tot <= max_frac * lab.size)
-    ok[0] = False
+    mostly selected join (strokes between taken cells); holes up to 4096 px at inference scale s are refilled.
+    2026-11-14: the cells are cached per sheet and the coverage counts only the selected pixels (integer counts, the same
+    floats as the weighted bincount) -- identical output, checked end to end on every eval question."""
+    ink, n, lab, tot, ok = _cells(img, ink_t, min_px, max_frac)
+    c = np.bincount(lab[m], minlength=n).astype(np.float64) / np.maximum(tot, 1)
     out = m.copy()
     out[(ok & (c >= hi))[lab]] = True
     out[(ok & (c <= lo) & (c > 0))[lab]] = False

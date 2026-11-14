@@ -3440,3 +3440,16 @@ were offered; the user dropped the pre-label / self-training plan.
   results file (`files/batch-dqv676j2pq1off70skzcruwr9k0wm8z07y3t`, 1.27 GB) was still active, so they were rewritten with
   `generate_images_gemini.py`'s crop and saved to the private Hub dataset `abshetty/floz-assets` `gemini_r5/` (200 / 200). Still
   unlabelled; not in Roboflow.
+
+## 2026-11-14 — product post-processing ~2.9x faster, identical output
+
+Profile (HF14, fgavg78 maps, 1 process): 1,079 ms / question, 71% in `colour_cut` (a k~21 median blur of the whole sheet, Lab of
+every pixel, a percentile and a float median over the ~90% "paper" pixels), 14% `snap_to_cells`. Changes, all exact:
+- `colour_cut`: median blur in horizontal strips on `product.THREADS` (min(8, cores)) threads with k//2 rows of context; paper
+  Lab median from 256-bin histograms of the uint8 Lab channels (Lab is affine in the uint8 value); Lab / chromaticity only at
+  the box and the selected pixels; `colour_cut_ref` kept as the reference.
+- per-sheet caches (`polygonize.sheet_key`): the blur + paper colour, and `snap_to_cells`' ink map / cells; coverage counted
+  with an integer bincount over the selected pixels (same floats).
+Check: product polygons identical on all 316 valfix4 / hf14fix4 / Gemini30 questions (HEAD vs new). Timing (GH200, training
+running alongside): 8 parallel processes 1,098 -> 386 ms / question on HF14; solo, first question on a sheet 653 ms, later
+questions on the same sheet 258 ms. Multi-query sheets benefit most; the deployment CPU will set the absolute numbers.

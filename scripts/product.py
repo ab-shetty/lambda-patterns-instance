@@ -15,7 +15,8 @@ Library: product_polygons(maps, img, box) with maps = {scale: prob_u8}. CLI: sco
 layout, MAPS/{split}_{scale}/probs/IIII_QQQ.npz) on a pp_probe split; `evaluate_refunet_selection.py --product` runs the model
 at the three scales and then this.
     python3 scripts/product.py valfix4 data/floz-diag/gem2s_x [--out rows.json]"""
-import argparse, json, sys
+import argparse, json, os, sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import cv2
 import numpy as np
@@ -29,7 +30,100 @@ EPS_FLOOR = 4.0            # scaled eps never below 4 native px: without it a 10
                            # outlines stay jagged (valfix4 1.31x, hf14fix4 1.38x vertices / label)
 
 
+THREADS = min(8, os.cpu_count() or 1)
+
+
+def _median_blur(img, k, threads=THREADS):
+    """cv2.medianBlur in horizontal strips on `threads` threads, each strip read with k // 2 rows of real context: identical
+    to the one-call result (BORDER_REPLICATE only applies at the true image edges), ~threads x faster."""
+    h = img.shape[0]
+    if threads <= 1 or h < 64 * threads:
+        return cv2.medianBlur(img, k)
+    r, out = k // 2, np.empty_like(img)
+    cuts = np.linspace(0, h, threads + 1).astype(int)
+
+    def strip(i):
+        a, b = cuts[i], cuts[i + 1]
+        lo, hi = max(0, a - r), min(h, b + r)
+        out[a:b] = cv2.medianBlur(img[lo:hi], k)[a - lo:a - lo + (b - a)]
+    with ThreadPoolExecutor(threads) as ex:
+        list(ex.map(strip, range(threads)))
+    return out
+
+
+def _lab(px):
+    """Lab (L in 0-100, a / b centred) of an (N, 3) uint8 BGR array, as colour_cut_ref computes it per pixel."""
+    return cv2.cvtColor(px.reshape(-1, 1, 3), cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32) * [100 / 255, 1, 1] - [0, 128, 128]
+
+
+def _p90_mask(g):
+    """g >= np.percentile(g, 90) for a uint8 image, from the histogram (no sort). The comparison is with integers, so it only
+    depends on the two order statistics np.percentile interpolates between."""
+    c = np.cumsum(np.bincount(g.ravel(), minlength=256))
+    idx = 0.9 * (g.size - 1)
+    lo, hi = int(np.floor(idx)), int(np.ceil(idx))
+    v0, v1 = int(np.searchsorted(c, lo, side="right")), int(np.searchsorted(c, hi, side="right"))
+    if v0 == v1 or lo == hi:
+        return g >= v0
+    return g > v0          # the percentile lies strictly between v0 and v1 = the next present value
+
+
+def _paper_lab(blur, pm):
+    """np.median(Lab(blur[pm]), 0) exactly, from 256-bin histograms of the uint8 Lab channels: the paper mask is usually ~90%
+    of the sheet, and sorting millions of floats was most of the cut's time. Lab here is affine in the uint8 value
+    (L * 100 / 255, a - 128, b - 128, in float64 as colour_cut_ref), so the median is the same transform of the middle
+    order statistic(s), averaged as np.median averages an even count."""
+    lab = cv2.cvtColor(blur, cv2.COLOR_BGR2LAB)
+    n = int(pm.sum())
+    out = np.empty(3)
+    for c, (mul, off) in enumerate(((100 / 255, 0.0), (1.0, 128.0), (1.0, 128.0))):
+        ch = lab[..., c]
+        hist = np.bincount(ch.ravel(), minlength=256) - np.bincount(ch[~pm], minlength=256)
+        cum = np.cumsum(hist)
+        v = lambda r: np.float64(np.float32(np.searchsorted(cum, r, side="right"))) * mul - off
+        out[c] = v(n // 2) if n % 2 else (v(n // 2 - 1) + v(n // 2)) / 2
+    return out
+
+
+_SHEET = {}      # per-sheet cache of the image-only half of the colour cut
+
+
+def _sheet_colour(img):
+    from polygonize import sheet_key
+    key = sheet_key(img)
+    if key not in _SHEET:
+        if len(_SHEET) > 4:
+            _SHEET.clear()
+        k = max(5, int(max(img.shape[:2]) / 160) | 1)
+        blur = _median_blur(img, k)
+        _SHEET[key] = (blur, _paper_lab(blur, _p90_mask(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))))
+    return _SHEET[key]
+
+
 def colour_cut(img, m, box, t=6.0):
+    """Chromaticity colour cut (synth_progress 2026-10-21; pp_probe/stack.py `cc`): on a colour sheet (reference fill > 12 Lab
+    from the paper), selected pieces whose shadow-invariant chromaticity is > t from the reference's are removed.
+    Same output as colour_cut_ref (checked on every valfix4 / hf14fix4 / Gemini30 question, 2026-11-14), ~6x faster: the
+    median blur runs in strips on THREADS threads and Lab / chromaticity are computed only where they are read."""
+    blur, paper = _sheet_colour(img)
+    x, y, bw, bh = box
+    bpx = blur[y:y + bh, x:x + bw].reshape(-1, 3)
+    if np.linalg.norm(np.median(_lab(bpx), 0) - paper) <= 12:
+        return m
+    fb = bpx.astype(np.float32) + 1
+    ref = np.median(fb / fb.sum(-1, keepdims=True) * 100, 0)
+    f = blur[m].astype(np.float32) + 1
+    d = np.linalg.norm(f / f.sum(-1, keepdims=True) * 100 - ref, axis=-1)
+    far = np.zeros(m.shape, np.uint8)
+    far[m] = d > t
+    n, cc, st, _ = cv2.connectedComponentsWithStats(far, connectivity=8)
+    big = np.zeros(n, bool); big[1:] = st[1:, 4] > 0.0002 * m.size
+    cut = big[cc]
+    keep = m & ~cv2.dilate(cut.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    return cv2.morphologyEx((m & ~cut).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool) | keep
+
+
+def colour_cut_ref(img, m, box, t=6.0):
     """Chromaticity colour cut (synth_progress 2026-10-21; pp_probe/stack.py `cc`): on a colour sheet (reference fill > 12 Lab
     from the paper), selected pieces whose shadow-invariant chromaticity is > t from the reference's are removed."""
     k = max(5, int(max(img.shape[:2]) / 160) | 1)
