@@ -80,8 +80,11 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 ## Where we are (2026-11-14)
 
 Best: `abshetty/floz-refunet-swint-fgavg78` (published 2026-11-14): product v3 valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131.
-Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 RECOVERED (2026-11-14, CPU session): 200 images on `abshetty/floz-assets` `gemini_r5/`, unlabelled. The pre-label /
-self-training plan was dropped by the user while the images were thought lost; not restarted. Degradation stress (jpeg25, B&W) is a footnote per the user.
+Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 RECOVERED (2026-11-14, CPU session): 200 images on `abshetty/floz-assets` `gemini_r5/`, unlabelled. Self-training on round 5 (fgavg78's confident answers, two pool versions,
+four seeds) FAILED the gate both times (v2 blend: valfix4 +0.0004, hf14fix4 -0.0089, gemini30 -0.0086): closed. Round-5 DRAFTS for
+human correction are in Roboflow `floz-gen-gemini-r5` (15 blank holdouts for the anchoring check) -- labelling them is the open lever.
+Post-processing is ~2.9x faster with identical output; `scripts/bench_deploy.py` measures a candidate card. Local checkpoints are
+backed up to the private `abshetty/floz-runs-backup`; the GH200 instance was terminated after it. Degradation stress (jpeg25, B&W) is a footnote per the user.
 
 ## Where we were (2026-10-22): closed out
 
