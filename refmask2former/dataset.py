@@ -27,6 +27,12 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 # --------------------------------------------------------------------------- #
 # Mask + reference helpers
 # --------------------------------------------------------------------------- #
+# Self-training pools (scripts/selftrain, 2026-11-14): an annotation whose category is IGNORE_PREFIX + family marks pixels
+# that carry no loss for that family's questions (IGNORE_PREFIX + "*": for every question). They are never references or
+# targets. Pools without them load exactly as before (no RNG draw changes).
+IGNORE_PREFIX = "__ignore__:"
+
+
 def render_instance_mask(segmentation, height, width):
     """COCO polygons -> binary mask. First polygon is outer, the rest are holes."""
     mask = np.zeros((height, width), dtype=np.uint8)
@@ -396,6 +402,9 @@ class InstanceSegDataset(Dataset):
 
     def __getitem__(self, i):
         image, anns = self._load(i)
+        ign_anns = [a for a in anns if str(a.get("category_name", "")).startswith(IGNORE_PREFIX)]
+        if ign_anns:
+            anns = [a for a in anns if not str(a.get("category_name", "")).startswith(IGNORE_PREFIX)]
         h0, w0 = image.shape[:2]
         rec = self.records[self.indices[i]]
         excl = exclusion_mask(rec.get("ref_exclude") if isinstance(rec, dict) else None, h0, w0)
@@ -490,6 +499,15 @@ class InstanceSegDataset(Dataset):
                 multi_boxes = [(0, 0, 0, 0)] * self.refs_per_image
         if not multi:
             ref_patches = [ref_patch]
+
+        # ignore plane for this question's family: carried as one extra mask through every transform, split off at the end
+        has_ign = False
+        if ign_anns and not multi and target_cat is not None:
+            sel = [a for a in ign_anns if a["category_name"][len(IGNORE_PREFIX):] in (target_cat, "*")]
+            if sel:
+                masks = list(masks) + [np.logical_or.reduce(
+                    [render_instance_mask(a["segmentation"], h0, w0) > 0 for a in sel]).astype(np.uint8)]
+                has_ign = True
 
         # Aspect-preserving resize of image + masks.
         side = self.image_max_size
@@ -655,13 +673,20 @@ class InstanceSegDataset(Dataset):
                 "ref_boxes_multi": torch.from_numpy(np.ascontiguousarray(boxes_r)),  # [K, nh, nw]
             }
         ref_r = refs_r[0]
-        return {
+        ign_r = None
+        if has_ign:
+            ign_r = np.ascontiguousarray(masks_arr[-1])
+            masks_arr = np.ascontiguousarray(masks_arr[:-1])
+        out = {
             "image": _normalize_chw(image_r),                       # [3, nh, nw]
             "masks": torch.from_numpy(masks_arr).to(torch.uint8),   # [G, nh, nw]
             "ref_match": torch.from_numpy(ref_match),               # [G]
             "reference": _normalize_chw(ref_r),                     # [3, R, R]
             "ref_box": torch.from_numpy(ref_box_r).float()[None],   # [1, nh, nw]
         }
+        if ign_r is not None:
+            out["ignore"] = torch.from_numpy(ign_r).bool()          # [nh, nw], loss-free pixels
+        return out
 
 
 # --------------------------------------------------------------------------- #
@@ -726,6 +751,8 @@ def collate_fn(batch, size_divisible=32, union_only=False, other_plane=False):
         images[b, :, :h, :w] = sample["image"]
         ref_boxes[b, :, :h, :w] = sample["ref_box"]
         pixel_mask[b, :h, :w] = True
+        if "ignore" in sample:      # self-training: no loss on this question's ignored pixels
+            pixel_mask[b, :h, :w] &= ~sample["ignore"]
 
         g = sample["masks"].shape[0]
         entry = {

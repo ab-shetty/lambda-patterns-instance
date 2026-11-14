@@ -1,0 +1,459 @@
+{
+ "summary": {
+  "sheets": 14,
+  "human_families": 24,
+  "families_found": 30,
+  "pseudo_families": 20,
+  "merges": 0,
+  "draft_miou": 0.5593,
+  "draft_misses": 10,
+  "pl_covered_families": 13,
+  "pl_pos_precision": 0.9887,
+  "pl_pos_recall": 0.9682,
+  "pl_neg_error": 0.0058,
+  "pl_ignored": 0.0261,
+  "unmatched_pl_families": 7,
+  "unmatched_pl_on_labels": 0.0016,
+  "params": {
+   "hi": 0.9,
+   "lo": 0.1,
+   "s_min": 2
+  }
+ },
+ "sheets": [
+  {
+   "sheet": "real004",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real004",
+     "category": "pattern2",
+     "target_px": 687270,
+     "draft_iou": 0.9885,
+     "miss": false,
+     "pl": true,
+     "support": 9,
+     "pos_px": 671843,
+     "pos_tp": 671001,
+     "neg_on_T": 4363,
+     "ign_on_T": 11906
+    },
+    {
+     "sheet": "real004",
+     "category": "pattern1",
+     "target_px": 1954747,
+     "draft_iou": 0.9623,
+     "miss": false,
+     "pl": true,
+     "support": 29,
+     "pos_px": 1904190,
+     "pos_tp": 1887827,
+     "neg_on_T": 16696,
+     "ign_on_T": 50224
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real005",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real005",
+     "category": "pattern1",
+     "target_px": 2026898,
+     "draft_iou": 0.9374,
+     "miss": false,
+     "pl": true,
+     "support": 5,
+     "pos_px": 1886180,
+     "pos_tp": 1849118,
+     "neg_on_T": 4920,
+     "ign_on_T": 172860
+    },
+    {
+     "sheet": "real005",
+     "category": "pattern2",
+     "target_px": 1938240,
+     "draft_iou": 0.8765,
+     "miss": false,
+     "pl": true,
+     "support": 11,
+     "pos_px": 2060281,
+     "pos_tp": 1895169,
+     "neg_on_T": 12710,
+     "ign_on_T": 30361
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real006",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real006",
+     "category": "pattern2",
+     "target_px": 2197025,
+     "draft_iou": 0.979,
+     "miss": false,
+     "pl": true,
+     "support": 36,
+     "pos_px": 2139123,
+     "pos_tp": 2138143,
+     "neg_on_T": 26628,
+     "ign_on_T": 32254
+    },
+    {
+     "sheet": "real006",
+     "category": "pattern1",
+     "target_px": 1217326,
+     "draft_iou": 0.9348,
+     "miss": false,
+     "pl": true,
+     "support": 3,
+     "pos_px": 1082651,
+     "pos_tp": 1069767,
+     "neg_on_T": 14681,
+     "ign_on_T": 132878
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real008",
+   "n_fam": 5,
+   "n_pl": 1,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real008",
+     "category": "pattern1",
+     "target_px": 3930833,
+     "draft_iou": 0.9828,
+     "miss": false,
+     "pl": true,
+     "support": 36,
+     "pos_px": 3876994,
+     "pos_tp": 3866701,
+     "neg_on_T": 25071,
+     "ign_on_T": 39061
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real009",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real009",
+     "category": "pattern1",
+     "target_px": 1125433,
+     "draft_iou": 0.9536,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 1110548,
+     "pos_tp": 1102118,
+     "neg_on_T": 5522,
+     "ign_on_T": 17793
+    },
+    {
+     "sheet": "real009",
+     "category": "pattern2",
+     "target_px": 218204,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": [
+    {
+     "support": 5,
+     "pos_px": 900463,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real010",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real010",
+     "category": "pattern1",
+     "target_px": 1129675,
+     "draft_iou": 0.9809,
+     "miss": false,
+     "pl": true,
+     "support": 19,
+     "pos_px": 1115995,
+     "pos_tp": 1110491,
+     "neg_on_T": 7010,
+     "ign_on_T": 12174
+    },
+    {
+     "sheet": "real010",
+     "category": "pattern2",
+     "target_px": 214813,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": [
+    {
+     "support": 16,
+     "pos_px": 908111,
+     "on_labels": 5799
+    }
+   ]
+  },
+  {
+   "sheet": "real013",
+   "n_fam": 1,
+   "n_pl": 1,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real013",
+     "category": "pattern1",
+     "target_px": 229342,
+     "draft_iou": 0.0007,
+     "miss": true,
+     "pl": false,
+     "support": 6
+    },
+    {
+     "sheet": "real013",
+     "category": "pattern2",
+     "target_px": 1594263,
+     "draft_iou": 0.9685,
+     "miss": false,
+     "pl": true,
+     "support": 6,
+     "pos_px": 1538901,
+     "pos_tp": 1533813,
+     "neg_on_T": 5837,
+     "ign_on_T": 54613
+    },
+    {
+     "sheet": "real013",
+     "category": "pattern3",
+     "target_px": 666087,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real015",
+   "n_fam": 6,
+   "n_pl": 3,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real015",
+     "category": "pattern1",
+     "target_px": 6342095,
+     "draft_iou": 0.9915,
+     "miss": false,
+     "pl": true,
+     "support": 39,
+     "pos_px": 6277183,
+     "pos_tp": 6266847,
+     "neg_on_T": 15619,
+     "ign_on_T": 59629
+    }
+   ],
+   "extra": [
+    {
+     "support": 2,
+     "pos_px": 423571,
+     "on_labels": 0
+    },
+    {
+     "support": 2,
+     "pos_px": 1393461,
+     "on_labels": 1220
+    }
+   ]
+  },
+  {
+   "sheet": "real017",
+   "n_fam": 3,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real017",
+     "category": "pattern1",
+     "target_px": 53551,
+     "draft_iou": 0.002,
+     "miss": true,
+     "pl": false,
+     "support": 1
+    },
+    {
+     "sheet": "real017",
+     "category": "pattern2",
+     "target_px": 537487,
+     "draft_iou": 0.9393,
+     "miss": false,
+     "pl": false,
+     "support": 1
+    }
+   ],
+   "extra": [
+    {
+     "support": 17,
+     "pos_px": 499314,
+     "on_labels": 399
+    },
+    {
+     "support": 2,
+     "pos_px": 404786,
+     "on_labels": 124
+    }
+   ]
+  },
+  {
+   "sheet": "real019",
+   "n_fam": 2,
+   "n_pl": 2,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real019",
+     "category": "pattern1",
+     "target_px": 114786,
+     "draft_iou": 0.0036,
+     "miss": true,
+     "pl": false,
+     "support": 8
+    },
+    {
+     "sheet": "real019",
+     "category": "pattern2",
+     "target_px": 761303,
+     "draft_iou": 0.9487,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 721928,
+     "pos_tp": 718433,
+     "neg_on_T": 5047,
+     "ign_on_T": 37823
+    },
+    {
+     "sheet": "real019",
+     "category": "pattern3",
+     "target_px": 234819,
+     "draft_iou": 0.0013,
+     "miss": true,
+     "pl": false,
+     "support": 2
+    }
+   ],
+   "extra": [
+    {
+     "support": 2,
+     "pos_px": 302591,
+     "on_labels": 2
+    }
+   ]
+  },
+  {
+   "sheet": "real020",
+   "n_fam": 1,
+   "n_pl": 0,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real020",
+     "category": "pattern1",
+     "target_px": 67396,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real021",
+   "n_fam": 0,
+   "n_pl": 0,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real021",
+     "category": "pattern1",
+     "target_px": 149717,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real022",
+   "n_fam": 0,
+   "n_pl": 0,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real022",
+     "category": "pattern1",
+     "target_px": 127356,
+     "draft_iou": 0.0,
+     "miss": true,
+     "pl": false,
+     "support": null
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real026",
+   "n_fam": 2,
+   "n_pl": 1,
+   "merges": 0,
+   "rows": [
+    {
+     "sheet": "real026",
+     "category": "pattern1",
+     "target_px": 209413,
+     "draft_iou": 0.9723,
+     "miss": false,
+     "pl": true,
+     "support": 5,
+     "pos_px": 206343,
+     "pos_tp": 205212,
+     "neg_on_T": 635,
+     "ign_on_T": 3566
+    }
+   ],
+   "extra": []
+  }
+ ]
+}
