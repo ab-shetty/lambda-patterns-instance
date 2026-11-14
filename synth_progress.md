@@ -3277,3 +3277,25 @@ Raw @4096 (blend50): HF14 0.9261 -> 0.9291, fix v2 0.9331 -> 0.9330, val 0.9019 
   the <= 1.2x target on hf14fix4.
 - One seed. Seed noise (~0.016) is five times the HF14 difference; only Gemini30 reaches p < 0.05.
 Checkpoints not published (`data/runs/ck_fgab_{ctl,fg}_s7_blend50.pth` on the GH200); maps on floz-diag `fgab_{ctl,fg}_s7/`.
+
+### 2026-11-14 (CPU) -- vertices: drop low-confidence islands (`product.drop_islands`, default); eps 7 left to the user
+
+Why fg's HF14 vertices rose (`scripts/pp_probe/render_verts.py`, `data/diag/fgverts/`): mostly the median cliff (total
+vertices +4%, valfix4 / Gemini30 totals flat), plus a few questions with small spill islands (25 q1: a shingle patch and a piece
+in a dark gap, 22 -> 50 vertices and -0.064 IoU; 27 q3) or zig-zag stretches of big outlines (14 q0, 3 q0).
+`scripts/pp_probe/vertsweep.py` (label-free variants on the product v3 mask; picks on valfix4 IoU + Gemini30, HF14 a check;
+v3 rows reproduce the evaluator exactly). IoU / vertices-per-label median:
+
+| | valfix4 | hf14fix4 | Gemini30 |
+|---|---|---|---|
+| fg: v3 | 0.9514 / 1.00x | 0.9504 / 1.46x | 0.9068 / 1.27x |
+| fg: + islands < 5% with mean P < 0.6 dropped | 0.9515 / 1.00x | 0.9513 / 1.26x | 0.9093 / 1.19x (28 up / 7 down, p 0.012) |
+| fg: + islands + eps 7 | 0.9500 / 1.00x (12 up / 35 down) | 0.9509 / 1.16x | 0.9097 / 1.16x |
+| ctl: v3 -> + islands | 0.9517 -> 0.9518 | 0.9473 / 1.17x -> 0.9481 / 1.12x | 0.8990 / 1.32x -> 0.9015 / 1.19x |
+| gem2s-x: v3 -> + islands | 0.9506 -> 0.9514 (4 up / 0 down) | 0.9473 / 1.23x -> 0.9466 / 1.15x (3 up / 6 down) | 0.8998 / 1.47x -> 0.9020 / 1.42x (29 / 3) |
+
+Also tried: eps 8, small rings at k 0.2 / 5-10%, island thresholds 2% / P 0.5 / 0.7 -- dominated or within noise of the above.
+**Islands now the product default** (`product.ISLANDS`, `product_polygons(..., islands=True)`; the evaluator's `--product` uses
+it). HF14 is mixed on gem2s-x (12 q1 -0.034, 14 q4 / q5 -0.014: real low-confidence pieces dropped). eps 7 is a trade (valfix4
+-0.0013..-0.0020, significant) and is not the default: with islands, gem2s-x already sits at 1.15x on hf14fix4; the fg model
+needs eps 7 to get there.

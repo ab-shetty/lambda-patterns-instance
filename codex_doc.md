@@ -14,6 +14,9 @@ on the targeted sheet 02 (synth_progress 2026-11-14). Next: (1) seed 8 of both a
 trusting +0.003; (2) find why fg outlines carry more vertices on HF14 (render the questions that rose most); (3) the
 deployment latency check on a 16-20 GB card. FreeCAD on this VM: user-local micromamba env, `FREECADCMD=~/fc/bin/freecadcmd`
 (no sudo for /opt/fc).
+- **Vertices (later 2026-11-14)**: `product.drop_islands` is now default (pieces < 5% of the mask with mean P < 0.6): free on
+  valfix4, +0.002 Gemini30, hf14fix4 vertices fg 1.46x -> 1.26x, gem2s-x 1.23x -> 1.15x. eps 7 on top gets fg to 1.16x for
+  valfix4 -0.0015: the user's call (synth_progress 2026-11-14).
 
 ## 2026-11-11: 0.95 within reach on val from inference changes; hf14fix2 needs label review + model work
 

@@ -6,7 +6,8 @@
                   chromaticity colour cut against the reference box, snapped to the drawing's cells (polygonize.snap_to_cells)
     polygons      traced, pieces < 0.5% dropped, Douglas-Peucker 6 native px + axis snap, every polygon grown 1 native px
                   outward (the real-sheet labels put the edge on the outer side of the stroke); rings under 5% of the mask
-                  re-simplified at 0.1 x sqrt(their area) (simplify_small_rings, 2026-11-12)
+                  re-simplified at 0.1 x sqrt(their area) (simplify_small_rings, 2026-11-12); pieces under 5% of the mask whose
+                  mean blended probability is < 0.6 dropped (drop_islands, 2026-11-14)
 Numbers (gem2s-x, synth_progress 2026-11-11): valfix4 0.9511 / 1.06x the labeller's vertices, hf14fix4 0.9473 / 1.24x. Tuned on
 the real eval sheets; the scales and cell snap hold on gemdev, the 1 px offset is the opposite of Gemini's label convention.
 
@@ -92,11 +93,33 @@ def simplify_small_rings(polys, total, k=SMALL_RING["k"], max_frac=SMALL_RING["m
     return out
 
 
-def product_polygons(maps, img, box, scaled_eps=False, small_rings=True):
+ISLANDS = dict(max_frac=0.05, p=0.6)
+
+
+def drop_islands(polys, P, total, max_frac=ISLANDS["max_frac"], pmin=ISLANDS["p"]):
+    """Drop a piece (outer ring with its holes) under max_frac of the question's mask area whose mean blended probability is
+    under pmin; never the last piece. The extra HF14 vertices of the fgab model were mostly small low-confidence spill islands
+    (2026-11-14, pp_probe/vertsweep.py, chosen on valfix4 + Gemini30, change vs v3 on fgab_fg / fgab_ctl: valfix4 +0.0001 /
+    +0.0001 (1 up / 0 down), Gemini30 +0.0025 / +0.0025 (28 up / 7 down; 26 / 10), hf14fix4 +0.0009 / +0.0008; vertices / label
+    median hf14fix4 1.46x -> 1.26x / 1.17x -> 1.12x, Gemini30 1.27x -> 1.19x / 1.32x -> 1.19x)."""
+    keep = []
+    for p in polys:
+        if len(polys) > 1 and abs(cv2.contourArea(np.asarray(p["outer"], np.float32))) < max_frac * total:
+            m = rasterize([p], P.shape)
+            if m.any() and P[m].mean() < pmin:
+                continue
+        keep.append(p)
+    return keep or polys
+
+
+def product_polygons(maps, img, box, scaled_eps=False, small_rings=True, islands=True):
     """maps: {scale: prob_u8 at that inference scale}; img: native BGR sheet; box: the reference (x, y, w, h), native px."""
-    m = product_mask(blend(maps, img.shape[:2]), img, box)
+    P = blend(maps, img.shape[:2])
+    m = product_mask(P, img, box)
+    total = max(1, int(m.sum()))
     polys = offset_polys(mask_to_polygons(m, LOW_VERTEX["min_frac"], product_eps(img.shape[:2], scaled_eps)), PRODUCT_V2["offset"])
-    return simplify_small_rings(polys, max(1, int(m.sum()))) if small_rings else polys
+    polys = simplify_small_rings(polys, total) if small_rings else polys
+    return drop_islands(polys, P, total) if islands else polys
 
 
 def nverts(polys):
