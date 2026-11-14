@@ -3243,3 +3243,15 @@ a Revit elevation sheet chosen with P gets 1-4 objects on the ground line inside
 footprints join ref_exclude. Own RNG stream (fam_seed * 433 + 59), so P = 0 is byte-identical and other draws are unchanged.
 Checked on a test wall (`data/diag/fg_test_all.png`); not yet run through FreeCAD (not on the CPU box). A/B:
 `run_foreground_ab.sh` (pools identical but for --foreground, one-epoch restarts of gem2s-x, product output scored).
+
+### 2026-11-14 (GH200) -- `--foreground` smoke test through FreeCAD: no bug
+
+20 elevation sheets (ids 990000+, seed 6, `--mode-weights 100,0,0`, `--foreground 1.0`; FreeCAD from conda-forge, 26.3, via
+`FREECADCMD`) against the same ids at `--foreground 0` (`scripts/probes/fg_check.py`, montage `scripts/probes/fg_montage.py`
+-> `data/diag/fg_smoke_montage.jpg`, sheets 990003 / 011 / 017 / 018):
+- 20 / 20 sheets carry objects; the annotations are identical to the fg-0 sheets on all 20 (the wall labels run on behind them).
+- Every changed pixel outside the new ref_exclude rings (dilated 3 px) is darker than the fg-0 sheet: cast shadows on the wall.
+- Footprints stand on grade inside the elevation: bottoms within ~1 px of the label bottom in their column wherever a wall is
+  labelled. On 990007 / 008 the footprints touch no label because the walls are plain (unlabelled) stucco, which is correct.
+- `--foreground 0` = no flag = the pre-commit generator (af48afe^), byte for byte (images and annotations, 20 sheets).
+Cosmetic, not fixed: on 990018's right elevation a patio set stands under a deck and is drawn over the railing.
