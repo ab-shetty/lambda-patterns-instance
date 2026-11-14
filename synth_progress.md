@@ -3521,3 +3521,13 @@ sheets; not adopted, direction closed. The labelled-data lever (human correction
 Roboflow `floz-gen-gemini-r5` (185 drafted + 15 blank holdout elevations for the anchoring check; patternN = confident
 families only, check_here = undrafted dense line work; local copies data/selftrain/drafts_uploaded/). Gemini30 check of the
 draft rules: 47 / 57 families drafted, 6 flagged, 4 silent misses.
+
+
+## 2026-11-14 — self-training A/B v2 (auto-recorded by scripts/finalize_instance.py before termination)
+
+    st vs ctl valfix4 0.9503 -> 0.9507 (+0.0004)  hf14fix4 0.9498 -> 0.9410 (-0.0089)  gemini30 0.9131 -> 0.9044 (-0.0086)
+    st_s7 vs ctl_s7 valfix4 0.9504 -> 0.9506 (+0.0002)  hf14fix4 0.9521 -> 0.9454 (-0.0067)  gemini30 0.9118 -> 0.9008 (-0.0109)
+    st_s8 vs ctl_s8 valfix4 0.9493 -> 0.9499 (+0.0006)  hf14fix4 0.9431 -> 0.9169 (-0.0262)  gemini30 0.9083 -> 0.9008 (-0.0075)
+    GATE (blend vs fgavg78): FAIL {'valfix4': 0.0004, 'hf14fix4': -0.0089, 'gemini30': -0.0086}
+
+Backup of local-only checkpoints / round-5 discovery / pseudo pools: `abshetty/floz-runs-backup` (private). Instance 5764a1b50bda44b6a72254984e199176 terminated after the backup (the user's instruction).

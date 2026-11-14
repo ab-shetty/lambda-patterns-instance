@@ -1,0 +1,7 @@
+Using the latest cached version of the dataset since abshetty/floz-synth-v5 couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'real-world-test' at data/abshetty___floz-synth-v5/real-world-test/0.0.0/967e3e9c54c394c7119246f615901cb7d36e2f85 (last modified on Sat Nov 14 05:55:05 2026).
+{
+  "checkpoint_epoch": null,
+  "n_reference_selections": 50,
+  "mean_iou": 0.9409730346717811
+}
