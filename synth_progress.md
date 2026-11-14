@@ -3316,3 +3316,9 @@ The user: the numeric targets stand in for "what a human would consider right". 
   triangle (P ~ 1) because its cell leaks through a gap into a large unlabelled area (coverage <= lo). The snap may no longer
   delete pixels with P >= 0.95. Chosen on valfix4 (gem2s-x / fg: +0.0000 / +0.0000), hf14fix4 +0.0004 / +0.0006, Gemini30
   (gem2s-x) +0.0012 (15 up / 6 down). 11 q0: 0.966 -> 0.992 (`data/diag/snapguard_11_0.jpg`).
+- Which stage made each visible error (`pp_probe/blame.py`; patch area / label, mean per question): almost all the model's
+  (HF14 miss 0.0097 model vs 0.0012 polygons; extra 0.0041 model vs 0.0018 fill; Gemini30 extra 0.060 model vs 0.009 fill).
+  Biggest post-processing ones undo regular drawn shapes: HF14 27 q2's door filled by fill_gaps (mean P 0.05 = pmin), 14 q1-q5's
+  panel under a window dropped by drop_islands. `pp_probe/regular.py`: fill_gaps pmin 0.1-0.2 costs valfix4 -0.0008..-0.0011
+  (Gemini30 +0.004..+0.006, HF14 +-0.0004); sparing rectangular islands: valfix4 0 / -0.0003, Gemini30 -0.0006..-0.0009, HF14
+  mixed. Neither kept (val is the selection split).
