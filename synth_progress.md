@@ -3348,3 +3348,8 @@ Raw @4096 seed 8 ctl -> fg: HF14 0.9144 -> 0.9206, fix v2 0.9251 -> 0.9299, val 
   0.9061 / 149 (label 27).
 Maps on floz-diag `fgab_{ctl,fg}_s8/`. All numbers in this entry predate SNAP_GUARD (the entry above, made the default in another
 session the same day): they are v3 / v3 + islands without the guard.
+- **Re-judged on visible errors (the user: the goal is what a person would call right), fill_gaps pmin 0.1 is now the default**
+  (`product.FILL_PMIN`, `pp_probe/human_ab.py`): valfix4's -0.0011 mIoU is invisible (questions with a visible patch 43 -> 42;
+  the only changed question improved, 6 q1); hf14fix4 30 -> 31 questions, area 1.71% -> 1.70% (4 better, 2 worse: 18 q0 / q1
+  gain a 0.4% patch); Gemini30 visible patch area 8.5% -> 8.0% of the label (159 -> 158 questions; ~55 better, ~10 worse).
+  27 q2's door is only partly fixed (visible error 0.103 -> 0.099).

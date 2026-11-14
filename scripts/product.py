@@ -58,16 +58,20 @@ def blend(maps, hw):
 
 
 SNAP_GUARD = 0.95
+FILL_PMIN = 0.1           # fill_gaps fills a dropout only if the mean P over it is >= this (2026-11-14; 0.05 before), see product_mask
 
 
 def product_mask(P, img, box, guard=SNAP_GUARD):
     """guard (2026-11-14, pp_probe/snapguard.py): the cell snap may not delete pixels whose blended probability is >= guard
     (when they are > 0.1% of the mask). A drawn cell that leaks through a gap into a large unlabelled area has low coverage
     and was dropped whole, confident pattern and all (HF14 11 q0: a hatched triangle with P ~ 1 left as hatch-line spikes).
-    Chosen on valfix4 (neutral); hf14fix4 +0.0006 / +0.0004 (fg / gem2s-x), Gemini30 +0.0012 (15 up / 6 down)."""
+    Chosen on valfix4 (neutral); hf14fix4 +0.0006 / +0.0004 (fg / gem2s-x), Gemini30 +0.0012 (15 up / 6 down).
+    FILL_PMIN 0.1 (2026-11-14, judged on VISIBLE errors -- pp_probe/human_ab.py -- per the user's goal): fill_gaps painted
+    low-confidence drawn objects over (HF14 27 q2's door, mean P 0.05). valfix4 mIoU -0.0011 but no visible error worse (1 better);
+    hf14fix4 +0.0003, 4 better / 2 worse; Gemini30 +0.0038, visible error area 8.5% -> 8.0% of the label."""
     h, w = P.shape
     s = REF_SCALE / max(h, w)
-    pre = colour_cut(img, fill_gaps(_fill_holes(P > T, 4096 / s / s), P), box)
+    pre = colour_cut(img, fill_gaps(_fill_holes(P > T, 4096 / s / s), P, pmin=FILL_PMIN), box)
     snap = snap_to_cells(pre, img, s)
     if guard:
         g = pre & ~snap & (P >= guard)
