@@ -1,48 +1,59 @@
-"""Holes of the answer (2026-10-21, descriptive): every connected non-mask region enclosed by the mask (>= 80% of its outer ring
-in the mask), mask = lin_fill @2048-equivalent. Per hole (no labels): area / label-free features rect (area / min-area-rect
-area: windows ~1), solidity, pmean, and truth: share of the hole inside the label. A hole that is mostly label is a miss
-(fill it); one that is not is a real opening (window, door) or another material (keep it)."""
+"""Irregular holes (2026-11-14, the user on human_calib 0_0: the patio table cut out of the pattern "is the only major issue",
+irregular errors are the annoying ones). Real holes in a pattern region are drawn objects -- windows, doors, columns, walls --
+and are rectangles; a hole the shape of furniture, a fixture or text is the pattern running on underneath. Variant: a hole
+ring under F of the question's mask area whose rectangularity (area / its minimum-area rectangle) is under R is filled
+(dropped from the polygon). Prints IoU, change vs the product, holes filled, and up / down per question.
+Usage: python3 scripts/pp_probe/holes.py SPLIT [MAPS]"""
 import json, sys
-import cv2, numpy as np
-sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0]); sys.path.insert(0, 'scripts'); sys.path.insert(0, '.')
-import common
-from methods import fill_holes
+from pathlib import Path
+sys.path.insert(0, "scripts/pp_probe"); sys.path.insert(0, "scripts"); sys.path.insert(0, ".")
+import numpy as np, cv2
+import common, product
+from polygonize import rasterize
 common.WITH_BOX[0] = True
-T = 0.35
+
+GRID = [(r, f) for r in (0.6, 0.7, 0.8, 0.9) for f in (0.02, 0.05, 0.2)]
 
 
-def sheet(job):
-    idx, img, anyann, qs = common.load(job)
-    h0, w0 = img.shape[:2]; s = 2048 / max(h0, w0); W, H = round(w0 * s), round(h0 * s)
-    rows = []
-    for ref, cat, tgt, p, box in qs:
-        P = cv2.resize(p, (W, H), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255
-        t = cv2.resize(tgt.astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST).astype(bool)
-        sp = p.shape[1] / W
-        M = fill_holes(P > T, int(4096 / (sp * sp)))
-        inv = (~M).astype(np.uint8)
-        n, cc, st, _ = cv2.connectedComponentsWithStats(inv, connectivity=4)
-        for i in range(1, n):
-            x, y, bw, bh, a = st[i]
-            if x == 0 or y == 0 or x + bw >= W or y + bh >= H or a < 20:
-                continue
-            sel = cc[y:y + bh, x:x + bw] == i
-            ring = cv2.dilate(sel.astype(np.uint8), np.ones((3, 3), np.uint8), borderType=cv2.BORDER_CONSTANT).astype(bool) & ~sel
-            if M[y:y + bh, x:x + bw][ring].mean() < 0.8:
-                continue
-            cs, _ = cv2.findContours(sel.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            c = max(cs, key=cv2.contourArea)
-            (_, _), (rw, rh), _ = cv2.minAreaRect(c)
-            hull = cv2.contourArea(cv2.convexHull(c)) or 1
-            rows.append({"sheet": idx, "q": ref, "area": int(a), "label": int(t.sum()), "mask": int(M.sum()),
-                         "rect": float(a / max(1, rw * rh)), "solidity": float(a / hull),
-                         "pmean": float(P[y:y + bh, x:x + bw][sel].mean()),
-                         "tshare": float(t[y:y + bh, x:x + bw][sel].mean())})
-    return rows
+def rectangularity(ring):
+    a = np.asarray(ring, np.float32)
+    (_, _), (w, h), _ = cv2.minAreaRect(a)
+    return abs(cv2.contourArea(a)) / max(1e-6, w * h)
+
+
+def fill_irregular(polys, total, r, f):
+    out, n = [], 0
+    for p in polys:
+        keep = [h for h in p["holes"] if not (abs(cv2.contourArea(np.asarray(h, np.float32))) < f * total
+                                              and rectangularity(h) < r)]
+        n += len(p["holes"]) - len(keep)
+        out.append({"outer": p["outer"], "holes": keep})
+    return out, n
 
 
 if __name__ == "__main__":
     split = sys.argv[1]
-    R = [r for job in common.jobs(split) for r in sheet(job)]
-    json.dump(R, open(f"scripts/pp_probe/rows_holes_{split}.json", "w"))
-    print(split, len(R), "holes")
+    maps = Path(sys.argv[2] if len(sys.argv) > 2 else "data/floz-diag/gem2s_x")
+    common.MAPS = maps
+    rows = []
+    for job in common.jobs(split):
+        idx, img, _, qs = common.load(job)
+        h, w = img.shape[:2]
+        for ref, cat, tgt, p4, box in qs:
+            mp = {z: (p4 if z == 4096 else np.load(maps / f"{common.map_split(split)}_{z}" / "probs" / f"{idx:03d}_{ref:03d}.npz")["prob"])
+                  for z in product.SCALES}
+            P = product.blend(mp, (h, w))
+            polys = product.product_polygons(mp, img, box)
+            total = max(1, int(product.product_mask(P, img, box).sum()))
+            r = {"sheet": idx, "q": ref, "base": common.masked_iou(rasterize(polys, (h, w)), tgt, (idx, ref))}
+            for R, F in GRID:
+                q, n = fill_irregular(polys, total, R, F)
+                r[f"{R}/{F}"] = (common.masked_iou(rasterize(q, (h, w)), tgt, (idx, ref)) if n else r["base"], n)
+            rows.append(r)
+    json.dump(rows, open(f"scripts/pp_probe/rows_holes_{split}_{maps.name}.json", "w"))
+    b = np.array([x["base"] for x in rows])
+    print(f"{split} {maps.name}: {len(rows)} q, product {b.mean():.4f}")
+    for R, F in GRID:
+        a = np.array([x[f"{R}/{F}"][0] for x in rows]); n = sum(x[f"{R}/{F}"][1] for x in rows)
+        print(f"  R<{R} F<{F:<4}  {a.mean():.4f} ({a.mean() - b.mean():+.4f})  holes filled {n:3d}  up {(a > b + 1e-3).sum()} / "
+              f"down {(a < b - 1e-3).sum()}")
