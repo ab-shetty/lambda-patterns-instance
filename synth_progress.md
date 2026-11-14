@@ -3373,3 +3373,14 @@ HF14 02 q1 (label 27 vertices): fgavg78 0.9064 / 83, ctlavg78 0.9079 / 101, gem2
 - **Gate (the user): ship = best mean of valfix4 and hf14fix4 with Gemini30 within 0.003 of the best -> fgavg78** (also the best
   Gemini30). Not published (the user publishes).
 - **eps 7 gate (valfix4 >= 0.950 and hf14fix4 <= 1.2x for the shipped model): fails** (0.9501, 1.25x); eps stays 6.
+**Correction, same day: the table above predates FILL_PMIN 0.1** (d0b844e, made the product default by the parallel CPU session
+while it ran). Rescored on the same maps with `product.py` at HEAD (which reproduces run_stress.sh's "none" rows exactly):
+
+| model | valfix4 | hf14fix4 | mean | Gemini30 | vertices / label hf14fix4 | eps 7: valfix4 / hf14fix4 vertices |
+|---|---|---|---|---|---|---|
+| **fgavg78** | 0.9503 | **0.9498** | **0.9501** | **0.9131** | 1.25x | 0.9495 / 1.21x |
+| ctlavg78 | 0.9510 | 0.9484 | 0.9497 | 0.9053 | 1.23x | -- |
+| gem2s_fg | 0.9506 | 0.9486 | 0.9496 | 0.9112 | 1.21x | -- |
+| gem2s-x | 0.9506 | 0.9459 | 0.9483 | 0.9069 | 1.12x | -- |
+
+Same decisions: **ship fgavg78**; eps 7 fails on both conditions (valfix4 0.9495 < 0.950, hf14fix4 1.21x > 1.2x).
