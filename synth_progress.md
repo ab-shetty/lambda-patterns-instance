@@ -3415,3 +3415,12 @@ Product union mIoU, (drop vs none); **>0.02** = trips the stop gate.
   makes look alike are not expected to separate. So the gray stress loss counts only where the regions stay distinct in grey
   (candidate: HF14 25 q1, white vertical vs green horizontal siding); val 17 (teal stone base vs dark roof, L 50 vs 39 with
   sd ~14) is expected to merge. A higher grey-copy share in training is worth one paired A/B only if that distinct group is real.
+
+## 2026-11-14 — gray stress drop explained -> footnote (user decision)
+
+scripts/probes/gray_collapse.py: no two LABELLED patterns merge in the B&W copy (closest pair still >= 25 grey levels apart,
+0/100 questions). The drop is an unlabelled clash: sheet 17 (valfix4) teal-grey brick base vs neutral-grey roof shingles
+become the same dark textured grey -> asked for brick, the model takes brick + roofs (IoU 0.93 -> 0.09, 9 questions =
+most of the -0.115); sheet 18 the reverse (roof query takes the brick). HF14 25/27 (highlighter markup) not inspected.
+About half the questions are unchanged (already-grey sheets). User (2026-11-14): B&W input is a footnote alongside jpeg25;
+no grayscale augmentation / training change. fgavg78 remains the ship pick (unpublished; the user publishes).
