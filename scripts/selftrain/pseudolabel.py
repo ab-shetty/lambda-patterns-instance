@@ -33,18 +33,28 @@ HI, LO, S_MIN, MIN_AREA = 0.9, 0.1, 3, 0.005   # chosen on Gemini30 + val labels
 CFG = {}
 
 
+def stroke_share(g, box, t=20):
+    """Share of a box's pixels darker than their 9 px neighbourhood maximum by > t: line work of any weight (stipple dots, thin
+    brick lines, hatching), not flat paper."""
+    x, y, w, h = box
+    y0, x0 = max(0, y - 5), max(0, x - 5)
+    sub = g[y0:y + h + 5, x0:x + w + 5]
+    lm = cv2.dilate(sub, np.ones((9, 9), np.uint8)).astype(np.int16) - sub
+    return float((lm[y - y0:y - y0 + h, x - x0:x - x0 + w] > t).mean())
+
+
 def plain_share(img_bgr, boxes):
     """Share of the boxes that are blank paper: median colour within 12 Lab of the paper (as product.colour_cut) and < 3% of
-    pixels inked (40 grey levels darker than the paper). Gemini30 / val (2026-11-14): families made of such boxes are blobs on
-    empty paper, plain walls and room floors -- 50 / 105 unmatched families on Gemini30, 1 of the matched ones."""
+    pixels in strokes (stroke_share). Gemini30 / val (2026-11-14): families made of such boxes are blobs on empty paper, plain
+    walls and room floors. The stroke test replaced "< 3% pixels 40 grey levels darker than paper", which also rejected
+    sparse real patterns (stucco stipple, thin brick lines): real families rejected 4 / 70 -> 1 / 70, junk 29 / 57 -> 27 / 57."""
     lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB).astype(np.float32) * [100 / 255, 1, 1] - [0, 128, 128]
     g = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    hi = g >= np.percentile(g, 90)
-    paper, pg = np.median(lab[hi], 0), np.median(g[hi])
+    paper = np.median(lab[g >= np.percentile(g, 90)], 0)
     n = 0
     for x, y, w, h in boxes:
         dE = np.linalg.norm(np.median(lab[y:y + h, x:x + w].reshape(-1, 3), 0) - paper)
-        n += dE <= 12 and (g[y:y + h, x:x + w] < pg - 40).mean() < 0.03
+        n += dE <= 12 and stroke_share(g, (x, y, w, h)) < 0.03
     return n / max(len(boxes), 1)
 
 

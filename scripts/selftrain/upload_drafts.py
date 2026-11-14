@@ -31,6 +31,22 @@ HOLDOUT_N, HOLDOUT_SEED = 15, 20261114
 CHECK_MIN = 0.005        # uncovered inked area (share of the sheet) that earns a check_here marker
 
 
+def check_regions(img, covered, win_frac=0.01, dens=0.08):
+    """Boxes around areas DENSE with line work (hatching, stipple, brick: stroke pixels > dens of a window ~1% of the long side)
+    that no included draft covers, text excluded (scripts/text_mask.py). Single outlines are not dense, so markers sit on
+    undrafted materials instead of wrapping whole elevations (the first version: ink components, which joined everything)."""
+    from text_mask import text_mask
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    stroke = ((cv2.dilate(g, np.ones((9, 9), np.uint8)).astype(np.int16) - g) > 20).astype(np.float32)
+    k = max(15, int(win_frac * max(g.shape)) | 1)
+    dense = cv2.blur(stroke, (k, k)) > dens
+    dense &= ~cv2.dilate(text_mask(img).astype(np.uint8), np.ones((k, k), np.uint8)).astype(bool)
+    dense &= ~cv2.dilate(covered.astype(np.uint8), np.ones((k, k), np.uint8)).astype(bool)
+    dense = cv2.morphologyEx(dense.astype(np.uint8), cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(dense, connectivity=8)
+    return [tuple(int(v) for v in st[j, :4]) for j in range(1, n) if st[j, 4] >= CHECK_MIN * dense.size]
+
+
 def drafts(d, images):
     meta = json.loads((d / "families.json").read_text())
     src = next(p for p in Path(images).iterdir() if p.stem == meta["sheet"])
@@ -51,14 +67,8 @@ def drafts(d, images):
             out.append((label, p["outer"]))
             # Roboflow polygons carry no holes: holes become their own `hole` polygons for the reviewer to subtract
             out += [("hole_" + label, hp) for hp in p["holes"]]
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ink = cv2.dilate((gray < 200).astype(np.uint8), np.ones((25, 25), np.uint8)).astype(bool)
-    left = cv2.morphologyEx((ink & ~covered).astype(np.uint8), cv2.MORPH_OPEN, np.ones((15, 15), np.uint8))
-    n, lab, st, _ = cv2.connectedComponentsWithStats(left, connectivity=8)
-    for j in range(1, n):
-        if st[j, 4] >= CHECK_MIN * left.size:
-            x, y, w, h = st[j, :4]
-            out.append(("check_here", [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]))
+    for x, y, w, h in check_regions(img, covered):
+        out.append(("check_here", [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]))
     return meta["sheet"], src, img.shape[:2], out
 
 

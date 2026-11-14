@@ -3465,3 +3465,20 @@ material (complete-linkage keeps look-alike answers apart) leave the rest of tha
 now the default; --keep-fragments = v1): drop a family whose draft lies >= half inside a larger eligible family's draft.
 Gemini30: own material as background 3.36% -> 0.81%, 43 / 57 human families still covered (46), precision 0.991; val
 unchanged (0.70%, no fragments). The running A/B is v1 and finishes as pre-registered (two seeds, product, gate).
+
+## 2026-11-14 — self-training A/B v1: GATE FAIL (pre-registered; nothing published)
+
+Product mIoU (HEAD product), self-trained (round-5 pseudo pool v1, with fragments) vs control; the control re-score reproduces
+fgavg78's numbers exactly (0.9503 / 0.9498 / 0.9131):
+
+| | valfix4 | hf14fix4 | gemini30 |
+|---|---|---|---|
+| two-seed blend vs fgavg78 | 0.9503 -> 0.9484 (-0.0019) | 0.9498 -> 0.9459 (-0.0039) | 0.9131 -> 0.9060 (-0.0071) |
+| seed 7 | 0.9504 -> 0.9468 (-0.0036) | 0.9521 -> 0.9414 (-0.0107) | 0.9118 -> 0.8967 (-0.0151) |
+| seed 8 | 0.9493 -> 0.9502 (+0.0010) | 0.9431 -> 0.9459 (+0.0028) | 0.9083 -> 0.9066 (-0.0018) |
+
+Gate (hf14fix4 >= +0.002, valfix4 >= -0.002, gemini30 >= -0.003): FAIL on hf14fix4 and gemini30. Seed 7 carries the loss
+(under-selection, see the fragment entry above); seed 8 is neutral. v2 (fragments dropped; blank-paper test now stroke-based:
+val pseudo families covered 19 -> 22 / 24, precision 0.989, own material as background 0.66%; Gemini30 0.81%) is prepared,
+not run. Drafts (upload_drafts.py): check_here now marks uncovered DENSE line work (Gemini30: 50 / 57 families drafted, 4
+flagged, 3 silent misses; 1.6 markers / sheet); not uploaded.
