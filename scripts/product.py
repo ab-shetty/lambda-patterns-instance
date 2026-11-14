@@ -57,11 +57,23 @@ def blend(maps, hw):
     return sum(cv2.resize(p, (w, h), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255 for p in maps.values()) / len(maps)
 
 
-def product_mask(P, img, box):
+SNAP_GUARD = 0.95
+
+
+def product_mask(P, img, box, guard=SNAP_GUARD):
+    """guard (2026-11-14, pp_probe/snapguard.py): the cell snap may not delete pixels whose blended probability is >= guard
+    (when they are > 0.1% of the mask). A drawn cell that leaks through a gap into a large unlabelled area has low coverage
+    and was dropped whole, confident pattern and all (HF14 11 q0: a hatched triangle with P ~ 1 left as hatch-line spikes).
+    Chosen on valfix4 (neutral); hf14fix4 +0.0006 / +0.0004 (fg / gem2s-x), Gemini30 +0.0012 (15 up / 6 down)."""
     h, w = P.shape
     s = REF_SCALE / max(h, w)
-    m = fill_gaps(_fill_holes(P > T, 4096 / s / s), P)
-    return snap_to_cells(colour_cut(img, m, box), img, s)
+    pre = colour_cut(img, fill_gaps(_fill_holes(P > T, 4096 / s / s), P), box)
+    snap = snap_to_cells(pre, img, s)
+    if guard:
+        g = pre & ~snap & (P >= guard)
+        if g.sum() > 0.001 * max(1, snap.sum()):
+            snap = snap | g
+    return snap
 
 
 def product_eps(hw, scaled=False):

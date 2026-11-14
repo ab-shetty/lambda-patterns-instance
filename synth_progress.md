@@ -3299,3 +3299,20 @@ Also tried: eps 8, small rings at k 0.2 / 5-10%, island thresholds 2% / P 0.5 / 
 it). HF14 is mixed on gem2s-x (12 q1 -0.034, 14 q4 / q5 -0.014: real low-confidence pieces dropped). eps 7 is a trade (valfix4
 -0.0013..-0.0020, significant) and is not the default: with islands, gem2s-x already sits at 1.15x on hf14fix4; the fg model
 needs eps 7 to get there.
+
+### 2026-11-14 (CPU) -- "what a person would call right": stress test, human-acceptance proxy, cell-snap guard (default)
+
+The user: the numeric targets stand in for "what a human would consider right". New tools, no new labels:
+- `evaluate_refunet_selection.py --degrade {jpeg50,jpeg25,lowres2000,lowres1400,scan,gray}` + `run_stress.sh` (degraded copies at
+  native size, labels hold). For the GPU.
+- `pp_probe/human.py`: 2 px edge tolerance, visible miss / extra patches (>= 4 screen px at fit-to-screen, opened by a 3 px disc),
+  ragged-outline jogs. fg seed-7 model: tol2 mIoU val 0.982, HF14 0.973; ragged outlines on 1 / 121 questions (the vertex excess
+  is not visible roughness). Accepted share depends wholly on the patch-size bar (HF14: 42% at 0.2% of the region, 70% at 1%,
+  90% at 5%). The user on six renders (`data/diag/human_calib_*`, patches 0.3-4.1%): all shippable; what annoys is IRREGULAR
+  errors -- a notch under an eave, the patio table cut out of a plan, hatch-line spikes through a missed region.
+- Irregular-hole fill (`pp_probe/holes_irregular.py`, area / min-area rect < R, < F of the mask): no effect on the real sheets
+  (the patio table hole is rect 0.93 with mean P 0.07 -- a model miss), Gemini30 +0.0001..0.0003. Not kept (as on 2026-10-21).
+- **Cell-snap guard, default** (`product.SNAP_GUARD = 0.95`, `pp_probe/snapguard.py`): snap_to_cells dropped HF14 11 q0's hatched
+  triangle (P ~ 1) because its cell leaks through a gap into a large unlabelled area (coverage <= lo). The snap may no longer
+  delete pixels with P >= 0.95. Chosen on valfix4 (gem2s-x / fg: +0.0000 / +0.0000), hf14fix4 +0.0004 / +0.0006, Gemini30
+  (gem2s-x) +0.0012 (15 up / 6 down). 11 q0: 0.966 -> 0.992 (`data/diag/snapguard_11_0.jpg`).

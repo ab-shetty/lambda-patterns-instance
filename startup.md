@@ -38,7 +38,7 @@ hand-labelled Gemini r2-r4 sheets outside Gemini30 x18, 50/50 DR / no-DR blend).
 
 **Product output v3 (2026-11-11, `scripts/product.py`; scored end to end with `evaluate_refunet_selection.py --product`)**:
 the model at 5120 / 4096 / 3072, maps averaged, then gap fill, colour cut, cell snap, polygons at 6 px + axis snap, grown 1 px,
-small rings re-simplified (2026-11-12), low-confidence islands < 5% dropped (2026-11-14). gem2s-x: **valfix4 0.9514 / 1.00x vertices
+small rings re-simplified (2026-11-12), low-confidence islands < 5% dropped (2026-11-14), cell snap may not delete P >= 0.95 (2026-11-14, `SNAP_GUARD`; HF14 11 q0 0.966 -> 0.992). gem2s-x: **valfix4 0.9514 / 1.00x vertices
 per label, hf14fix4 0.9466 / 1.15x, Gemini30 0.9020 / 1.42x** (synth_progress 2026-11-14; 2026-11-11 v3 without the last two
 steps: 0.9511 / 1.06x, 0.9473 / 1.24x). The older stack:
 
