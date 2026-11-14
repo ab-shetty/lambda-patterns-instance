@@ -21,7 +21,7 @@ import random
 import cv2
 import numpy as np
 from shapely import affinity
-from shapely.geometry import Polygon, box
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 
 G = None      # generate_synthetic_v6
@@ -480,6 +480,124 @@ def _outline_geom(canvas, g, colour, lw):
 
 
 # ----------------------------------------------------------------------------
+# foreground objects (FC.FOREGROUND, --foreground P; 2026-11-14)
+# Real elevations often show entourage in front of the house -- patio furniture, planters, shrubs, a grill, a tree, a car --
+# and the labeller draws the wall on behind it (HF14 02: chairs and a table in a shaded porch; the model cut blobby holes
+# there, 247 vertices against the label's 27). The generator drew nothing in front of a wall but posts, railings, stairs and
+# downspouts. Objects stand on the ground line inside the building's width, white (hidden-line) or muted (colour views), with
+# the usual thin outline; each footprint joins ref_exclude and the wall labels run on behind it, as for railings.
+
+def _circle(x, y, rad):
+    return Point(x, y).buffer(rad, 16)
+
+
+def _fg_object(kind, x, fr):
+    """(parts, fill kind) for one object standing at x on the ground (view feet, y = 0 at grade, negative up)."""
+    R = G.rect
+    if kind == "chair":
+        w, sh, bh = fr.uniform(1.4, 1.9), fr.uniform(1.4, 1.6), fr.uniform(2.8, 3.3)
+        side = fr.choice([0, 1])
+        bx = x + (w - 0.15 if side else 0)
+        return [R(x, -sh, x + w, -sh - 0.18), R(x + 0.05, 0, x + 0.17, -sh), R(x + w - 0.17, 0, x + w - 0.05, -sh),
+                R(bx, -sh, bx + 0.15, -bh)], "furniture"
+    if kind == "table":
+        w, th = fr.uniform(3.0, 5.0), fr.uniform(2.4, 2.6)
+        if fr.random() < 0.5:
+            legs = [R(x + 0.2, 0, x + 0.34, -th), R(x + w - 0.34, 0, x + w - 0.2, -th)]
+        else:
+            legs = [R(x + w / 2 - 0.12, 0, x + w / 2 + 0.12, -th), R(x + w / 2 - 0.8, 0, x + w / 2 + 0.8, -0.12)]
+        parts = [R(x, -th, x + w, -th - 0.15)] + legs
+        if fr.random() < 0.4:   # umbrella
+            ux, uh, ur = x + w / 2, fr.uniform(7, 8.5), fr.uniform(3, 4.5)
+            parts += [R(ux - 0.06, -th, ux + 0.06, -uh), Polygon([(ux - ur, -uh + 1.2), (ux, -uh - 0.4), (ux + ur, -uh + 1.2)])]
+        return parts, "furniture"
+    if kind == "bench":
+        w, sh = fr.uniform(4, 6.5), fr.uniform(1.4, 1.6)
+        parts = [R(x, -sh, x + w, -sh - 0.2), R(x + 0.3, 0, x + 0.5, -sh), R(x + w - 0.5, 0, x + w - 0.3, -sh)]
+        if fr.random() < 0.6:
+            parts += [R(x, -sh - 0.9, x + w, -sh - 1.25)]
+        return parts, "furniture"
+    if kind == "planter":
+        w, bh = fr.uniform(1.8, 3.2), fr.uniform(1.3, 2.4)
+        crown = unary_union([_circle(x + w * fr.uniform(0.15, 0.85), -bh - fr.uniform(0.3, 1.0), fr.uniform(0.5, 1.0))
+                             for _ in range(fr.randint(3, 5))])
+        return [R(x, 0, x + w, -bh), crown.difference(R(x - 5, 0, x + w + 5, -bh))], "planter"
+    if kind == "shrub":
+        w, hh = fr.uniform(2.5, 6.0), fr.uniform(1.8, 4.0)
+        blobs = [_circle(x + w * fr.uniform(0.1, 0.9), -hh * fr.uniform(0.35, 0.75), hh * fr.uniform(0.3, 0.5))
+                 for _ in range(fr.randint(4, 8))]
+        return [unary_union(blobs).intersection(R(x - 3, 0, x + w + 3, -hh - 3))], "plant"
+    if kind == "grill":
+        w = fr.uniform(2.2, 3.2)
+        return [R(x, -2.6, x + w, -3.4), Polygon([(x + 0.1, -3.4), (x + w / 2, -3.9), (x + w - 0.1, -3.4)]),
+                R(x + 0.2, 0, x + 0.32, -2.6), R(x + w - 0.32, 0, x + w - 0.2, -2.6), R(x + 0.2, -1.0, x + w - 0.2, -1.1)], "furniture"
+    if kind == "tree":
+        th, cr = fr.uniform(5, 9), fr.uniform(3, 6)
+        cx = x + cr
+        crown = unary_union([_circle(cx + fr.uniform(-0.6, 0.6) * cr, -th - fr.uniform(0.3, 1.0) * cr, cr * fr.uniform(0.45, 0.7))
+                             for _ in range(fr.randint(4, 7))])
+        return [R(cx - 0.35, 0, cx + 0.35, -th - 0.5), crown], "plant"
+    # car, seen end-on in an elevation
+    w = fr.uniform(5.8, 6.6)
+    body = Polygon([(x, -1.0), (x + w, -1.0), (x + w, -3.3), (x + w - 0.8, -3.5), (x + w - 1.3, -5.0), (x + 1.3, -5.0),
+                    (x + 0.8, -3.5), (x, -3.3)])
+    return [body, R(x + 0.4, 0, x + 1.4, -1.2), R(x + w - 1.4, 0, x + w - 0.4, -1.2),
+            Polygon([(x + 1.0, -3.55), (x + w - 1.0, -3.55), (x + w - 1.45, -4.8), (x + 1.45, -4.8)])], "car"
+
+
+FG_KINDS = (("chair", 3), ("table", 2), ("bench", 2), ("planter", 3), ("shrub", 4), ("grill", 1), ("tree", 1), ("car", 1))
+FG_SPAN = {"chair": 1.9, "table": 5.0, "bench": 6.5, "planter": 3.2, "shrub": 6.0, "grill": 3.2, "tree": 12.0, "car": 6.6}
+
+
+def plan_foreground(x0, x1, fr):
+    """1-4 objects (a patio set counts as one: a table and 2-4 chairs around it), placed left to right without overlap."""
+    objs, taken = [], []
+    for _ in range(fr.choices([1, 2, 3, 4], weights=[30, 35, 22, 13])[0]):
+        kind = fr.choices([k for k, _ in FG_KINDS] + ["patio"], weights=[wt for _, wt in FG_KINDS] + [4])[0]
+        group = [("table", 0.0)] + [("chair", d) for d in (-2.2, 5.2, -4.3, 7.3)[:fr.randint(2, 4)]] if kind == "patio" \
+            else [(kind, 0.0)]
+        span = (max(d for _, d in group) + FG_SPAN[group[-1][0]]) - min(0.0, min(d for _, d in group)) + 1.0
+        for _try in range(15):
+            x = fr.uniform(x0 + 1 - min(0.0, min(d for _, d in group)), max(x0 + 1.5, x1 - span))
+            lo, hi = x + min(0.0, min(d for _, d in group)), x + span
+            if all(hi < a or lo > b for a, b in taken):
+                taken.append((lo, hi))
+                objs += [(k, x + d) for k, d in group]
+                break
+    return objs
+
+
+def draw_foreground(canvas, V, e, fr, shaded, ink, lw, shadow_mul, W, H, sun):
+    """Draw the objects; return their footprints (view feet) for ref_exclude. Shadows fall on the walls behind them."""
+    x0, _, x1, _ = e["extent"]
+    objs = [(k, _fg_object(k, x, fr)) for k, x in plan_foreground(x0, x1, fr)]
+    if not objs:
+        return []
+    walls_u = unary_union([q for (f, q, bi, k) in e["surfaces"] if k in ("wall", "found")])
+    sils = [unary_union(parts).buffer(0.02) for _, (parts, _) in objs]
+    if shadow_mul is not None and not walls_u.is_empty:      # cast `d` ft in front of the wall
+        d = fr.uniform(1.0, 4.0)
+        sh = unary_union([affinity.translate(q, sun[0] * d, sun[1] * d) for q in sils]).intersection(walls_u)
+        sh = sh.difference(unary_union(sils))
+        m = np.zeros((H, W), np.uint8)
+        for q in G.polys_of(sh):
+            m = np.maximum(m, G.poly_mask(V.geom(q), W, H))
+        shadow_mul(m > 127)
+    fills = {"furniture": (250, 250, 250), "planter": (236, 236, 234), "plant": (250, 250, 250), "car": (246, 246, 246)}
+    if shaded:
+        fills = {"furniture": G.mix((70, 90, 110), (255, 255, 255), fr.uniform(0.35, 0.8)),
+                 "planter": G.mix((90, 110, 140), (255, 255, 255), fr.uniform(0.3, 0.6)),
+                 "plant": G.mix((80, 140, 100), (255, 255, 255), fr.uniform(0.3, 0.6)),
+                 "car": G.mix((120, 120, 120), (255, 255, 255), fr.uniform(0.2, 0.7))}
+    for _, (parts, fill) in objs:
+        for q in parts:
+            for qq in G.polys_of(q):
+                G.cv_fill(canvas, V.geom(qq), fills[fill])
+                _outline_geom(canvas, V.geom(qq), ink, lw)
+    return sils
+
+
+# ----------------------------------------------------------------------------
 # the sheet
 # ----------------------------------------------------------------------------
 def compose_revit(image_id, seed, mode_weights):
@@ -728,6 +846,8 @@ def compose_revit(image_id, seed, mode_weights):
             lum = px @ np.float32([0.114, 0.587, 0.299])          # canvas is BGR
             px = px * (1 - soft["desat"]) + lum[:, None] * soft["desat"]
         canvas[sel] = np.clip(px * k, 0, 255).astype(np.uint8)
+    fgr = random.Random(fam_seed * 433 + 59)             # --foreground: own stream, one decision per sheet
+    fg_on = fgr.random() < getattr(FC, "FOREGROUND", [0.0])[0]
     labelled = []
     excl_px = []        # --ref-exclude: posts, railings, stairs, downspouts (inside the labels)
     num = 1
@@ -858,6 +978,12 @@ def compose_revit(image_id, seed, mode_weights):
         sil = unary_union([p for (_, p, _, _) in e["surfaces"]] + list(e["trims"])).buffer(0.02)
         for p in G.polys_of(sil):
             G.cv_polyline(canvas, list(V.geom(p).exterior.coords), ink, lw_heavy, closed=True)
+        if fg_on:                       # --foreground: entourage in front of the house, wall labels run on behind it
+            mul = None
+            if shadows_on:
+                mul = (lambda sel: _shade(sel, soft["k1"])) if soft is not None else \
+                    (lambda sel: canvas.__setitem__(sel, (canvas[sel].astype(np.float32) * shadow_k).astype(np.uint8)))
+            excl_px += [V.geom(q) for q in draw_foreground(canvas, V, e, fgr, shaded, ink, lw_thin, mul, W, H, sun)]
         if mk is not None:
             apply_markup(canvas, V, e, mk, opening_polys, W, H)
         # ground line

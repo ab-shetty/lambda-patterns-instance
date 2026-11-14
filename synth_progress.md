@@ -3232,3 +3232,14 @@ Per-sheet inside / outside colour models from the product mask's confident inter
 +-3 px around the predicted edge, then the product polygons. First 6 HF14 questions +0.0033 (5 up / 0 down), but in full:
 hf14fix4 -0.0019 (19 up / 25 down; vertices 1.23x -> 1.12x), valfix4 -0.0023 (17 / 34), Gemini30 -0.0014 (76 / 102). Colour
 models do not separate a pattern from its neighbour at the 1-3 px scale (both share line ink and paper); not adopted.
+
+### 2026-11-14 (CPU) -- generator: foreground objects in front of the house (`--foreground P`, opt-in, default 0)
+
+HF14 02 q1 (247 vertices vs the label's 27): outdoor furniture in a shaded porch, where the model cuts blobby holes; the
+generator never drew anything in front of a wall but posts, railings, stairs and downspouts. `revit_render.draw_foreground`:
+a Revit elevation sheet chosen with P gets 1-4 objects on the ground line inside the building's width -- patio sets (table +
+2-4 chairs, sometimes an umbrella), benches, planters, shrubs, grills, a tree, a car end-on -- white (hidden-line) or muted
+(colour views), thin outlines, a cast shadow on the wall behind when the sheet has shadows. Wall labels run on behind them;
+footprints join ref_exclude. Own RNG stream (fam_seed * 433 + 59), so P = 0 is byte-identical and other draws are unchanged.
+Checked on a test wall (`data/diag/fg_test_all.png`); not yet run through FreeCAD (not on the CPU box). A/B:
+`run_foreground_ab.sh` (pools identical but for --foreground, one-epoch restarts of gem2s-x, product output scored).
