@@ -93,7 +93,7 @@ post-processing (reciprocity, reference ensembles) and TTA (latency) did not sur
 
 ## Next, if the project resumes
 
-1. **Label more Gemini sheets** -- round 5 (200 generated, `image_generation/prompts_r5.jsonl`, unlabelled) -- and retrain the gem recipe
+1. **Label more Gemini sheets** -- round 5 (200 generated, `image_generation/prompts_r5.jsonl`, unlabelled; images on `abshetty/floz-assets` `gemini_r5/`, recovered 2026-11-14 from the Gemini batch results file) -- and retrain the gem recipe
    (`run_gemini_holdout.sh` pool + `run_single_pass.sh`, two seeds, blend with the current best). This is the only lever measured to move
    Gemini30 by more than seed noise.
 2. **Self-training with automatic boxes** on unlabelled Gemini sheets (parked 2026-10-20; worth it once round 5 exists). Tile each sheet

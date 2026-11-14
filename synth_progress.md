@@ -3429,3 +3429,7 @@ no grayscale augmentation / training change. fgavg78 remains the ship pick (unpu
 
 `abshetty/floz-refunet-swint-fgavg78` (private), `scripts/publish_refunet.py`; round trip via `hf_ckpt_to_pth.py` identical
 (243 / 243 tensors). Now the default best (startup.md). Rescore maps uploaded to `abshetty/floz-diag` `rescore_{fgavg78,ctlavg78,gem2s_fg,gem2s_x}/`.
+- **Gemini round 5 recovered (CPU):** the 200 images (`data/image_generation/gemini_r5/`) were lost with the GPU VM; the Gemini batch
+  results file (`files/batch-dqv676j2pq1off70skzcruwr9k0wm8z07y3t`, 1.27 GB) was still active, so they were rewritten with
+  `generate_images_gemini.py`'s crop and saved to the private Hub dataset `abshetty/floz-assets` `gemini_r5/` (200 / 200). Still
+  unlabelled; not in Roboflow.
