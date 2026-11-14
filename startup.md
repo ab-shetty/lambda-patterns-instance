@@ -30,13 +30,13 @@ byte-comparable to older ones). **Every run before
 
 ## Current best (2026-11-14)
 
-**Shipped 2026-11-14: `fgavg78`** (`abshetty/floz-refunet-swint-fgavg78`, private): float average of two one-epoch restarts of
-`gem2s-x` (seeds 7 / 8, DR / no-DR blend50 each) on the `--foreground 0.4` pool (GEN 2026-11-14a) + the Gemini holdout records
-(`run_foreground_ab.sh`). Product (current defaults below), label fixes v4: **valfix4 0.9503, hf14fix4 0.9498, Gemini30 0.9131**
-(gem2s-x 0.9506 / 0.9459 / 0.9069); vertices / label median hf14fix4 1.25x. Chosen by the gate "best mean of valfix4 + hf14fix4,
-Gemini30 within 0.003 of the best" over gem2s-x, the control blend and gem2s-x + fg (synth_progress 2026-11-14). Stress (clean
-hi-res inputs expected): JPEG / low-res / scan / B&W copies are footnotes; B&W losses are stone-or-brick vs grey-roof clashes
-with unlabelled material, no labelled patterns merge. Rebuild: `scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-fgavg78`.
+**Best since 2026-11-14: `abshetty/floz-refunet-swint-fgavg78`** (private, published by the user's call, round-trip identical
+243 / 243). 50/50 average of the seed-7 and seed-8 one-epoch gem2s-x restarts on `--foreground 0.4` pools (GEN 2026-11-14a; each a
+50/50 DR / no-DR blend). Product v3 at HEAD: valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131 (gem2s-x 0.9506 / 0.9459 / 0.9069).
+Maps: `abshetty/floz-diag` `rescore_fgavg78/`. Details: `synth_progress.md` 2026-11-14.
+`PYTHONPATH=. python3 scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-fgavg78 --out data/runs/ck_best/fgavg78.pth`
+Stress (clean hi-res inputs expected): JPEG / low-res / scan / B&W copies are footnotes; B&W losses are stone-or-brick vs
+grey-roof clashes with unlabelled material, no labelled patterns merge.
 
 ### Previous best (2026-10-22)
 

@@ -3424,3 +3424,8 @@ become the same dark textured grey -> asked for brick, the model takes brick + r
 most of the -0.115); sheet 18 the reverse (roof query takes the brick). HF14 25/27 (highlighter markup) not inspected.
 About half the questions are unchanged (already-grey sheets). User (2026-11-14): B&W input is a footnote alongside jpeg25;
 no grayscale augmentation / training change. fgavg78 remains the ship pick (unpublished; the user publishes).
+
+## 2026-11-14 — fgavg78 published (user's call)
+
+`abshetty/floz-refunet-swint-fgavg78` (private), `scripts/publish_refunet.py`; round trip via `hf_ckpt_to_pth.py` identical
+(243 / 243 tensors). Now the default best (startup.md). Rescore maps uploaded to `abshetty/floz-diag` `rescore_{fgavg78,ctlavg78,gem2s_fg,gem2s_x}/`.

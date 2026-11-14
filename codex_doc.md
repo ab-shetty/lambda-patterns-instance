@@ -77,6 +77,12 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
   (e.g. ink / texture match to the reference inside the gap); (3) 0.95 mIoU is a model problem -- ignoring 2 px around every true
   edge still gives Gemini30 0.91, so the rest is wrong / missing regions.
 
+## Where we are (2026-11-14)
+
+Best: `abshetty/floz-refunet-swint-fgavg78` (published 2026-11-14): product v3 valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131.
+Next levers: round 5 labelling (user unavailable until ~2026-11-21), shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing
+latency. Degradation stress (jpeg25, B&W) is a footnote per the user.
+
 ## Where we were (2026-10-22): closed out
 
 Best: `abshetty/floz-refunet-swint-gem2s-x` (0.25 gem_s7 + 0.25 gem_s8 + 0.5 xblend-kq30-kms30), with `-gk-x` and `-gke-x` published
