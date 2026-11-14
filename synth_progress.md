@@ -3390,3 +3390,24 @@ Same decisions: **ship fgavg78**; eps 7 fails on both conditions (valfix4 0.9495
   Nothing label-free separates the pieces: all near-perfect rectangles, mean P 0.47-0.60 (real) vs 0.38-0.59 (false), ink /
   edge density no better. The user: "tough to tell" -> status quo; a model-confidence problem (all at P 0.4-0.6). Renders
   `data/diag/ab_rect.9_*.jpg`.
+
+## 2026-11-14 — stress test: fgavg78 (ship pick) vs gem2s-x, product at HEAD (run_stress.sh, evaluate_refunet_selection.py --degrade)
+
+Product union mIoU, (drop vs none); **>0.02** = trips the stop gate.
+
+| degradation | best valfix4 | best hf14fix4 | gem2s-x valfix4 | gem2s-x hf14fix4 |
+|---|---|---|---|---|
+| none | 0.9503 | 0.9498 | 0.9506 | 0.9459 |
+| jpeg50 | 0.9449 (-0.0054) | 0.9367 (-0.0132) | 0.9408 (-0.0098) | 0.9332 (-0.0127) |
+| jpeg25 | 0.9388 (-0.0115) | 0.9110 (-0.0389) **>0.02** | 0.9356 (-0.0150) | 0.9017 (-0.0442) **>0.02** |
+| lowres2000 | 0.9323 (-0.0179) | 0.9389 (-0.0110) | 0.9354 (-0.0152) | 0.9402 (-0.0058) |
+| lowres1400 | 0.9315 (-0.0188) | 0.9170 (-0.0329) **>0.02** | 0.9103 (-0.0403) **>0.02** | 0.9071 (-0.0388) **>0.02** |
+| scan | 0.9293 (-0.0210) **>0.02** | 0.9039 (-0.0459) **>0.02** | 0.9157 (-0.0349) **>0.02** | 0.8883 (-0.0576) **>0.02** |
+| gray | 0.8350 (-0.1153) **>0.02** | 0.8885 (-0.0613) **>0.02** | 0.8337 (-0.1169) **>0.02** | 0.8919 (-0.0541) **>0.02** |
+
+- fgavg78 degrades no worse than gem2s-x except lowres2000 on valfix4 and gray on HF14; ship pick unchanged.
+- jpeg25 / lowres1400 / scan: trip the gate but the user (2026-11-14) says real inputs are clean hi-res originals -> footnote.
+- **gray is the real flag**: a clean full-res black-and-white copy costs -0.115 valfix4 / -0.061 HF14 (both models alike).
+  The model and the colour cut lean on colour; a client sending a B&W print/export of a colour plan would hit this.
+  Stopped here per the gate; not investigated. Candidate fix if wanted: random grayscale augmentation in training and/or
+  skip the colour cut when the sheet is near-grey.
