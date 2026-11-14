@@ -41,7 +41,7 @@ def drafts(d, images):
     for f in fams:
         if f["pl"]:
             n_conf += 1; label = f"pattern{n_conf}"
-        elif f["support"] >= 2 and f["plain"] < 0.5:
+        elif f["support"] >= 2 and f["plain"] < 0.5 and not f.get("fragment"):   # a fragment duplicates a drafted material
             n_unc += 1; label = f"uncertain_{n_unc}"
         else:
             continue        # single-box / blank-paper families: left out (the dry run had ~55 such polygons per sheet);
