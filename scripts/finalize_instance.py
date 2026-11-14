@@ -148,6 +148,9 @@ def terminate():
 
 if __name__ == "__main__":
     env()
+    if "--backup-only" in sys.argv:          # start the upload early (network-bound); the final run re-checks / tops it up
+        backup()
+        sys.exit(0)
     try:
         wait()
         git_sync()
