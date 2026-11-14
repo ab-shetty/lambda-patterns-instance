@@ -3411,3 +3411,7 @@ Product union mIoU, (drop vs none); **>0.02** = trips the stop gate.
   The model and the colour cut lean on colour; a client sending a B&W print/export of a colour plan would hit this.
   Stopped here per the gate; not investigated. Candidate fix if wanted: random grayscale augmentation in training and/or
   skip the colour cut when the sheet is near-grey.
+- **B&W inputs (the user, 2026-11-14):** clients probably never send B&W copies of colour drawings; if they do, regions that grey
+  makes look alike are not expected to separate. So the gray stress loss counts only where the regions stay distinct in grey
+  (candidate: HF14 25 q1, white vertical vs green horizontal siding); val 17 (teal stone base vs dark roof, L 50 vs 39 with
+  sd ~14) is expected to merge. A higher grey-copy share in training is worth one paired A/B only if that distinct group is real.
