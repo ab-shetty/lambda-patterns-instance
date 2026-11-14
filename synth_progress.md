@@ -3453,3 +3453,15 @@ every pixel, a percentile and a float median over the ~90% "paper" pixels), 14% 
 Check: product polygons identical on all 316 valfix4 / hf14fix4 / Gemini30 questions (HEAD vs new). Timing (GH200, training
 running alongside): 8 parallel processes 1,098 -> 386 ms / question on HF14; solo, first question on a sheet 653 ms, later
 questions on the same sheet 258 ms. Multi-query sheets benefit most; the deployment CPU will set the absolute numbers.
+
+## 2026-11-14 — self-training A/B (run_selftrain_ab.sh): seed 7 under-selects; fragment fix for a v2
+
+Round-5 pool: 104 / 111 elevations, 273 families, 1,872 records x18 (< 2,502 hand-labelled Gemini records). Seed 7 raw @4096,
+self-trained vs its control (fgab_fg_s7_blend50): val 0.9026 -> 0.8991, HF14 0.9291 -> 0.9192, fix v2 0.9330 -> 0.9250,
+Gemini30 0.8959 -> 0.8799. Losses are UNDER-selection (Gemini30 17: target 1.69M px, control predicts 1.66M, self-trained 0.58M;
+every losing HF14 question predicts fewer pixels). Cause found on Gemini30's labels: pseudo families that are FRAGMENTS of a
+material (complete-linkage keeps look-alike answers apart) leave the rest of that material at P < 0.1 = confident background;
+3.4% of the families' own material was background (the v1 metric, best-matching family only, said 0.9%). Fix (pseudolabel.py,
+now the default; --keep-fragments = v1): drop a family whose draft lies >= half inside a larger eligible family's draft.
+Gemini30: own material as background 3.36% -> 0.81%, 43 / 57 human families still covered (46), precision 0.991; val
+unchanged (0.70%, no fragments). The running A/B is v1 and finishes as pre-registered (two seeds, product, gate).

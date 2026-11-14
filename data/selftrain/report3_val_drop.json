@@ -1,0 +1,563 @@
+{
+ "summary": {
+  "sheets": 14,
+  "human_families": 24,
+  "families_found": 147,
+  "pseudo_families": 30,
+  "merges": 0,
+  "draft_miou": 0.9558,
+  "draft_misses": 0,
+  "pl_covered_families": 19,
+  "pl_pos_precision": 0.987,
+  "pl_pos_recall": 0.9511,
+  "pl_neg_error": 0.007,
+  "pl_ignored": 0.0419,
+  "pl_own_material_as_background": 0.007,
+  "unmatched_pl_families": 11,
+  "unmatched_pl_on_labels": 0.0021,
+  "params": {
+   "hi": 0.9,
+   "lo": 0.1,
+   "s_min": 3,
+   "min_area": 0.005,
+   "drop_fragments": true
+  }
+ },
+ "sheets": [
+  {
+   "sheet": "real004",
+   "n_fam": 4,
+   "n_pl": 2,
+   "merges": 0,
+   "own": [
+    2642017,
+    21059
+   ],
+   "rows": [
+    {
+     "sheet": "real004",
+     "category": "pattern2",
+     "target_px": 687270,
+     "draft_iou": 0.9885,
+     "miss": false,
+     "pl": true,
+     "support": 9,
+     "pos_px": 671844,
+     "pos_tp": 671002,
+     "neg_on_T": 4366,
+     "ign_on_T": 11902
+    },
+    {
+     "sheet": "real004",
+     "category": "pattern1",
+     "target_px": 1954747,
+     "draft_iou": 0.9623,
+     "miss": false,
+     "pl": true,
+     "support": 29,
+     "pos_px": 1904190,
+     "pos_tp": 1887829,
+     "neg_on_T": 16693,
+     "ign_on_T": 50225
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real005",
+   "n_fam": 15,
+   "n_pl": 3,
+   "merges": 0,
+   "own": [
+    3965138,
+    17623
+   ],
+   "rows": [
+    {
+     "sheet": "real005",
+     "category": "pattern1",
+     "target_px": 2026898,
+     "draft_iou": 0.9375,
+     "miss": false,
+     "pl": true,
+     "support": 5,
+     "pos_px": 1886198,
+     "pos_tp": 1849130,
+     "neg_on_T": 4914,
+     "ign_on_T": 172854
+    },
+    {
+     "sheet": "real005",
+     "category": "pattern2",
+     "target_px": 1938240,
+     "draft_iou": 0.8765,
+     "miss": false,
+     "pl": true,
+     "support": 11,
+     "pos_px": 2060247,
+     "pos_tp": 1895168,
+     "neg_on_T": 12709,
+     "ign_on_T": 30363
+    }
+   ],
+   "extra": [
+    {
+     "support": 11,
+     "pos_px": 351245,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real006",
+   "n_fam": 5,
+   "n_pl": 4,
+   "merges": 0,
+   "own": [
+    3414351,
+    41354
+   ],
+   "rows": [
+    {
+     "sheet": "real006",
+     "category": "pattern2",
+     "target_px": 2197025,
+     "draft_iou": 0.979,
+     "miss": false,
+     "pl": true,
+     "support": 36,
+     "pos_px": 2139133,
+     "pos_tp": 2138153,
+     "neg_on_T": 26629,
+     "ign_on_T": 32243
+    },
+    {
+     "sheet": "real006",
+     "category": "pattern1",
+     "target_px": 1217326,
+     "draft_iou": 0.9517,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 834001,
+     "pos_tp": 829408,
+     "neg_on_T": 14725,
+     "ign_on_T": 373193
+    }
+   ],
+   "extra": [
+    {
+     "support": 14,
+     "pos_px": 282440,
+     "on_labels": 0
+    },
+    {
+     "support": 5,
+     "pos_px": 198258,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real008",
+   "n_fam": 21,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    0,
+    0
+   ],
+   "rows": [
+    {
+     "sheet": "real008",
+     "category": "pattern1",
+     "target_px": 3930833,
+     "draft_iou": 0.9828,
+     "miss": false,
+     "pl": false,
+     "support": 36
+    }
+   ],
+   "extra": [
+    {
+     "support": 3,
+     "pos_px": 132762,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real009",
+   "n_fam": 16,
+   "n_pl": 4,
+   "merges": 0,
+   "own": [
+    1343637,
+    9671
+   ],
+   "rows": [
+    {
+     "sheet": "real009",
+     "category": "pattern1",
+     "target_px": 1125433,
+     "draft_iou": 0.9537,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 1110480,
+     "pos_tp": 1102118,
+     "neg_on_T": 5523,
+     "ign_on_T": 17792
+    },
+    {
+     "sheet": "real009",
+     "category": "pattern2",
+     "target_px": 218204,
+     "draft_iou": 0.9472,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 203268,
+     "pos_tp": 201577,
+     "neg_on_T": 4148,
+     "ign_on_T": 12479
+    }
+   ],
+   "extra": [
+    {
+     "support": 5,
+     "pos_px": 41935,
+     "on_labels": 0
+    },
+    {
+     "support": 3,
+     "pos_px": 298820,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real010",
+   "n_fam": 23,
+   "n_pl": 5,
+   "merges": 0,
+   "own": [
+    1344488,
+    10365
+   ],
+   "rows": [
+    {
+     "sheet": "real010",
+     "category": "pattern1",
+     "target_px": 1129675,
+     "draft_iou": 0.9809,
+     "miss": false,
+     "pl": true,
+     "support": 19,
+     "pos_px": 1115999,
+     "pos_tp": 1110494,
+     "neg_on_T": 7007,
+     "ign_on_T": 12174
+    },
+    {
+     "sheet": "real010",
+     "category": "pattern2",
+     "target_px": 214813,
+     "draft_iou": 0.9662,
+     "miss": false,
+     "pl": true,
+     "support": 4,
+     "pos_px": 207402,
+     "pos_tp": 206114,
+     "neg_on_T": 3358,
+     "ign_on_T": 5341
+    }
+   ],
+   "extra": [
+    {
+     "support": 23,
+     "pos_px": 142578,
+     "on_labels": 0
+    },
+    {
+     "support": 16,
+     "pos_px": 908107,
+     "on_labels": 5799
+    },
+    {
+     "support": 3,
+     "pos_px": 69359,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real013",
+   "n_fam": 11,
+   "n_pl": 0,
+   "merges": 0,
+   "own": [
+    0,
+    0
+   ],
+   "rows": [
+    {
+     "sheet": "real013",
+     "category": "pattern1",
+     "target_px": 229342,
+     "draft_iou": 0.965,
+     "miss": false,
+     "pl": false,
+     "support": 2
+    },
+    {
+     "sheet": "real013",
+     "category": "pattern2",
+     "target_px": 1594263,
+     "draft_iou": 0.9686,
+     "miss": false,
+     "pl": false,
+     "support": 6
+    },
+    {
+     "sheet": "real013",
+     "category": "pattern3",
+     "target_px": 666087,
+     "draft_iou": 0.9793,
+     "miss": false,
+     "pl": false,
+     "support": 12
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real015",
+   "n_fam": 18,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    6342095,
+    15626
+   ],
+   "rows": [
+    {
+     "sheet": "real015",
+     "category": "pattern1",
+     "target_px": 6342095,
+     "draft_iou": 0.9916,
+     "miss": false,
+     "pl": true,
+     "support": 39,
+     "pos_px": 6277233,
+     "pos_tp": 6266897,
+     "neg_on_T": 15626,
+     "ign_on_T": 59572
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real017",
+   "n_fam": 7,
+   "n_pl": 3,
+   "merges": 0,
+   "own": [
+    53551,
+    1007
+   ],
+   "rows": [
+    {
+     "sheet": "real017",
+     "category": "pattern1",
+     "target_px": 53551,
+     "draft_iou": 0.9255,
+     "miss": false,
+     "pl": true,
+     "support": 11,
+     "pos_px": 51510,
+     "pos_tp": 49819,
+     "neg_on_T": 1007,
+     "ign_on_T": 2725
+    },
+    {
+     "sheet": "real017",
+     "category": "pattern2",
+     "target_px": 537487,
+     "draft_iou": 0.9392,
+     "miss": false,
+     "pl": false,
+     "support": 1
+    }
+   ],
+   "extra": [
+    {
+     "support": 17,
+     "pos_px": 499314,
+     "on_labels": 399
+    },
+    {
+     "support": 4,
+     "pos_px": 11506,
+     "on_labels": 0
+    }
+   ]
+  },
+  {
+   "sheet": "real019",
+   "n_fam": 6,
+   "n_pl": 3,
+   "merges": 0,
+   "own": [
+    1110908,
+    23821
+   ],
+   "rows": [
+    {
+     "sheet": "real019",
+     "category": "pattern1",
+     "target_px": 114786,
+     "draft_iou": 0.9024,
+     "miss": false,
+     "pl": true,
+     "support": 24,
+     "pos_px": 106123,
+     "pos_tp": 104280,
+     "neg_on_T": 5567,
+     "ign_on_T": 4939
+    },
+    {
+     "sheet": "real019",
+     "category": "pattern2",
+     "target_px": 761303,
+     "draft_iou": 0.9487,
+     "miss": false,
+     "pl": true,
+     "support": 8,
+     "pos_px": 721929,
+     "pos_tp": 718435,
+     "neg_on_T": 5046,
+     "ign_on_T": 37822
+    },
+    {
+     "sheet": "real019",
+     "category": "pattern3",
+     "target_px": 234819,
+     "draft_iou": 0.9251,
+     "miss": false,
+     "pl": true,
+     "support": 35,
+     "pos_px": 184246,
+     "pos_tp": 184246,
+     "neg_on_T": 13208,
+     "ign_on_T": 37365
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real020",
+   "n_fam": 3,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    67396,
+    1635
+   ],
+   "rows": [
+    {
+     "sheet": "real020",
+     "category": "pattern1",
+     "target_px": 67396,
+     "draft_iou": 0.9483,
+     "miss": false,
+     "pl": true,
+     "support": 12,
+     "pos_px": 64188,
+     "pos_tp": 64121,
+     "neg_on_T": 1635,
+     "ign_on_T": 1640
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real021",
+   "n_fam": 9,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    149717,
+    1390
+   ],
+   "rows": [
+    {
+     "sheet": "real021",
+     "category": "pattern1",
+     "target_px": 149717,
+     "draft_iou": 0.9741,
+     "miss": false,
+     "pl": true,
+     "support": 28,
+     "pos_px": 146872,
+     "pos_tp": 146111,
+     "neg_on_T": 1390,
+     "ign_on_T": 2216
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real022",
+   "n_fam": 4,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    127356,
+    1591
+   ],
+   "rows": [
+    {
+     "sheet": "real022",
+     "category": "pattern1",
+     "target_px": 127356,
+     "draft_iou": 0.9733,
+     "miss": false,
+     "pl": true,
+     "support": 27,
+     "pos_px": 123879,
+     "pos_tp": 123842,
+     "neg_on_T": 1591,
+     "ign_on_T": 1923
+    }
+   ],
+   "extra": []
+  },
+  {
+   "sheet": "real026",
+   "n_fam": 5,
+   "n_pl": 1,
+   "merges": 0,
+   "own": [
+    209413,
+    635
+   ],
+   "rows": [
+    {
+     "sheet": "real026",
+     "category": "pattern1",
+     "target_px": 209413,
+     "draft_iou": 0.9723,
+     "miss": false,
+     "pl": true,
+     "support": 5,
+     "pos_px": 206342,
+     "pos_tp": 205212,
+     "neg_on_T": 635,
+     "ign_on_T": 3566
+    }
+   ],
+   "extra": []
+  }
+ ]
+}

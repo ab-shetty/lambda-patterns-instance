@@ -63,6 +63,15 @@ def family_layers(d, img_bgr, meta):
         pl = f["support"] >= CFG["s_min"] and plain < 0.5 and pos.mean() >= CFG.get("min_area", 0)
         out.append(dict(k=k, support=f["support"], box=f["box"], overlaps=f["overlaps"], polys=polys, draft=draft,
                         pos=pos, neg=(P < CFG["lo"]) & ~draft, plain=round(float(plain), 3), pl=pl))
+    # fragments (2026-11-14, after the first A/B's seed 7 under-selected): an eligible family whose draft lies >= half inside a
+    # larger eligible family's draft is a piece of the same material; asked from it, the teacher leaves the rest of the
+    # material at P < 0.1, which became confident BACKGROUND (Gemini30: 3.4% of the families' own material; 0.8% without them)
+    if CFG.get("drop_fragments", True):
+        E = [o for o in out if o["pl"]]
+        for o in E:
+            if any(g is not o and g["draft"].sum() > o["draft"].sum() and (o["draft"] & g["draft"]).sum() >= 0.5 * o["draft"].sum()
+                   for g in E):
+                o["pl"], o["fragment"] = False, True
     # a pixel confident for two eligible families is ignored for both
     elig = [o["pos"] for o in out if o["pl"]]
     if len(elig) >= 2:
@@ -135,12 +144,20 @@ def score_sheet(args):
             r.update(pl=False, support=None if bi is None else bi["support"])
         rows.append(r)
     # pseudo-label families that match no human family: where does their confident target land?
+    # own material marked background: each pseudo family against the human family holding most of its confident pixels
+    own = [0, 0]
+    for f in fams:
+        if not f["pl"] or not tg:
+            continue
+        c, (T, _) = max(tg.items(), key=lambda kv: (f["pos"] & kv[1][0]).sum())
+        if (f["pos"] & T).sum() >= 0.5 * max(f["pos"].sum(), 1):
+            own[0] += int(T.sum()); own[1] += int((f["neg"] & T).sum())
     extra = []
     for f in fams:
         if f["pl"] and not any(
                 (f["draft"] & T).sum() / max((f["draft"] | T).sum(), 1) >= 0.5 for T, _ in tg.values()):
             extra.append(dict(support=f["support"], pos_px=int(f["pos"].sum()), on_labels=int((f["pos"] & allT).sum())))
-    return dict(sheet=sid, n_fam=len(fams), n_pl=sum(f["pl"] for f in fams), merges=merges,
+    return dict(sheet=sid, n_fam=len(fams), n_pl=sum(f["pl"] for f in fams), merges=merges, own=own,
                 rows=rows, extra=extra)
 
 
@@ -210,10 +227,11 @@ def main():
     ap.add_argument("--hi", type=float, default=HI); ap.add_argument("--lo", type=float, default=LO)
     ap.add_argument("--s-min", type=int, default=S_MIN)
     ap.add_argument("--min-area", type=float, default=MIN_AREA, help="confident area (share of the sheet) for a pseudo family")
+    ap.add_argument("--keep-fragments", action="store_true", help="the first A/B's behaviour (fragments stay pseudo families)")
     ap.add_argument("--write-pool", help="with --images: write the pseudo-labelled local pool here (stage C)")
     ap.add_argument("--only", help="file of sheet stems to use (one per line)")
     a = ap.parse_args()
-    CFG.update(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area)
+    CFG.update(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments)
     if a.real:
         from evaluate_refunet_selection import load_parquet_records
         CFG["recs"] = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
@@ -229,7 +247,7 @@ def main():
         summ = dict(sheets_in=len(dirs), sheets_written=len(done), families=sum(len(k) for k in done.values()),
                     mean_pos_frac=round(float(np.mean([f["pos_frac"] for k in done.values() for f in k])), 4) if done else 0,
                     mean_ign_frac=round(float(np.mean([f["ign_frac"] for k in done.values() for f in k])), 4) if done else 0,
-                    params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area))
+                    params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments))
         print(json.dumps(summ, indent=1))
         Path(a.write_pool, "selftrain_manifest.json").write_text(json.dumps(dict(summary=summ, sheets=done), indent=1))
         return
@@ -248,10 +266,11 @@ def main():
         pl_pos_recall=round(sum(r["pos_tp"] for r in pl) / max(T, 1), 4),
         pl_neg_error=round(sum(r["neg_on_T"] for r in pl) / max(T, 1), 4),
         pl_ignored=round(sum(r["ign_on_T"] for r in pl) / max(T, 1), 4),
+        pl_own_material_as_background=round(sum(s["own"][1] for s in res) / max(sum(s["own"][0] for s in res), 1), 4),
         unmatched_pl_families=sum(len(s["extra"]) for s in res),
         unmatched_pl_on_labels=round(sum(e["on_labels"] for s in res for e in s["extra"]) /
                                      max(sum(e["pos_px"] for s in res for e in s["extra"]), 1), 4),
-        params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area))
+        params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments))
     print(json.dumps(summ, indent=1, default=int))
     if a.report:
         Path(a.report).parent.mkdir(parents=True, exist_ok=True)
