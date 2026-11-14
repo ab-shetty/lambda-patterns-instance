@@ -3429,7 +3429,14 @@ no grayscale augmentation / training change. fgavg78 remains the ship pick (unpu
 
 `abshetty/floz-refunet-swint-fgavg78` (private), `scripts/publish_refunet.py`; round trip via `hf_ckpt_to_pth.py` identical
 (243 / 243 tensors). Now the default best (startup.md). Rescore maps uploaded to `abshetty/floz-diag` `rescore_{fgavg78,ctlavg78,gem2s_fg,gem2s_x}/`.
-- **Gemini round 5 recovered (CPU):** the 200 images (`data/image_generation/gemini_r5/`) were lost with the GPU VM; the Gemini batch
+
+## 2026-11-14 — round 5 lost; pre-label / self-training dropped
+
+The 200 round-5 Gemini images existed only on the CPU box (`data/image_generation/gemini_r5/`); none on HF (all abshetty datasets
+checked) or Roboflow (r1-r4 only). The user: there is no round 5. `image_generation/prompts_r5.jsonl` survives if it is ever
+regenerated. Unlabelled alternatives found in Roboflow (floz-real-pool 41 real sheets, gemini-r1 14, two older generated pools 120)
+were offered; the user dropped the pre-label / self-training plan.
+- **Update, later the same day -- round 5 recovered (CPU):** the 200 images (`data/image_generation/gemini_r5/`) were lost with the GPU VM; the Gemini batch
   results file (`files/batch-dqv676j2pq1off70skzcruwr9k0wm8z07y3t`, 1.27 GB) was still active, so they were rewritten with
   `generate_images_gemini.py`'s crop and saved to the private Hub dataset `abshetty/floz-assets` `gemini_r5/` (200 / 200). Still
   unlabelled; not in Roboflow.

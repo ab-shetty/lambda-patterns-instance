@@ -80,8 +80,8 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 ## Where we are (2026-11-14)
 
 Best: `abshetty/floz-refunet-swint-fgavg78` (published 2026-11-14): product v3 valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131.
-Next levers: round 5 labelling (user unavailable until ~2026-11-21), shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing
-latency. Degradation stress (jpeg25, B&W) is a footnote per the user.
+Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 is LOST (2026-11-14: the 200 images
+were only on the CPU box's disk; not on HF or Roboflow; prompts_r5.jsonl survives). Pre-label / self-training plan dropped by the user. Degradation stress (jpeg25, B&W) is a footnote per the user.
 
 ## Where we were (2026-10-22): closed out
 
