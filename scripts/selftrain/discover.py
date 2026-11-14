@@ -128,8 +128,12 @@ def main():
     src.add_argument("--local-pool"); src.add_argument("--real"); src.add_argument("--images")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--q-batch", type=int, default=16, help="boxes per decoder call (smaller = less GPU memory)")
+    ap.add_argument("--mem-frac", type=float, default=0.0, help="cap this process's share of GPU memory (next to training)")
     a = ap.parse_args()
     device = torch.device("cuda")
+    if a.mem_frac:
+        torch.cuda.set_per_process_memory_fraction(a.mem_frac)
     model, _ = load_refunet(a.checkpoint, device)
     model.roi_ref = bool(getattr(model, "roi_ref", False))
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
@@ -150,7 +154,7 @@ def main():
                        if low else None)
             boxes = candidates(img0, txt, div, covered)
             n_boxes += len(boxes)
-            P = ask(model, img0, boxes, DISC_SCALE, device)
+            P = ask(model, img0, boxes, DISC_SCALE, device, q_batch=a.q_batch)
             nh, nw = P.shape[1:] if len(P) else (1, 1)
             for b, p in zip(boxes, P):
                 x, y, w, h = b
@@ -187,7 +191,7 @@ def main():
         for z in SCALES:
             (md / str(z)).mkdir(parents=True, exist_ok=True)
             if fams:
-                M = ask(model, img0, [tuple(f["box"]) for f in fams], z, device)
+                M = ask(model, img0, [tuple(f["box"]) for f in fams], z, device, q_batch=a.q_batch)
                 for k, m in enumerate(M):
                     np.savez_compressed(md / str(z) / f"{k:03d}.npz", prob=m)
         meta = {"sheet": sid, "h": h0, "w": w0, "n_candidates": n_boxes, "n_accepted": len(acc),
@@ -196,7 +200,7 @@ def main():
                 "checkpoint": a.checkpoint}
         (d / "families.json").write_text(json.dumps(meta, indent=1))
         print(f"{sid}: {n_boxes} boxes, {len(acc)} accepted, {len(fams)} families "
-              f"(support {[f['support'] for f in fams]})", flush=True)
+              f"(support {[f['support'] for f in fams]}), peak GPU {torch.cuda.max_memory_allocated() / 2**30:.1f} GB", flush=True)
 
 
 if __name__ == "__main__":
