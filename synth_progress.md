@@ -3482,3 +3482,26 @@ Gate (hf14fix4 >= +0.002, valfix4 >= -0.002, gemini30 >= -0.003): FAIL on hf14fi
 val pseudo families covered 19 -> 22 / 24, precision 0.989, own material as background 0.66%; Gemini30 0.81%) is prepared,
 not run. Drafts (upload_drafts.py): check_here now marks uncovered DENSE line work (Gemini30: 50 / 57 families drafted, 4
 flagged, 3 silent misses; 1.6 markers / sheet); not uploaded.
+
+## 2026-11-14 — self-training on Gemini round 5 (fgavg78 pseudo-labels): FAILS the gate, not adopted
+
+`run_selftrain_ab.sh`: the fgavg78 recipe (gem2s-x restarts on the fg pool + 139 hand-labelled Gemini x18, seeds 7 + 8) plus
+fgavg78's confident pseudo-labels on 104 of the 111 round-5 elevations x18 (1,872 records < 2,502 hand-labelled). Pseudo-labels:
+`scripts/selftrain/` -- automatic families (grid boxes at 3 sizes, box wholly inside its own P > 0.9 answer, complete linkage
+IoU >= 0.75), target = draft & P > 0.9, background P < 0.1, rest ignored (new dataset `__ignore__:` annotations, no loss);
+families >= 3 boxes, not blank paper, >= 0.5% confident. Filters chosen on Gemini30 / val labels: precision 0.991 / 0.987,
+target pixels marked background 0.9% / 0.7%. Control = fgavg78 (same init / pool / seeds), all product scores at HEAD.
+
+| | valfix4 | hf14fix4 | gemini30 |
+|---|---|---|---|
+| fgavg78 (control) | 0.9503 | 0.9498 | 0.9131 |
+| self-trained, 2-seed blend | 0.9484 (-0.0019) | 0.9459 (-0.0039) | 0.9060 (-0.0071) |
+| seed 7 vs ctl seed 7 | -0.0036 | -0.0107 | -0.0151 |
+| seed 8 vs ctl seed 8 | +0.0010 | +0.0028 | -0.0018 |
+
+Paired (blend): valfix4 8 better / 9 worse of 71, CI [-0.0045, +0.0002]; hf14fix4 8 / 13 of 50, CI [-0.0088, -0.0000];
+Gemini30 33 / 57 of 195, CI [-0.0144, +0.0002], worst Gemini30 17 q2 / q10 (-0.34 / -0.31), 19 q0 (-0.23).
+Gate (hf14fix4 >= +0.002, valfix4 >= -0.002, Gemini30 >= -0.003): FAIL. The loss is largest on Gemini30, the same domain as the
+pseudo-labelled sheets: the model's own answers, even at 99% pixel precision, teach it its confident mistakes (and the
+families it misses become nothing), while hand labels correct them. fgavg78 stays the best. The drafting pipeline remains
+useful for pre-labelling round 5 for the user.
