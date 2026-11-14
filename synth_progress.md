@@ -3429,3 +3429,10 @@ no grayscale augmentation / training change. fgavg78 remains the ship pick (unpu
 
 `abshetty/floz-refunet-swint-fgavg78` (private), `scripts/publish_refunet.py`; round trip via `hf_ckpt_to_pth.py` identical
 (243 / 243 tensors). Now the default best (startup.md). Rescore maps uploaded to `abshetty/floz-diag` `rescore_{fgavg78,ctlavg78,gem2s_fg,gem2s_x}/`.
+
+## 2026-11-14 — round 5 lost; pre-label / self-training dropped
+
+The 200 round-5 Gemini images existed only on the CPU box (`data/image_generation/gemini_r5/`); none on HF (all abshetty datasets
+checked) or Roboflow (r1-r4 only). The user: there is no round 5. `image_generation/prompts_r5.jsonl` survives if it is ever
+regenerated. Unlabelled alternatives found in Roboflow (floz-real-pool 41 real sheets, gemini-r1 14, two older generated pools 120)
+were offered; the user dropped the pre-label / self-training plan.
