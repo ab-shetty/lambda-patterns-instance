@@ -3505,3 +3505,19 @@ Gate (hf14fix4 >= +0.002, valfix4 >= -0.002, Gemini30 >= -0.003): FAIL. The loss
 pseudo-labelled sheets: the model's own answers, even at 99% pixel precision, teach it its confident mistakes (and the
 families it misses become nothing), while hand labels correct them. fgavg78 stays the best. The drafting pipeline remains
 useful for pre-labelling round 5 for the user.
+
+## 2026-11-14 — self-training A/B v2 (fragment-free pool, stroke blank-paper test): GATE FAIL; direction closed
+
+| product mIoU vs control | valfix4 | hf14fix4 | gemini30 |
+|---|---|---|---|
+| v2 two-seed blend vs fgavg78 | 0.9503 -> 0.9507 (+0.0004) | 0.9498 -> 0.9410 (-0.0089) | 0.9131 -> 0.9044 (-0.0086) |
+| v2 seed 7 | +0.0002 | -0.0067 | -0.0109 |
+| v2 seed 8 | +0.0006 | -0.0262 | -0.0075 |
+| (v1 blend) | -0.0019 | -0.0039 | -0.0071 |
+
+Dropping fragment families fixed valfix4 (now neutral) but HF14 and Gemini30 lost more. Four seeds over two pseudo-label
+versions: training on fgavg78's own confident answers for unlabelled round-5 elevations does not help the real or Gemini
+sheets; not adopted, direction closed. The labelled-data lever (human corrections of round 5) is unaffected: drafts are in
+Roboflow `floz-gen-gemini-r5` (185 drafted + 15 blank holdout elevations for the anchoring check; patternN = confident
+families only, check_here = undrafted dense line work; local copies data/selftrain/drafts_uploaded/). Gemini30 check of the
+draft rules: 47 / 57 families drafted, 6 flagged, 4 silent misses.

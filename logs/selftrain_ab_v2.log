@@ -1,0 +1,19 @@
+== discovery: 111 sheets
+== pseudo pool: 105 sheets, 1890 records (hand-labelled Gemini: 2502)
+== mix: 13329 records (control mix: 11439)
+data/mixed/selftrain_r5v2_mix: built by generator version 2026-10-21a, current is 2026-11-14a
+reusing stale pool data/mixed/selftrain_r5v2_mix (ALLOW_STALE_POOLS=1)
+== pool 13329 sheets
+== trained
+== scored: data/evaluations/st2_r5_s7
+data/mixed/selftrain_r5v2_mix: built by generator version 2026-10-21a, current is 2026-11-14a
+reusing stale pool data/mixed/selftrain_r5v2_mix (ALLOW_STALE_POOLS=1)
+== pool 13329 sheets
+== trained
+== scored: data/evaluations/st2_r5_s8
+data/runs/ck_st2_r5_avg.pth [('data/runs/ck_st2_r5_s7_blend50.pth', 0.5), ('data/runs/ck_st2_r5_s8_blend50.pth', 0.5)]
+st vs ctl valfix4 0.9503 -> 0.9507 (+0.0004)  hf14fix4 0.9498 -> 0.9410 (-0.0089)  gemini30 0.9131 -> 0.9044 (-0.0086)
+st_s7 vs ctl_s7 valfix4 0.9504 -> 0.9506 (+0.0002)  hf14fix4 0.9521 -> 0.9454 (-0.0067)  gemini30 0.9118 -> 0.9008 (-0.0109)
+st_s8 vs ctl_s8 valfix4 0.9493 -> 0.9499 (+0.0006)  hf14fix4 0.9431 -> 0.9169 (-0.0262)  gemini30 0.9083 -> 0.9008 (-0.0075)
+GATE (blend vs fgavg78): FAIL {'valfix4': 0.0004, 'hf14fix4': -0.0089, 'gemini30': -0.0086}
+SELFTRAIN AB DONE 15:44:12
