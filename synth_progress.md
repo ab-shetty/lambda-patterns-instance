@@ -3384,3 +3384,9 @@ while it ran). Rescored on the same maps with `product.py` at HEAD (which reprod
 | gem2s-x | 0.9506 | 0.9459 | 0.9483 | 0.9069 | 1.12x | -- |
 
 Same decisions: **ship fgavg78**; eps 7 fails on both conditions (valfix4 0.9495 < 0.950, hf14fix4 1.21x > 1.2x).
+- **Rectangular-island exemption, re-judged on visible errors (fixed version: the exemption inside drop_islands): left off.**
+  On top of FILL_PMIN 0.1: valfix4 no change; hf14fix4 5 fixed (14 q1/q3/q4/q5 panels under windows, gem2s-x 12 q1) / 1 broken
+  (27 q3 small box); Gemini30 0 fixed / 5 broken (1 q1 a window pane filled solid, 18 q0-q2 a laundry appliance box, 28 q5).
+  Nothing label-free separates the pieces: all near-perfect rectangles, mean P 0.47-0.60 (real) vs 0.38-0.59 (false), ink /
+  edge density no better. The user: "tough to tell" -> status quo; a model-confidence problem (all at P 0.4-0.6). Renders
+  `data/diag/ab_rect.9_*.jpg`.
