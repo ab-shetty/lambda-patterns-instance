@@ -28,7 +28,17 @@ byte-comparable to older ones). **Every run before
 2026-09-29, 0.8440 included, was trained sheet-only**: reproduce those with
 `train_refunet.py --legacy-ref-jitter`. The effect of the fix is not yet measured.
 
-## Current best (2026-10-22)
+## Current best (2026-11-14)
+
+**Shipped 2026-11-14: `fgavg78`** (`abshetty/floz-refunet-swint-fgavg78`, private): float average of two one-epoch restarts of
+`gem2s-x` (seeds 7 / 8, DR / no-DR blend50 each) on the `--foreground 0.4` pool (GEN 2026-11-14a) + the Gemini holdout records
+(`run_foreground_ab.sh`). Product (current defaults below), label fixes v4: **valfix4 0.9503, hf14fix4 0.9498, Gemini30 0.9131**
+(gem2s-x 0.9506 / 0.9459 / 0.9069); vertices / label median hf14fix4 1.25x. Chosen by the gate "best mean of valfix4 + hf14fix4,
+Gemini30 within 0.003 of the best" over gem2s-x, the control blend and gem2s-x + fg (synth_progress 2026-11-14). Stress (clean
+hi-res inputs expected): JPEG / low-res / scan / B&W copies are footnotes; B&W losses are stone-or-brick vs grey-roof clashes
+with unlabelled material, no labelled patterns merge. Rebuild: `scripts/hf_ckpt_to_pth.py --repo abshetty/floz-refunet-swint-fgavg78`.
+
+### Previous best (2026-10-22)
 
 **Best since 2026-10-22: three published Gemini-data blends, `gem2s-x` the default** (`abshetty/floz-refunet-swint-{gem2s-x,gk-x,gke-x}`,
 private, round-trip identical 243 / 243). All pass the gate against xblend-kq30-kms30 and sit within noise of each other; the user
