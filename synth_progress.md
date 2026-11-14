@@ -3322,3 +3322,29 @@ The user: the numeric targets stand in for "what a human would consider right". 
   panel under a window dropped by drop_islands. `pp_probe/regular.py`: fill_gaps pmin 0.1-0.2 costs valfix4 -0.0008..-0.0011
   (Gemini30 +0.004..+0.006, HF14 +-0.0004); sparing rectangular islands: valfix4 0 / -0.0003, Gemini30 -0.0006..-0.0009, HF14
   mixed. Neither kept (val is the selection split).
+
+### 2026-11-14 (GH200) -- `--foreground` A/B, seed 8: same direction; the default stays 0.4
+
+`SEED=8 ./run_foreground_ab.sh` (same pools and mixes as seed 7). Product mIoU, v3 rows rescored from the maps
+(`vertsweep.py`) so both seeds compare with and without the island drop; the `--product` JSONs of seed 8 already include it:
+
+| | seed 7 ctl -> fg | seed 8 ctl -> fg | 2-seed mean fg - ctl | per question (2-seed avg) |
+|---|---|---|---|---|
+| hf14fix4, v3 | 0.9473 -> 0.9504 | 0.9408 -> 0.9429 | **+0.0026** | 22 up / 27 down, p 0.32 |
+| valfix4, v3 | 0.9517 -> 0.9514 | 0.9512 -> 0.9498 | -0.0008 | 25 up / 42 down, p 0.11 |
+| Gemini30, v3 | 0.8990 -> 0.9068 | 0.8977 -> 0.9016 | **+0.0058** | 90 up / 103 down, p 0.08 |
+| hf14fix4, + islands | 0.9481 -> 0.9513 | 0.9396 -> 0.9420 | +0.0028 | p 0.29 |
+| valfix4, + islands | 0.9518 -> 0.9515 | 0.9513 -> 0.9502 | -0.0007 | p 0.19 |
+| Gemini30, + islands | 0.9015 -> 0.9093 | 0.9006 -> 0.9051 | +0.0062 | p 0.046 |
+
+Raw @4096 seed 8 ctl -> fg: HF14 0.9144 -> 0.9206, fix v2 0.9251 -> 0.9299, val 0.9035 -> 0.9022, Gemini30 0.8878 -> 0.8901.
+- Seed 8 alone passes the gate too (hf14fix4 +0.0021, valfix4 -0.0014, Gemini30 +0.0039), as does the 2-seed mean. The default
+  stays `--foreground 0.4`. Statistically thin: the HF14 gain sits on a few questions (more go down than up); only Gemini30
+  approaches p 0.05.
+- Vertices: seed 8's ctl is also high on hf14fix4 (v3 1.50x; fg 1.55x), so seed 7's 1.17x -> 1.46x was mostly seed noise at the
+  median cliff, not the objects. With islands: ctl 1.48x, fg 1.50x; even eps 7 leaves both > 1.2x at seed 8 (1.31x / 1.48x).
+  **Neither seed-8 model meets <= 1.2x on HF14**: the vertex target depends on the checkpoint as much as the post-processing.
+- The targeted question did not move: HF14 02 q1 ctl -> fg seed 7 0.9065 / 84 -> 0.9123 / 90 vertices, seed 8 0.9109 / 103 ->
+  0.9061 / 149 (label 27).
+Maps on floz-diag `fgab_{ctl,fg}_s8/`. All numbers in this entry predate SNAP_GUARD (the entry above, made the default in another
+session the same day): they are v3 / v3 + islands without the guard.
