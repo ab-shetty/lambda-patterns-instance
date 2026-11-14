@@ -28,6 +28,8 @@ import pseudolabel as PLB
 import product
 
 HOLDOUT_N, HOLDOUT_SEED = 15, 20261114
+UNCERTAIN = False        # 2026-11-14, Gemini30: uncertain drafts added 3 real families for 8.5 mostly-noise polygons per sheet
+                         # (furniture / window blobs on round 5); off: 47 drafted, 6 flagged by check_here, 4 silent of 57
 CHECK_MIN = 0.005        # uncovered inked area (share of the sheet) that earns a check_here marker
 
 
@@ -44,7 +46,17 @@ def check_regions(img, covered, win_frac=0.01, dens=0.08):
     dense &= ~cv2.dilate(covered.astype(np.uint8), np.ones((k, k), np.uint8)).astype(bool)
     dense = cv2.morphologyEx(dense.astype(np.uint8), cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
     n, lab, st, _ = cv2.connectedComponentsWithStats(dense, connectivity=8)
-    return [tuple(int(v) for v in st[j, :4]) for j in range(1, n) if st[j, 4] >= CHECK_MIN * dense.size]
+    H, W = dense.shape
+    out = []
+    for j in range(1, n):
+        x, y, w, h = (int(v) for v in st[j, :4])
+        if st[j, 4] < CHECK_MIN * dense.size:
+            continue
+        edge = x <= 2 or y <= 2 or x + w >= W - 2 or y + h >= H - 2
+        if edge and min(w, h) < 0.03 * max(H, W):       # a thin strip along the sheet border = the border's own line work
+            continue
+        out.append((x, y, w, h))
+    return out
 
 
 def drafts(d, images):
@@ -57,7 +69,7 @@ def drafts(d, images):
     for f in fams:
         if f["pl"]:
             n_conf += 1; label = f"pattern{n_conf}"
-        elif f["support"] >= 2 and f["plain"] < 0.5 and not f.get("fragment"):   # a fragment duplicates a drafted material
+        elif UNCERTAIN and f["support"] >= 2 and f["plain"] < 0.5 and not f.get("fragment"):
             n_unc += 1; label = f"uncertain_{n_unc}"
         else:
             continue        # single-box / blank-paper families: left out (the dry run had ~55 such polygons per sheet);
