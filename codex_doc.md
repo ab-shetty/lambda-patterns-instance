@@ -82,7 +82,8 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 Best: `abshetty/floz-refunet-swint-fgavg78` (published 2026-11-14): product v3 valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131.
 Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 RECOVERED (2026-11-14, CPU session): 200 images on `abshetty/floz-assets` `gemini_r5/`, unlabelled. Self-training on round 5 (fgavg78's confident answers, two pool versions,
 four seeds) FAILED the gate both times (v2 blend: valfix4 +0.0004, hf14fix4 -0.0089, gemini30 -0.0086): closed. Round-5 DRAFTS for
-human correction are in Roboflow `floz-gen-gemini-r5` (15 blank holdouts for the anchoring check) -- labelling them is the open lever.
+human correction are in Roboflow `floz-gen-gemini-r5`, but the user will not label round 5 (2026-11-19): the pseudo-labels were its
+labels, and round 5 is done.
 Post-processing is ~2.9x faster with identical output; `scripts/bench_deploy.py` measures a candidate card. Local checkpoints are
 backed up to the private `abshetty/floz-runs-backup`; the GH200 instance was terminated after it. Degradation stress (jpeg25, B&W) is a footnote per the user.
 
@@ -96,10 +97,10 @@ post-processing (reciprocity, reference ensembles) and TTA (latency) did not sur
 
 ## Next, if the project resumes
 
-1. **Label more Gemini sheets** -- round 5 (200 generated, `image_generation/prompts_r5.jsonl`, unlabelled; images on `abshetty/floz-assets` `gemini_r5/`, recovered 2026-11-14 from the Gemini batch results file) -- and retrain the gem recipe
+1. **Label more Gemini sheets** -- NOT round 5 (the user, 2026-11-19: never labelled; its pseudo-labels were tried, see self-training) -- round 5 (200 generated, `image_generation/prompts_r5.jsonl`, unlabelled; images on `abshetty/floz-assets` `gemini_r5/`, recovered 2026-11-14 from the Gemini batch results file) -- and retrain the gem recipe
    (`run_gemini_holdout.sh` pool + `run_single_pass.sh`, two seeds, blend with the current best). This is the only lever measured to move
    Gemini30 by more than seed noise.
-2. **Self-training with automatic boxes** on unlabelled Gemini sheets (parked 2026-10-20; worth it once round 5 exists). Tile each sheet
+2. **Self-training with automatic boxes** on unlabelled Gemini sheets -- DONE 2026-11-14 on round 5, failed the gate twice, closed. Tile each sheet
    with candidate boxes; keep a box only if it lies wholly inside its own answer at P > 0.9, the answer is a sensible size with texture,
    and the box is not mostly text. Note the 2026-10-22 reciprocity result: the model does not answer back reliably from a second box on
    the same material, so do not use reference-swap consistency as a filter. Validate on val's labelled sheets first; Gemini30 never in the pool.

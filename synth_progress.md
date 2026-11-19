@@ -3532,7 +3532,7 @@ draft rules: 47 / 57 families drafted, 6 flagged, 4 silent misses.
 
 Backup of local-only checkpoints / round-5 discovery / pseudo pools: `abshetty/floz-runs-backup` (private). Instance 5764a1b50bda44b6a72254984e199176 terminated after the backup (the user's instruction).
 
-## 2026-11-19 (CPU) -- pre-GPU checks: round-5 drafts vs the Roboflow converter
+## 2026-11-19 (CPU) -- pre-GPU checks: round-5 drafts vs the Roboflow converter (insurance only: the user will not label round 5)
 
 The round-5 drafts (`floz-gen-gemini-r5`) mark holes as `hole_patternN` and review markers as `check_here`; rounds 3-4 used
 `remove`. `scripts/roboflow_to_local.py` treated every class but `remove` as a material, so a corrected round-5 export would have
