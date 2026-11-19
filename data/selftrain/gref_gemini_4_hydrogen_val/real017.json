@@ -1,0 +1,90 @@
+{
+ "sheet": "real017",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "gray roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "gray-blue brick or stone wainscot",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "entry door panel (non-material)",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     825,
+     193,
+     892,
+     226
+    ],
+    [
+     825,
+     410,
+     892,
+     443
+    ],
+    [
+     825,
+     627,
+     892,
+     660
+    ],
+    [
+     825,
+     843,
+     892,
+     876
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 329,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 329
+   }
+  ],
+  "prompt_token_count": 8624,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7579
+   }
+  ],
+  "thoughts_token_count": 1052,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10005,
+  "traffic_type": null
+ }
+}

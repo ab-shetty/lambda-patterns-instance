@@ -1,0 +1,40 @@
+{
+ "sheet": "real021",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof tile",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 79,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3781,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   }
+  ],
+  "thoughts_token_count": 314,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 4174,
+  "traffic_type": null
+ }
+}

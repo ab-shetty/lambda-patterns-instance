@@ -1,0 +1,68 @@
+{
+ "sheet": "floz_gen_r5_054",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     644,
+     130,
+     837,
+     173
+    ],
+    [
+     644,
+     267,
+     837,
+     292
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 207,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 207
+   }
+  ],
+  "prompt_token_count": 6485,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 1309,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8001,
+  "traffic_type": null
+ }
+}

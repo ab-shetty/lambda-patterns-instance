@@ -1,0 +1,196 @@
+{
+ "sheet": "floz_gen_r5_186",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 2,
+  "F2": 3,
+  "F3": 4,
+  "F4": 6,
+  "F5": 8
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "tan flat trim and foundation fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     383,
+     142,
+     410,
+     449
+    ],
+    [
+     239,
+     127,
+     429,
+     305
+    ],
+    [
+     239,
+     300,
+     429,
+     477
+    ],
+    [
+     405,
+     91,
+     434,
+     145
+    ],
+    [
+     426,
+     112,
+     564,
+     146
+    ],
+    [
+     426,
+     291,
+     564,
+     327
+    ],
+    [
+     651,
+     107,
+     676,
+     146
+    ],
+    [
+     829,
+     109,
+     844,
+     146
+    ],
+    [
+     405,
+     441,
+     676,
+     458
+    ],
+    [
+     405,
+     527,
+     434,
+     566
+    ],
+    [
+     426,
+     549,
+     564,
+     584
+    ],
+    [
+     651,
+     544,
+     676,
+     584
+    ],
+    [
+     828,
+     545,
+     844,
+     868
+    ],
+    [
+     676,
+     864,
+     829,
+     870
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "smooth pinkish-brown wall fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "cedar shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     0,
+     8,
+     81,
+     66
+    ],
+    [
+     14,
+     78,
+     81,
+     118
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "green painted trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     426,
+     730,
+     564,
+     764
+    ],
+    [
+     426,
+     848,
+     564,
+     882
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 764,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 764
+   }
+  ],
+  "prompt_token_count": 13070,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1073
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11997
+   }
+  ],
+  "thoughts_token_count": 6427,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 20261,
+  "traffic_type": null
+ }
+}

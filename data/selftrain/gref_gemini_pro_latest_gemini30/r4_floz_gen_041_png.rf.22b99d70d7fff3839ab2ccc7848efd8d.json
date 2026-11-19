@@ -1,0 +1,71 @@
+{
+ "sheet": "r4_floz_gen_041_png.rf.22b99d70d7fff3839ab2ccc7848efd8d",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "joists on white background",
+   "reference_valid": true,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     315,
+     87,
+     787,
+     151
+    ],
+    [
+     286,
+     724,
+     864,
+     916
+    ],
+    [
+     362,
+     287,
+     695,
+     591
+    ],
+    [
+     426,
+     602,
+     696,
+     718
+    ],
+    [
+     88,
+     588,
+     302,
+     718
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 228,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3781,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   }
+  ],
+  "thoughts_token_count": 2038,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 6047,
+  "traffic_type": null
+ }
+}

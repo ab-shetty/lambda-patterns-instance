@@ -1,0 +1,86 @@
+{
+ "sheet": "floz_gen_r5_166",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and dashed lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     719,
+     53,
+     858,
+     256
+    ],
+    [
+     719,
+     320,
+     858,
+     533
+    ],
+    [
+     549,
+     533,
+     722,
+     582
+    ],
+    [
+     708,
+     585,
+     845,
+     733
+    ],
+    [
+     709,
+     786,
+     833,
+     894
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 275,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 275
+   }
+  ],
+  "prompt_token_count": 6485,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 2555,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9315,
+  "traffic_type": null
+ }
+}

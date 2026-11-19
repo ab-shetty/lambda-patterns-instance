@@ -1,0 +1,63 @@
+{
+ "sheet": "r4_floz_gen_055_png.rf.ac5b19d23be97ff419b41f7f08023c1a",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "garage door",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     295,
+     764,
+     497,
+     859
+    ],
+    [
+     617,
+     347,
+     988,
+     764
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 193,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5962,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5402
+   }
+  ],
+  "thoughts_token_count": 1641,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7796,
+  "traffic_type": null
+ }
+}

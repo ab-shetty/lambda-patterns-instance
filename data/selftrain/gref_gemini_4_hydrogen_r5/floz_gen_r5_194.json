@@ -1,0 +1,119 @@
+{
+ "sheet": "floz_gen_r5_194",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 3,
+  "F3": 5,
+  "F4": 7,
+  "F5": 10
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "wood plank soffit",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     306,
+     87,
+     346,
+     118
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and concrete footing edge",
+   "reference_valid": false,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     922,
+     120,
+     998,
+     550
+    ],
+    [
+     896,
+     550,
+     998,
+     830
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     68,
+     540,
+     365,
+     807
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "flat tan-grey stucco",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     520,
+     390,
+     585,
+     433
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 487,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 487
+   }
+  ],
+  "prompt_token_count": 13070,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1073
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11997
+   }
+  ],
+  "thoughts_token_count": 18990,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 32547,
+  "traffic_type": null
+ }
+}

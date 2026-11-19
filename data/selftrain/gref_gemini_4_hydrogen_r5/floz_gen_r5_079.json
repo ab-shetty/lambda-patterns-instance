@@ -1,0 +1,134 @@
+{
+ "sheet": "floz_gen_r5_079",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stucco stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     375,
+     151,
+     448,
+     168
+    ],
+    [
+     608,
+     151,
+     680,
+     186
+    ],
+    [
+     620,
+     306,
+     688,
+     388
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and ground line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     908,
+     98,
+     998,
+     894
+    ],
+    [
+     450,
+     307,
+     474,
+     421
+    ],
+    [
+     680,
+     307,
+     704,
+     421
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "balcony railing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     375,
+     148,
+     450,
+     190
+    ],
+    [
+     605,
+     148,
+     681,
+     190
+    ],
+    [
+     375,
+     306,
+     452,
+     422
+    ],
+    [
+     605,
+     306,
+     682,
+     422
+    ],
+    [
+     825,
+     306,
+     912,
+     422
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 311,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 311
+   }
+  ],
+  "prompt_token_count": 8680,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7635
+   }
+  ],
+  "thoughts_token_count": 5171,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14162,
+  "traffic_type": null
+ }
+}

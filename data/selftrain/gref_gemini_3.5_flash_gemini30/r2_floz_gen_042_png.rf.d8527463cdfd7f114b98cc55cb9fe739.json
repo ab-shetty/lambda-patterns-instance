@@ -1,0 +1,57 @@
+{
+ "sheet": "r2_floz_gen_042_png.rf.d8527463cdfd7f114b98cc55cb9fe739",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stipple pattern",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "solid wall fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     15,
+     688,
+     42,
+     730
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 171,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5906,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5346
+   }
+  ],
+  "thoughts_token_count": 2271,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8348,
+  "traffic_type": null
+ }
+}

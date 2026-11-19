@@ -1,0 +1,153 @@
+{
+ "sheet": "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "dotted grid flooring",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     26,
+     439,
+     88,
+     545
+    ],
+    [
+     482,
+     803,
+     558,
+     834
+    ],
+    [
+     586,
+     620,
+     622,
+     666
+    ],
+    [
+     38,
+     113,
+     120,
+     226
+    ],
+    [
+     134,
+     229,
+     346,
+     273
+    ],
+    [
+     361,
+     113,
+     443,
+     226
+    ],
+    [
+     513,
+     113,
+     595,
+     226
+    ],
+    [
+     637,
+     236,
+     859,
+     280
+    ],
+    [
+     883,
+     113,
+     965,
+     227
+    ],
+    [
+     120,
+     323,
+     349,
+     410
+    ],
+    [
+     171,
+     449,
+     325,
+     517
+    ],
+    [
+     189,
+     138,
+     291,
+     200
+    ],
+    [
+     747,
+     141,
+     821,
+     199
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "square tile hatch",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     191,
+     130,
+     281,
+     204
+    ],
+    [
+     163,
+     326,
+     303,
+     410
+    ],
+    [
+     194,
+     482,
+     299,
+     553
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 517,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 517
+   }
+  ],
+  "prompt_token_count": 6521,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5490
+   }
+  ],
+  "thoughts_token_count": 4518,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 11556,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,140 @@
+{
+ "sheet": "floz_gen_r5_103",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 5,
+  "F6": 6
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "composition roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     644,
+     342,
+     790,
+     354
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "brown wood porch trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     428,
+     152,
+     456,
+     468
+    ],
+    [
+     456,
+     152,
+     785,
+     166
+    ],
+    [
+     456,
+     329,
+     785,
+     343
+    ],
+    [
+     456,
+     453,
+     785,
+     468
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "blank paper and dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "beige fascia and soffit trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     404,
+     488,
+     429,
+     862
+    ],
+    [
+     786,
+     468,
+     821,
+     844
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 598,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 598
+   }
+  ],
+  "prompt_token_count": 15181,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1087
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 14094
+   }
+  ],
+  "thoughts_token_count": 4599,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 20378,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,68 @@
+{
+ "sheet": "r4_floz_gen_078_png.rf.0e85ee027128006522c34b9f71f8b8e1",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "smooth trim band",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     264,
+     183,
+     453,
+     514
+    ],
+    [
+     237,
+     652,
+     539,
+     886
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal coursed roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 126,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 126
+   }
+  ],
+  "prompt_token_count": 6485,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 7446,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14057,
+  "traffic_type": null
+ }
+}

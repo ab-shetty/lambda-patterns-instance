@@ -1,0 +1,74 @@
+{
+ "sheet": "floz_gen_r5_087",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "vertical board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     165,
+     28,
+     403,
+     521
+    ],
+    [
+     165,
+     720,
+     403,
+     966
+    ],
+    [
+     638,
+     626,
+     910,
+     926
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 234,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 234
+   }
+  ],
+  "prompt_token_count": 6509,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5478
+   }
+  ],
+  "thoughts_token_count": 5463,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12206,
+  "traffic_type": null
+ }
+}

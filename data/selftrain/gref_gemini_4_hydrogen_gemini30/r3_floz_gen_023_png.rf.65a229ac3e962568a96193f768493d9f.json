@@ -1,0 +1,159 @@
+{
+ "sheet": "r3_floz_gen_023_png.rf.65a229ac3e962568a96193f768493d9f",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 7
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "diagonal line flooring hatch",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     129,
+     124,
+     189,
+     234
+    ],
+    [
+     208,
+     241,
+     359,
+     284
+    ],
+    [
+     429,
+     132,
+     455,
+     220
+    ],
+    [
+     499,
+     374,
+     632,
+     509
+    ],
+    [
+     772,
+     76,
+     891,
+     185
+    ],
+    [
+     772,
+     427,
+     891,
+     535
+    ]
+   ],
+   "missed_regions": [
+    [
+     807,
+     275,
+     955,
+     294
+    ],
+    [
+     807,
+     301,
+     955,
+     335
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "dotted grid flooring",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     409,
+     499,
+     469,
+     544
+    ],
+    [
+     372,
+     646,
+     412,
+     695
+    ],
+    [
+     472,
+     124,
+     526,
+     152
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blank paper and dimension line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     105,
+     0,
+     968,
+     60
+    ],
+    [
+     105,
+     941,
+     968,
+     1000
+    ],
+    [
+     139,
+     132,
+     189,
+     228
+    ],
+    [
+     807,
+     300,
+     955,
+     345
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 375,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 375
+   }
+  ],
+  "prompt_token_count": 8543,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7498
+   }
+  ],
+  "thoughts_token_count": 7378,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16296,
+  "traffic_type": null
+ }
+}

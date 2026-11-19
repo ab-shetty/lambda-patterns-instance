@@ -1,0 +1,93 @@
+{
+ "sheet": "floz_gen_r5_026",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "diagonal line roof hatch",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     68,
+     647,
+     130,
+     718
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "dimension lines on blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     190,
+     187,
+     300,
+     281
+    ],
+    [
+     462,
+     92,
+     625,
+     138
+    ],
+    [
+     360,
+     168,
+     625,
+     408
+    ],
+    [
+     20,
+     478,
+     912,
+     519
+    ],
+    [
+     68,
+     597,
+     625,
+     915
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 190,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 190
+   }
+  ],
+  "prompt_token_count": 6329,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5298
+   }
+  ],
+  "thoughts_token_count": 4501,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 11020,
+  "traffic_type": null
+ }
+}

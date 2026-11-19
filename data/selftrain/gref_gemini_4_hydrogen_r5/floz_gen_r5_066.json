@@ -1,0 +1,120 @@
+{
+ "sheet": "floz_gen_r5_066",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     205,
+     426,
+     275,
+     440
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled field",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "diagonal wood plank soffit",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     95,
+     58,
+     273,
+     85
+    ],
+    [
+     100,
+     412,
+     250,
+     439
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing and label",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     301,
+     133,
+     367,
+     211
+    ],
+    [
+     301,
+     785,
+     367,
+     813
+    ],
+    [
+     609,
+     754,
+     732,
+     784
+    ],
+    [
+     609,
+     866,
+     732,
+     896
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 458,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 458
+   }
+  ],
+  "prompt_token_count": 10980,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9921
+   }
+  ],
+  "thoughts_token_count": 4538,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 15976,
+  "traffic_type": null
+ }
+}

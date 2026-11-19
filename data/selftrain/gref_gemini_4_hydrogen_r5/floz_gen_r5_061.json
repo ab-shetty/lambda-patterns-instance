@@ -1,0 +1,118 @@
+{
+ "sheet": "floz_gen_r5_061",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "flat spandrel panel",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     282,
+     332,
+     380,
+     388
+    ],
+    [
+     522,
+     361,
+     618,
+     389
+    ],
+    [
+     760,
+     361,
+     857,
+     389
+    ],
+    [
+     282,
+     535,
+     412,
+     645
+    ],
+    [
+     522,
+     535,
+     652,
+     645
+    ],
+    [
+     760,
+     535,
+     948,
+     645
+    ],
+    [
+     764,
+     678,
+     948,
+     706
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 346,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 346
+   }
+  ],
+  "prompt_token_count": 10770,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9711
+   }
+  ],
+  "thoughts_token_count": 1854,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12970,
+  "traffic_type": null
+ }
+}

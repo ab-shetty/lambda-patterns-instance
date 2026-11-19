@@ -1,0 +1,142 @@
+{
+ "sheet": "real010",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "solid dark grey ground fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "stucco stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     612,
+     530,
+     842,
+     586
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     486,
+     68,
+     577,
+     190
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "window glazing and text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     334,
+     294,
+     474,
+     322
+    ],
+    [
+     634,
+     154,
+     772,
+     180
+    ],
+    [
+     680,
+     307,
+     734,
+     333
+    ],
+    [
+     634,
+     458,
+     772,
+     484
+    ],
+    [
+     634,
+     486,
+     772,
+     512
+    ],
+    [
+     334,
+     771,
+     474,
+     798
+    ],
+    [
+     334,
+     859,
+     474,
+     886
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 351,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 351
+   }
+  ],
+  "prompt_token_count": 12902,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1073
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11829
+   }
+  ],
+  "thoughts_token_count": 5430,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 18683,
+  "traffic_type": null
+ }
+}

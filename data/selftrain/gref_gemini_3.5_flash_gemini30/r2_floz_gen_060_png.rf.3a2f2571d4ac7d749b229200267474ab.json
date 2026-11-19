@@ -1,0 +1,67 @@
+{
+ "sheet": "r2_floz_gen_060_png.rf.3a2f2571d4ac7d749b229200267474ab",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 2,
+  "F2": 3,
+  "F3": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "board & batten siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "painted field",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     533,
+     460,
+     848,
+     520
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 242,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8121,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7551
+   }
+  ],
+  "thoughts_token_count": 2215,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10578,
+  "traffic_type": null
+ }
+}

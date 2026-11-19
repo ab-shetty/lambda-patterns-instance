@@ -1,0 +1,79 @@
+{
+ "sheet": "r3_floz_gen_029_png.rf.a2b5209188d33920ceec351768132d66",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "board and batten siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     425,
+     188,
+     649,
+     250
+    ],
+    [
+     425,
+     339,
+     649,
+     400
+    ],
+    [
+     425,
+     494,
+     649,
+     555
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 285,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8232,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7662
+   }
+  ],
+  "thoughts_token_count": 1205,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9722,
+  "traffic_type": null
+ }
+}

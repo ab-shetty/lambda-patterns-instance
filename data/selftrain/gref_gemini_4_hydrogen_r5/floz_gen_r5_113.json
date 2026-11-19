@@ -1,0 +1,79 @@
+{
+ "sheet": "floz_gen_r5_113",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     144,
+     826,
+     258,
+     871
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled garage door",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blank paper and dimension text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     266,
+     868,
+     902,
+     916
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 202,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 202
+   }
+  ],
+  "prompt_token_count": 8680,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7635
+   }
+  ],
+  "thoughts_token_count": 1566,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10448,
+  "traffic_type": null
+ }
+}

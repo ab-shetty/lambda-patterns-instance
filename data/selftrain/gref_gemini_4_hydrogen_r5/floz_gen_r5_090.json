@@ -1,0 +1,86 @@
+{
+ "sheet": "floz_gen_r5_090",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal roofing lines",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "fibre-cement panel grid",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     487,
+     524,
+     522,
+     622
+    ]
+   ],
+   "missed_regions": [
+    [
+     818,
+     260,
+     956,
+     288
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "dense shadow and sparse trim stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     588,
+     372,
+     745,
+     440
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 187,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 187
+   }
+  ],
+  "prompt_token_count": 8596,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7551
+   }
+  ],
+  "thoughts_token_count": 7612,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16395,
+  "traffic_type": null
+ }
+}

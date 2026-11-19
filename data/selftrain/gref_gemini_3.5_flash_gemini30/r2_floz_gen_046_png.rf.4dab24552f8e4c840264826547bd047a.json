@@ -1,0 +1,54 @@
+{
+ "sheet": "r2_floz_gen_046_png.rf.4dab24552f8e4c840264826547bd047a",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "standing seam metal roofing",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     675,
+     208,
+     885,
+     417
+    ]
+   ],
+   "missed_regions": [
+    [
+     488,
+     613,
+     795,
+     755
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 131,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3853,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3303
+   }
+  ],
+  "thoughts_token_count": 2210,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 6194,
+  "traffic_type": null
+ }
+}

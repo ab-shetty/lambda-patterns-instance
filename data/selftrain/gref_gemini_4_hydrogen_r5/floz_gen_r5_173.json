@@ -1,0 +1,75 @@
+{
+ "sheet": "floz_gen_r5_173",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brown horizontal roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "gray stippled stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blue-gray horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "tan stone veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 168,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 168
+   }
+  ],
+  "prompt_token_count": 10770,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9711
+   }
+  ],
+  "thoughts_token_count": 1307,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12245,
+  "traffic_type": null
+ }
+}

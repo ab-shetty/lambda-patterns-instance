@@ -1,0 +1,175 @@
+{
+ "sheet": "floz_gen_r5_122",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 4,
+  "F6": 5,
+  "F7": 7
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "painted siding with stipple finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal lined roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing and window label",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     500,
+     290,
+     620,
+     317
+    ],
+    [
+     500,
+     407,
+     662,
+     434
+    ],
+    [
+     500,
+     564,
+     662,
+     591
+    ],
+    [
+     500,
+     743,
+     662,
+     770
+    ],
+    [
+     532,
+     789,
+     714,
+     814
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper with text and dimension line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     785,
+     67,
+     1000,
+     451
+    ],
+    [
+     785,
+     540,
+     1000,
+     932
+    ],
+    [
+     550,
+     845,
+     776,
+     914
+    ],
+    [
+     274,
+     949,
+     785,
+     982
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "smooth tan flat siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     552,
+     845,
+     775,
+     914
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "smooth blue-grey painted siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     290,
+     580,
+     408,
+     670
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F7",
+   "material": "brown wood plank siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 767,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 767
+   }
+  ],
+  "prompt_token_count": 17156,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1101
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 16055
+   }
+  ],
+  "thoughts_token_count": 3332,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 21255,
+  "traffic_type": null
+ }
+}

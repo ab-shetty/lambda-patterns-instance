@@ -1,0 +1,129 @@
+{
+ "sheet": "floz_gen_r5_154",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 6,
+  "F5": 8
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "grey asphalt shingle roof",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     123,
+     352,
+     173,
+     424
+    ],
+    [
+     640,
+     339,
+     694,
+     423
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled stucco finish",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     190,
+     705,
+     330,
+     751
+    ],
+    [
+     639,
+     326,
+     703,
+     435
+    ],
+    [
+     676,
+     326,
+     853,
+     342
+    ],
+    [
+     685,
+     418,
+     853,
+     435
+    ],
+    [
+     782,
+     756,
+     849,
+     781
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window and door glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper with text and dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "blank paper with dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 325,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 325
+   }
+  ],
+  "prompt_token_count": 12944,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1073
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11871
+   }
+  ],
+  "thoughts_token_count": 4267,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 17536,
+  "traffic_type": null
+ }
+}

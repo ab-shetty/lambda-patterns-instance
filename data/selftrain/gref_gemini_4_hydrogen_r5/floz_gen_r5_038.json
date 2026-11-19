@@ -1,0 +1,110 @@
+{
+ "sheet": "floz_gen_r5_038",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "shingle roofing",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     234,
+     585,
+     462,
+     775
+    ],
+    [
+     462,
+     560,
+     545,
+     600
+    ],
+    [
+     462,
+     742,
+     545,
+     832
+    ]
+   ],
+   "missed_regions": [
+    [
+     235,
+     150,
+     528,
+     176
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     870,
+     175,
+     988,
+     520
+    ],
+    [
+     755,
+     517,
+     988,
+     565
+    ],
+    [
+     910,
+     565,
+     988,
+     850
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "stucco finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 396,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 396
+   }
+  ],
+  "prompt_token_count": 8543,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7498
+   }
+  ],
+  "thoughts_token_count": 7156,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16095,
+  "traffic_type": null
+ }
+}

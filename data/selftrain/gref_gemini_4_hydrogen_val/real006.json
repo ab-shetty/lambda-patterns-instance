@@ -1,0 +1,155 @@
+{
+ "sheet": "real006",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "garage door",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     630,
+     707,
+     949,
+     916
+    ],
+    [
+     630,
+     283,
+     931,
+     303
+    ],
+    [
+     553,
+     139,
+     935,
+     145
+    ],
+    [
+     555,
+     941,
+     935,
+     948
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     630,
+     51,
+     832,
+     67
+    ],
+    [
+     630,
+     72,
+     832,
+     105
+    ],
+    [
+     630,
+     172,
+     832,
+     243
+    ],
+    [
+     630,
+     284,
+     930,
+     303
+    ],
+    [
+     628,
+     305,
+     822,
+     342
+    ],
+    [
+     630,
+     344,
+     930,
+     363
+    ],
+    [
+     630,
+     417,
+     832,
+     452
+    ],
+    [
+     630,
+     560,
+     832,
+     631
+    ],
+    [
+     645,
+     712,
+     704,
+     910
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 582,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 582
+   }
+  ],
+  "prompt_token_count": 10815,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9756
+   }
+  ],
+  "thoughts_token_count": 4625,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16022,
+  "traffic_type": null
+ }
+}

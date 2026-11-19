@@ -1,0 +1,94 @@
+{
+ "sheet": "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stipple pattern flooring",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     30,
+     110,
+     140,
+     230
+    ],
+    [
+     110,
+     310,
+     360,
+     420
+    ],
+    [
+     160,
+     440,
+     350,
+     520
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "square tile flooring",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     180,
+     120,
+     300,
+     210
+    ],
+    [
+     150,
+     310,
+     310,
+     420
+    ],
+    [
+     180,
+     470,
+     300,
+     560
+    ],
+    [
+     890,
+     610,
+     970,
+     660
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 308,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6050,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5490
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 6335,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12693,
+  "traffic_type": null
+ }
+}

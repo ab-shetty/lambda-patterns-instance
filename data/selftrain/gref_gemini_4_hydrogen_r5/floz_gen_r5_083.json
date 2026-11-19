@@ -1,0 +1,112 @@
+{
+ "sheet": "floz_gen_r5_083",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     205,
+     150,
+     278,
+     163
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blank paper and dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     155,
+     29,
+     817,
+     78
+    ],
+    [
+     93,
+     916,
+     817,
+     986
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     346,
+     570,
+     378,
+     642
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 330,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 330
+   }
+  ],
+  "prompt_token_count": 13016,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1073
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11943
+   }
+  ],
+  "thoughts_token_count": 4497,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 17843,
+  "traffic_type": null
+ }
+}

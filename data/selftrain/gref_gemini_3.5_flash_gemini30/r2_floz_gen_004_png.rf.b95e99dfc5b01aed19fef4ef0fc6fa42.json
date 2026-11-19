@@ -1,0 +1,70 @@
+{
+ "sheet": "r2_floz_gen_004_png.rf.b95e99dfc5b01aed19fef4ef0fc6fa42",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "smooth trim band",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     267,
+     279,
+     885,
+     287
+    ],
+    [
+     267,
+     694,
+     885,
+     703
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     317,
+     568,
+     498,
+     609
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 135,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5951,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5391
+   }
+  ],
+  "thoughts_token_count": 2965,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9051,
+  "traffic_type": null
+ }
+}

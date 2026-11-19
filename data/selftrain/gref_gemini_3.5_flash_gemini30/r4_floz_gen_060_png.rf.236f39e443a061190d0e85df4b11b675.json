@@ -1,0 +1,77 @@
+{
+ "sheet": "r4_floz_gen_060_png.rf.236f39e443a061190d0e85df4b11b675",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "diagonal hatch flooring",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     25,
+     560,
+     400,
+     687
+    ],
+    [
+     115,
+     693,
+     400,
+     788
+    ],
+    [
+     25,
+     792,
+     400,
+     977
+    ],
+    [
+     587,
+     23,
+     988,
+     222
+    ],
+    [
+     540,
+     566,
+     988,
+     780
+    ],
+    [
+     535,
+     788,
+     988,
+     977
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 212,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3799,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3249
+   }
+  ],
+  "thoughts_token_count": 1235,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 5246,
+  "traffic_type": null
+ }
+}

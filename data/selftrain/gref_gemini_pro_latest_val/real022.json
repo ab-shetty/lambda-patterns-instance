@@ -1,0 +1,40 @@
+{
+ "sheet": "real022",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roofing tiles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 80,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3781,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   }
+  ],
+  "thoughts_token_count": 388,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 4249,
+  "traffic_type": null
+ }
+}

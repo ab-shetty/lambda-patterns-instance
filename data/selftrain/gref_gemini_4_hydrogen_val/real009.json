@@ -1,0 +1,137 @@
+{
+ "sheet": "real009",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 4,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     378,
+     141,
+     502,
+     168
+    ],
+    [
+     207,
+     754,
+     297,
+     819
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing and text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     406,
+     142,
+     502,
+     168
+    ],
+    [
+     406,
+     229,
+     502,
+     256
+    ],
+    [
+     712,
+     309,
+     773,
+     335
+    ],
+    [
+     378,
+     706,
+     502,
+     732
+    ],
+    [
+     643,
+     514,
+     771,
+     541
+    ],
+    [
+     643,
+     542,
+     771,
+     569
+    ],
+    [
+     684,
+     694,
+     735,
+     720
+    ],
+    [
+     643,
+     845,
+     771,
+     873
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "solid grey ground fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 407,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 407
+   }
+  ],
+  "prompt_token_count": 10715,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9656
+   }
+  ],
+  "thoughts_token_count": 3359,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14481,
+  "traffic_type": null
+ }
+}

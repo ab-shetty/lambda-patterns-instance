@@ -1,0 +1,84 @@
+{
+ "sheet": "floz_gen_r5_177",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     504,
+     914,
+     642,
+     929
+    ],
+    [
+     586,
+     203,
+     688,
+     214
+    ],
+    [
+     612,
+     425,
+     642,
+     440
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "horizontal siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 218,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 218
+   }
+  ],
+  "prompt_token_count": 8712,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7667
+   }
+  ],
+  "thoughts_token_count": 4292,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 13222,
+  "traffic_type": null
+ }
+}

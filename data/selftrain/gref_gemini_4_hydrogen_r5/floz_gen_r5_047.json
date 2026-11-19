@@ -1,0 +1,52 @@
+{
+ "sheet": "floz_gen_r5_047",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stucco dot stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     349,
+     651,
+     533,
+     693
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 122,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 122
+   }
+  ],
+  "prompt_token_count": 4272,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3255
+   }
+  ],
+  "thoughts_token_count": 1393,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 5787,
+  "traffic_type": null
+ }
+}

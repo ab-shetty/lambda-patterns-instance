@@ -1,0 +1,68 @@
+{
+ "sheet": "floz_gen_r5_099",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "vertical roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     342,
+     112,
+     826,
+     310
+    ],
+    [
+     252,
+     643,
+     456,
+     830
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 208,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 208
+   }
+  ],
+  "prompt_token_count": 6422,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5391
+   }
+  ],
+  "thoughts_token_count": 2403,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9033,
+  "traffic_type": null
+ }
+}

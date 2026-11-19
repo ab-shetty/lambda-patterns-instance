@@ -1,0 +1,126 @@
+{
+ "sheet": "real009",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 4,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     376,
+     142,
+     502,
+     169
+    ],
+    [
+     376,
+     230,
+     502,
+     257
+    ],
+    [
+     376,
+     706,
+     503,
+     733
+    ],
+    [
+     642,
+     514,
+     769,
+     541
+    ],
+    [
+     642,
+     543,
+     769,
+     569
+    ],
+    [
+     642,
+     694,
+     733,
+     720
+    ],
+    [
+     642,
+     846,
+     769,
+     872
+    ],
+    [
+     710,
+     308,
+     774,
+     335
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "ground fill",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     847,
+     0,
+     912,
+     1000
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 483,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 10236,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 580
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9656
+   }
+  ],
+  "thoughts_token_count": 1653,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12372,
+  "traffic_type": null
+ }
+}

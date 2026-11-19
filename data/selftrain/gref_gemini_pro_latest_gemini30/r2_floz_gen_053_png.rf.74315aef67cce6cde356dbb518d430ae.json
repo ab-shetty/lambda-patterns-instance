@@ -1,0 +1,109 @@
+{
+ "sheet": "r2_floz_gen_053_png.rf.74315aef67cce6cde356dbb518d430ae",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 4,
+  "F5": 5,
+  "F6": 6
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "bargeboard roof trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     90,
+     345,
+     105,
+     375
+    ],
+    [
+     115,
+     605,
+     130,
+     635
+    ],
+    [
+     735,
+     95,
+     745,
+     240
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "stucco finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "glazing / windows",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 487,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 14669,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 14069
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 600
+   }
+  ],
+  "thoughts_token_count": 5194,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 20350,
+  "traffic_type": null
+ }
+}

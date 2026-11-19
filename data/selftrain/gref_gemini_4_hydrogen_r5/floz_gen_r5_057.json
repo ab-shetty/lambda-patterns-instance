@@ -1,0 +1,82 @@
+{
+ "sheet": "floz_gen_r5_057",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2,
+  "F3": 4,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "standing-seam metal roofing",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     604,
+     476,
+     772,
+     489
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "shaded fibre-cement siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper and dimension line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 326,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 326
+   }
+  ],
+  "prompt_token_count": 10815,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9756
+   }
+  ],
+  "thoughts_token_count": 5068,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16209,
+  "traffic_type": null
+ }
+}

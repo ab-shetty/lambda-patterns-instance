@@ -1,0 +1,93 @@
+{
+ "sheet": "real013",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal wood siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     425,
+     173,
+     476,
+     270
+    ],
+    [
+     425,
+     282,
+     476,
+     382
+    ],
+    [
+     476,
+     290,
+     862,
+     366
+    ],
+    [
+     425,
+     451,
+     476,
+     528
+    ],
+    [
+     425,
+     710,
+     476,
+     856
+    ]
+   ],
+   "missed_regions": [
+    [
+     782,
+     865,
+     862,
+     975
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 299,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 299
+   }
+  ],
+  "prompt_token_count": 6359,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5328
+   }
+  ],
+  "thoughts_token_count": 2569,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9227,
+  "traffic_type": null
+ }
+}

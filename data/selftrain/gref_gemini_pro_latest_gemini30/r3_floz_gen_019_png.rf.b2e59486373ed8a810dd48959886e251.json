@@ -1,0 +1,57 @@
+{
+ "sheet": "r3_floz_gen_019_png.rf.b2e59486373ed8a810dd48959886e251",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "vertical siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     450,
+     250,
+     530,
+     325
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 172,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6014,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 5003,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 11189,
+  "traffic_type": null
+ }
+}

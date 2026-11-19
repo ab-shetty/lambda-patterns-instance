@@ -1,0 +1,98 @@
+{
+ "sheet": "floz_gen_r5_156",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and border line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     95,
+     476,
+     147,
+     521
+    ],
+    [
+     287,
+     236,
+     401,
+     330
+    ],
+    [
+     271,
+     535,
+     402,
+     618
+    ],
+    [
+     668,
+     639,
+     755,
+     737
+    ],
+    [
+     781,
+     235,
+     900,
+     332
+    ],
+    [
+     777,
+     650,
+     896,
+     766
+    ],
+    [
+     910,
+     237,
+     956,
+     348
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 319,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 319
+   }
+  ],
+  "prompt_token_count": 6413,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5382
+   }
+  ],
+  "thoughts_token_count": 1464,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8196,
+  "traffic_type": null
+ }
+}

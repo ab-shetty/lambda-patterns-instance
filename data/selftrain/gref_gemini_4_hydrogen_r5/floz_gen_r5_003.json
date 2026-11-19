@@ -1,0 +1,166 @@
+{
+ "sheet": "floz_gen_r5_003",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 4,
+  "F6": 6
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "grey roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "green board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "terracotta vertical panel siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "beige stippled stucco finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     278,
+     572,
+     330,
+     585
+    ],
+    [
+     336,
+     534,
+     401,
+     558
+    ],
+    [
+     336,
+     561,
+     401,
+     585
+    ],
+    [
+     617,
+     640,
+     807,
+     665
+    ],
+    [
+     659,
+     550,
+     712,
+     577
+    ],
+    [
+     686,
+     200,
+     764,
+     218
+    ],
+    [
+     686,
+     341,
+     764,
+     359
+    ],
+    [
+     686,
+     412,
+     764,
+     431
+    ],
+    [
+     686,
+     439,
+     764,
+     458
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "blank paper and ground line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     877,
+     176,
+     998,
+     938
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 932
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 12239
+   }
+  ],
+  "cached_content_token_count": 13171,
+  "candidates_token_count": 667,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 667
+   }
+  ],
+  "prompt_token_count": 15387,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1087
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 14300
+   }
+  ],
+  "thoughts_token_count": 5036,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 21090,
+  "traffic_type": null
+ }
+}

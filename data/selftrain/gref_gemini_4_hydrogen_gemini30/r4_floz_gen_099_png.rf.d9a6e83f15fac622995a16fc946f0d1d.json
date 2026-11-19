@@ -1,0 +1,45 @@
+{
+ "sheet": "r4_floz_gen_099_png.rf.d9a6e83f15fac622995a16fc946f0d1d",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roofing shingle courses",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 96,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 96
+   }
+  ],
+  "prompt_token_count": 4290,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3273
+   }
+  ],
+  "thoughts_token_count": 537,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 4923,
+  "traffic_type": null
+ }
+}

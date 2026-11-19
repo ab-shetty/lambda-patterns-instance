@@ -1,0 +1,52 @@
+{
+ "sheet": "floz_gen_r5_175",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "standing-seam metal",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     850,
+     72,
+     922,
+     165
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 120,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 120
+   }
+  ],
+  "prompt_token_count": 4234,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3217
+   }
+  ],
+  "thoughts_token_count": 2137,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 6491,
+  "traffic_type": null
+ }
+}

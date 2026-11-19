@@ -1,0 +1,69 @@
+{
+ "sheet": "r3_floz_gen_024_png.rf.632a086f143b83f6e412b5e4db52c505",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal roofing lines",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and border",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     0,
+     0,
+     790,
+     52
+    ],
+    [
+     547,
+     70,
+     677,
+     190
+    ],
+    [
+     547,
+     558,
+     677,
+     675
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 213,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5989,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5429
+   }
+  ],
+  "thoughts_token_count": 2207,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8409,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,92 @@
+{
+ "sheet": "r3_floz_gen_023_png.rf.65a229ac3e962568a96193f768493d9f",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 7
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "diagonal line hatch",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     592,
+     68,
+     706,
+     178
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stipple pattern",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blank paper and dimension line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     105,
+     0,
+     965,
+     54
+    ],
+    [
+     105,
+     942,
+     965,
+     1000
+    ],
+    [
+     130,
+     131,
+     189,
+     227
+    ],
+    [
+     807,
+     299,
+     954,
+     344
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 366,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8068,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7498
+   }
+  ],
+  "thoughts_token_count": 3932,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12366,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,80 @@
+{
+ "sheet": "floz_gen_r5_139",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "glazing and frame line",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     476,
+     246,
+     603,
+     281
+    ],
+    [
+     494,
+     343,
+     581,
+     381
+    ],
+    [
+     446,
+     622,
+     660,
+     711
+    ],
+    [
+     437,
+     770,
+     581,
+     850
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 255,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 255
+   }
+  ],
+  "prompt_token_count": 6452,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5421
+   }
+  ],
+  "thoughts_token_count": 1410,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8117,
+  "traffic_type": null
+ }
+}

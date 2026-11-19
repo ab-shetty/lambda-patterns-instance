@@ -1,0 +1,104 @@
+{
+ "sheet": "floz_gen_r5_149",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2,
+  "F3": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "grey horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "brownish-mauve roof fill",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     123,
+     74,
+     463,
+     92
+    ],
+    [
+     542,
+     74,
+     928,
+     105
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "beige concrete and trim",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     592,
+     567,
+     823,
+     661
+    ]
+   ],
+   "missed_regions": [
+    [
+     508,
+     543,
+     845,
+     554
+    ],
+    [
+     508,
+     673,
+     845,
+     684
+    ],
+    [
+     508,
+     810,
+     845,
+     821
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 232,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 232
+   }
+  ],
+  "prompt_token_count": 8680,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7635
+   }
+  ],
+  "thoughts_token_count": 4384,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 13296,
+  "traffic_type": null
+ }
+}

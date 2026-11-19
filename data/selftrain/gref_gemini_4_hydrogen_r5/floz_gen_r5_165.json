@@ -1,0 +1,94 @@
+{
+ "sheet": "floz_gen_r5_165",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "smooth painted trim band",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     565,
+     641,
+     625,
+     697
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled fibre-cement panels",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     188,
+     498,
+     358,
+     522
+    ]
+   ],
+   "missed_regions": [
+    [
+     439,
+     632,
+     623,
+     642
+    ],
+    [
+     439,
+     695,
+     623,
+     704
+    ],
+    [
+     684,
+     632,
+     874,
+     642
+    ],
+    [
+     684,
+     695,
+     874,
+     704
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 235,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 235
+   }
+  ],
+  "prompt_token_count": 6395,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5364
+   }
+  ],
+  "thoughts_token_count": 3810,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10440,
+  "traffic_type": null
+ }
+}

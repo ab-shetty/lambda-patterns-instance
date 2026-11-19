@@ -1,0 +1,202 @@
+{
+ "sheet": "r2_floz_gen_053_png.rf.74315aef67cce6cde356dbb518d430ae",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 4,
+  "F5": 5,
+  "F6": 6
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     88,
+     355,
+     134,
+     367
+    ],
+    [
+     88,
+     619,
+     127,
+     631
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof fascia trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     543,
+     763,
+     558,
+     898
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     125,
+     611,
+     147,
+     637
+    ],
+    [
+     559,
+     274,
+     581,
+     326
+    ],
+    [
+     739,
+     98,
+     752,
+     238
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper and dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     25,
+     0,
+     853,
+     73
+    ],
+    [
+     848,
+     99,
+     1000,
+     440
+    ],
+    [
+     848,
+     611,
+     1000,
+     888
+    ],
+    [
+     231,
+     884,
+     853,
+     987
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "stucco finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     199,
+     272,
+     294,
+     298
+    ],
+    [
+     327,
+     198,
+     434,
+     244
+    ],
+    [
+     591,
+     128,
+     739,
+     214
+    ],
+    [
+     613,
+     284,
+     744,
+     315
+    ],
+    [
+     327,
+     705,
+     469,
+     795
+    ],
+    [
+     590,
+     643,
+     739,
+     750
+    ],
+    [
+     638,
+     813,
+     817,
+     845
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 812,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 812
+   }
+  ],
+  "prompt_token_count": 15156,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1087
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 14069
+   }
+  ],
+  "thoughts_token_count": 3027,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 18995,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,199 @@
+{
+ "sheet": "floz_gen_r5_032",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 4,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "front porch stair steps",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     126,
+     151,
+     258,
+     275
+    ],
+    [
+     318,
+     43,
+     503,
+     383
+    ],
+    [
+     525,
+     25,
+     808,
+     152
+    ],
+    [
+     460,
+     166,
+     528,
+     261
+    ],
+    [
+     525,
+     275,
+     808,
+     383
+    ],
+    [
+     50,
+     610,
+     267,
+     922
+    ],
+    [
+     316,
+     615,
+     503,
+     937
+    ],
+    [
+     504,
+     615,
+     808,
+     954
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     12,
+     144,
+     91,
+     272
+    ],
+    [
+     10,
+     734,
+     67,
+     818
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window pane and frame",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     130,
+     194,
+     224,
+     202
+    ],
+    [
+     130,
+     224,
+     224,
+     232
+    ],
+    [
+     560,
+     108,
+     712,
+     117
+    ],
+    [
+     560,
+     310,
+     712,
+     318
+    ],
+    [
+     570,
+     577,
+     767,
+     613
+    ],
+    [
+     576,
+     667,
+     706,
+     708
+    ],
+    [
+     332,
+     832,
+     495,
+     898
+    ],
+    [
+     567,
+     811,
+     725,
+     905
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "balcony railing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     416,
+     782,
+     502,
+     938
+    ],
+    [
+     700,
+     578,
+     768,
+     614
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 598,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 598
+   }
+  ],
+  "prompt_token_count": 10875,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9816
+   }
+  ],
+  "thoughts_token_count": 8046,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 19519,
+  "traffic_type": null
+ }
+}

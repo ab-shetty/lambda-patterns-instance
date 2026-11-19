@@ -1,0 +1,69 @@
+{
+ "sheet": "r2_floz_gen_002_png.rf.f3dd092c2c32c191cb4d1061c5bbb6aa",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "dotted floor pattern",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "square tile floor",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     190,
+     130,
+     287,
+     201
+    ],
+    [
+     157,
+     323,
+     311,
+     412
+    ],
+    [
+     190,
+     482,
+     300,
+     553
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 217,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6050,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5490
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 1460,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7727,
+  "traffic_type": null
+ }
+}

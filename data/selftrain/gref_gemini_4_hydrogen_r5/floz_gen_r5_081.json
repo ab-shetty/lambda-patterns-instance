@@ -1,0 +1,107 @@
+{
+ "sheet": "floz_gen_r5_081",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "green brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     207,
+     207,
+     255,
+     439
+    ],
+    [
+     207,
+     573,
+     255,
+     799
+    ],
+    [
+     511,
+     563,
+     547,
+     795
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "beige brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "concrete foundation and steps",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     181,
+     440,
+     368,
+     564
+    ],
+    [
+     569,
+     597,
+     831,
+     643
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 413,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 413
+   }
+  ],
+  "prompt_token_count": 10850,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9791
+   }
+  ],
+  "thoughts_token_count": 2928,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14191,
+  "traffic_type": null
+ }
+}

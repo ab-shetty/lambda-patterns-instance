@@ -1,0 +1,135 @@
+{
+ "sheet": "floz_gen_r5_118",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stucco stipple fill",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     512,
+     193,
+     594,
+     744
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "porch railing line work",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     812,
+     94,
+     949,
+     123
+    ],
+    [
+     812,
+     128,
+     913,
+     252
+    ],
+    [
+     812,
+     258,
+     914,
+     381
+    ],
+    [
+     812,
+     532,
+     914,
+     670
+    ],
+    [
+     812,
+     675,
+     914,
+     811
+    ],
+    [
+     812,
+     816,
+     949,
+     842
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "standing-seam metal roof",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     812,
+     94,
+     988,
+     195
+    ],
+    [
+     812,
+     740,
+     988,
+     843
+    ]
+   ],
+   "missed_regions": [
+    [
+     517,
+     152,
+     592,
+     298
+    ],
+    [
+     517,
+     316,
+     588,
+     512
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 487,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 487
+   }
+  ],
+  "prompt_token_count": 8568,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7523
+   }
+  ],
+  "thoughts_token_count": 5172,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14227,
+  "traffic_type": null
+ }
+}

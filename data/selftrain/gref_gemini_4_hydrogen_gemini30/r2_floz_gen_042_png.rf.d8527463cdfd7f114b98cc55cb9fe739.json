@@ -1,0 +1,183 @@
+{
+ "sheet": "r2_floz_gen_042_png.rf.d8527463cdfd7f114b98cc55cb9fe739",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "square grid dot stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     38,
+     28,
+     305,
+     220
+    ],
+    [
+     38,
+     220,
+     345,
+     405
+    ],
+    [
+     345,
+     372,
+     415,
+     405
+    ],
+    [
+     305,
+     345,
+     965,
+     378
+    ],
+    [
+     402,
+     360,
+     505,
+     405
+    ],
+    [
+     520,
+     555,
+     795,
+     695
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "solid dark gray wall fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     12,
+     684,
+     42,
+     735
+    ],
+    [
+     38,
+     218,
+     120,
+     296
+    ],
+    [
+     185,
+     195,
+     212,
+     296
+    ],
+    [
+     185,
+     195,
+     305,
+     206
+    ],
+    [
+     185,
+     285,
+     305,
+     296
+    ],
+    [
+     195,
+     28,
+     212,
+     144
+    ],
+    [
+     240,
+     132,
+     305,
+     145
+    ],
+    [
+     302,
+     28,
+     318,
+     305
+    ],
+    [
+     405,
+     643,
+     422,
+     702
+    ],
+    [
+     510,
+     638,
+     678,
+     655
+    ],
+    [
+     608,
+     648,
+     622,
+     691
+    ],
+    [
+     662,
+     682,
+     676,
+     693
+    ],
+    [
+     735,
+     555,
+     755,
+     620
+    ],
+    [
+     792,
+     592,
+     822,
+     620
+    ],
+    [
+     792,
+     665,
+     822,
+     692
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 528,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 528
+   }
+  ],
+  "prompt_token_count": 6377,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5346
+   }
+  ],
+  "thoughts_token_count": 9057,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 15962,
+  "traffic_type": null
+ }
+}

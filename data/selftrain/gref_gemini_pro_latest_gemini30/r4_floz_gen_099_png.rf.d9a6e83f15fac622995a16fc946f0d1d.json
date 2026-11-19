@@ -1,0 +1,59 @@
+{
+ "sheet": "r4_floz_gen_099_png.rf.d9a6e83f15fac622995a16fc946f0d1d",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     388,
+     345,
+     412,
+     364
+    ],
+    [
+     404,
+     529,
+     428,
+     547
+    ],
+    [
+     501,
+     247,
+     526,
+     266
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 148,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3823,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 3273
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   }
+  ],
+  "thoughts_token_count": 1048,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 5019,
+  "traffic_type": null
+ }
+}

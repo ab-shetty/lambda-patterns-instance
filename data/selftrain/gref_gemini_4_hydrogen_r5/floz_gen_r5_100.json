@@ -1,0 +1,99 @@
+{
+ "sheet": "floz_gen_r5_100",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "blank unhatched roof space",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     31,
+     98,
+     63,
+     355
+    ],
+    [
+     838,
+     37,
+     875,
+     211
+    ],
+    [
+     838,
+     246,
+     875,
+     417
+    ],
+    [
+     852,
+     581,
+     875,
+     613
+    ],
+    [
+     852,
+     865,
+     875,
+     956
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     163,
+     86,
+     184,
+     376
+    ],
+    [
+     401,
+     31,
+     418,
+     424
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 204,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 204
+   }
+  ],
+  "prompt_token_count": 6485,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 3225,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9914,
+  "traffic_type": null
+ }
+}

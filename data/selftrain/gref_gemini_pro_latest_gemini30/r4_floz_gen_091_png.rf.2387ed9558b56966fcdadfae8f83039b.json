@@ -1,0 +1,57 @@
+{
+ "sheet": "r4_floz_gen_091_png.rf.2387ed9558b56966fcdadfae8f83039b",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     645,
+     207,
+     935,
+     245
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roofing shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 179,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5918,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5358
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 1370,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7467,
+  "traffic_type": null
+ }
+}

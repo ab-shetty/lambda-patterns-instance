@@ -1,0 +1,141 @@
+{
+ "sheet": "floz_gen_r5_170",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 2,
+  "F2": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "stipple siding pattern",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     395,
+     35,
+     670,
+     100
+    ],
+    [
+     525,
+     98,
+     670,
+     215
+    ],
+    [
+     425,
+     215,
+     670,
+     270
+    ],
+    [
+     425,
+     316,
+     670,
+     370
+    ],
+    [
+     385,
+     465,
+     670,
+     528
+    ],
+    [
+     520,
+     580,
+     668,
+     595
+    ],
+    [
+     512,
+     594,
+     670,
+     733
+    ],
+    [
+     285,
+     612,
+     515,
+     634
+    ],
+    [
+     512,
+     805,
+     670,
+     944
+    ],
+    [
+     285,
+     905,
+     515,
+     926
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     533,
+     571,
+     670,
+     595
+    ],
+    [
+     533,
+     731,
+     670,
+     749
+    ],
+    [
+     533,
+     790,
+     670,
+     807
+    ],
+    [
+     533,
+     943,
+     670,
+     968
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 317,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 317
+   }
+  ],
+  "prompt_token_count": 6524,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5493
+   }
+  ],
+  "thoughts_token_count": 4463,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 11304,
+  "traffic_type": null
+ }
+}

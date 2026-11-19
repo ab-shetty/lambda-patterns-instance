@@ -1,0 +1,132 @@
+{
+ "sheet": "real006",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "garage door panel",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     519,
+     137,
+     946,
+     143
+    ],
+    [
+     610,
+     283,
+     908,
+     301
+    ],
+    [
+     638,
+     706,
+     946,
+     915
+    ],
+    [
+     519,
+     940,
+     946,
+     946
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     616,
+     50,
+     814,
+     106
+    ],
+    [
+     614,
+     168,
+     815,
+     246
+    ],
+    [
+     608,
+     282,
+     908,
+     365
+    ],
+    [
+     614,
+     415,
+     816,
+     455
+    ],
+    [
+     616,
+     557,
+     816,
+     634
+    ],
+    [
+     638,
+     709,
+     692,
+     911
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 506,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 10336,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 9756
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 580
+   }
+  ],
+  "thoughts_token_count": 3238,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14080,
+  "traffic_type": null
+ }
+}

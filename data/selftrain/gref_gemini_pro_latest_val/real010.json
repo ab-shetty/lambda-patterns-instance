@@ -1,0 +1,123 @@
+{
+ "sheet": "real010",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "solid grey ground fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "stippled stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "window glazing and text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     635,
+     151,
+     780,
+     182
+    ],
+    [
+     635,
+     305,
+     740,
+     334
+    ],
+    [
+     635,
+     456,
+     780,
+     485
+    ],
+    [
+     635,
+     485,
+     780,
+     513
+    ],
+    [
+     330,
+     292,
+     475,
+     323
+    ],
+    [
+     330,
+     768,
+     475,
+     800
+    ],
+    [
+     330,
+     855,
+     475,
+     887
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 511,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 12419,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 590
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 11829
+   }
+  ],
+  "thoughts_token_count": 3724,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16654,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,75 @@
+{
+ "sheet": "floz_gen_r5_161",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal roof siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     488,
+     280,
+     636,
+     362
+    ],
+    [
+     369,
+     605,
+     636,
+     718
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     640,
+     562,
+     804,
+     645
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 147,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 147
+   }
+  ],
+  "prompt_token_count": 6422,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5391
+   }
+  ],
+  "thoughts_token_count": 4254,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10823,
+  "traffic_type": null
+ }
+}

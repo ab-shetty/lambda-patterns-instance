@@ -1,0 +1,76 @@
+{
+ "sheet": "floz_gen_r5_129",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "garage door panel",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     425,
+     74,
+     457,
+     502
+    ],
+    [
+     426,
+     508,
+     458,
+     880
+    ],
+    [
+     454,
+     94,
+     515,
+     483
+    ],
+    [
+     454,
+     94,
+     825,
+     134
+    ],
+    [
+     454,
+     441,
+     825,
+     483
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 163,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 163
+   }
+  ],
+  "prompt_token_count": 4248,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   }
+  ],
+  "thoughts_token_count": 2168,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 6579,
+  "traffic_type": null
+ }
+}

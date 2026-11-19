@@ -1,0 +1,63 @@
+{
+ "sheet": "r4_floz_gen_055_png.rf.ac5b19d23be97ff419b41f7f08023c1a",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "wood plank soffit",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "garage door",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     289,
+     782,
+     497,
+     861
+    ],
+    [
+     586,
+     353,
+     987,
+     750
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 196,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 5962,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5402
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 2656,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8814,
+  "traffic_type": null
+ }
+}

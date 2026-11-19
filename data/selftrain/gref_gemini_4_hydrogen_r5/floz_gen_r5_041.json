@@ -1,0 +1,88 @@
+{
+ "sheet": "floz_gen_r5_041",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "vertical board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     131,
+     21,
+     198,
+     455
+    ],
+    [
+     198,
+     21,
+     340,
+     50
+    ],
+    [
+     198,
+     225,
+     480,
+     285
+    ],
+    [
+     198,
+     285,
+     378,
+     395
+    ],
+    [
+     198,
+     395,
+     480,
+     455
+    ],
+    [
+     612,
+     189,
+     703,
+     422
+    ],
+    [
+     612,
+     888,
+     703,
+     980
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 254,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 254
+   }
+  ],
+  "prompt_token_count": 4248,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   }
+  ],
+  "thoughts_token_count": 5573,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10075,
+  "traffic_type": null
+ }
+}

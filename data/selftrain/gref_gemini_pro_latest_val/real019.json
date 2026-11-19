@@ -1,0 +1,60 @@
+{
+ "sheet": "real019",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "standing seam metal roof",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "brick pattern wall base",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "vertical board siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 218,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8149,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 7579
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   }
+  ],
+  "thoughts_token_count": 634,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9001,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,80 @@
+{
+ "sheet": "r3_floz_gen_028_png.rf.8bf23bbe8832ec3560eb8356492dc653",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "blank paper and dimension lines",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     441,
+     281,
+     468,
+     442
+    ],
+    [
+     660,
+     132,
+     718,
+     431
+    ],
+    [
+     441,
+     823,
+     493,
+     952
+    ],
+    [
+     724,
+     628,
+     818,
+     932
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 159,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 159
+   }
+  ],
+  "prompt_token_count": 6503,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5472
+   }
+  ],
+  "thoughts_token_count": 1262,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7924,
+  "traffic_type": null
+ }
+}

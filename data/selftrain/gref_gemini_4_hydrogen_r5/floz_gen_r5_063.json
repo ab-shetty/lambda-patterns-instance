@@ -1,0 +1,191 @@
+{
+ "sheet": "floz_gen_r5_063",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "board-and-batten siding with diagonal shadow hatch",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     668,
+     232,
+     770,
+     275
+    ],
+    [
+     668,
+     431,
+     760,
+     469
+    ],
+    [
+     668,
+     532,
+     775,
+     574
+    ],
+    [
+     668,
+     710,
+     770,
+     754
+    ],
+    [
+     640,
+     130,
+     665,
+     213
+    ]
+   ],
+   "missed_regions": [
+    [
+     320,
+     372,
+     535,
+     399
+    ],
+    [
+     320,
+     501,
+     465,
+     556
+    ],
+    [
+     490,
+     545,
+     535,
+     796
+    ],
+    [
+     755,
+     275,
+     940,
+     431
+    ],
+    [
+     755,
+     468,
+     940,
+     532
+    ],
+    [
+     755,
+     574,
+     940,
+     710
+    ],
+    [
+     755,
+     754,
+     940,
+     796
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "standing-seam metal roof",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     320,
+     372,
+     535,
+     399
+    ],
+    [
+     320,
+     318,
+     455,
+     338
+    ],
+    [
+     480,
+     253,
+     535,
+     338
+    ],
+    [
+     305,
+     500,
+     535,
+     650
+    ],
+    [
+     465,
+     704,
+     588,
+     796
+    ],
+    [
+     695,
+     268,
+     942,
+     431
+    ],
+    [
+     695,
+     466,
+     942,
+     540
+    ],
+    [
+     705,
+     545,
+     942,
+     714
+    ],
+    [
+     675,
+     748,
+     945,
+     796
+    ]
+   ],
+   "missed_regions": [
+    [
+     536,
+     118,
+     628,
+     483
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 560,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "prompt_token_count": 6458,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5427
+   }
+  ],
+  "thoughts_token_count": 7753,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14771,
+  "traffic_type": null
+ }
+}

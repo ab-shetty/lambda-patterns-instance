@@ -1,0 +1,115 @@
+{
+ "sheet": "floz_gen_r5_030",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2,
+  "F3": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "vertical stippled siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     54,
+     111,
+     178,
+     841
+    ],
+    [
+     535,
+     215,
+     650,
+     725
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "steel guardrail pickets and blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     252,
+     807,
+     291,
+     862
+    ],
+    [
+     367,
+     807,
+     406,
+     862
+    ],
+    [
+     771,
+     79,
+     811,
+     112
+    ],
+    [
+     887,
+     79,
+     928,
+     112
+    ],
+    [
+     771,
+     838,
+     811,
+     871
+    ],
+    [
+     887,
+     838,
+     928,
+     871
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 260,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 260
+   }
+  ],
+  "prompt_token_count": 8680,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7635
+   }
+  ],
+  "thoughts_token_count": 6193,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 15133,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,86 @@
+{
+ "sheet": "real020",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof tiles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     540,
+     117,
+     756,
+     170
+    ],
+    [
+     540,
+     256,
+     756,
+     308
+    ],
+    [
+     540,
+     388,
+     756,
+     440
+    ],
+    [
+     540,
+     526,
+     756,
+     579
+    ],
+    [
+     752,
+     656,
+     884,
+     743
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 273,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 273
+   }
+  ],
+  "prompt_token_count": 6389,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5358
+   }
+  ],
+  "thoughts_token_count": 958,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7620,
+  "traffic_type": null
+ }
+}

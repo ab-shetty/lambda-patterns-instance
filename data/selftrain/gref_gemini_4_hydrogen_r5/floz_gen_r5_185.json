@@ -1,0 +1,113 @@
+{
+ "sheet": "floz_gen_r5_185",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 3,
+  "F4": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "pink horizontal plank siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     182,
+     405,
+     224,
+     660
+    ],
+    [
+     370,
+     424,
+     414,
+     640
+    ],
+    [
+     600,
+     142,
+     752,
+     395
+    ],
+    [
+     725,
+     395,
+     775,
+     662
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "flat lavender wall siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "lavender horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     204,
+     198,
+     220,
+     256
+    ],
+    [
+     226,
+     675,
+     252,
+     813
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 265,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 265
+   }
+  ],
+  "prompt_token_count": 10770,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9711
+   }
+  ],
+  "thoughts_token_count": 4048,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 15083,
+  "traffic_type": null
+ }
+}

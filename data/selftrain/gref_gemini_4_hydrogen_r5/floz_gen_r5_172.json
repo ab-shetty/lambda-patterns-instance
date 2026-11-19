@@ -1,0 +1,105 @@
+{
+ "sheet": "floz_gen_r5_172",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick running bond",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     102,
+     319,
+     927,
+     334
+    ],
+    [
+     102,
+     635,
+     927,
+     651
+    ],
+    [
+     640,
+     114,
+     665,
+     146
+    ],
+    [
+     640,
+     645,
+     665,
+     681
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "window glazing and linework",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     173,
+     336,
+     369,
+     480
+    ],
+    [
+     184,
+     492,
+     369,
+     616
+    ],
+    [
+     443,
+     336,
+     642,
+     480
+    ],
+    [
+     443,
+     492,
+     642,
+     632
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 346,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 346
+   }
+  ],
+  "prompt_token_count": 6422,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5391
+   }
+  ],
+  "thoughts_token_count": 2747,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9515,
+  "traffic_type": null
+ }
+}

@@ -1,0 +1,110 @@
+{
+ "sheet": "floz_gen_r5_096",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "blank trim band linework",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     558,
+     265,
+     613,
+     713
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stucco stipple fill",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     272,
+     461,
+     316,
+     526
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "railing and window linework",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     440,
+     267,
+     558,
+     710
+    ],
+    [
+     326,
+     381,
+     441,
+     398
+    ],
+    [
+     334,
+     426,
+     441,
+     434
+    ],
+    [
+     337,
+     631,
+     441,
+     640
+    ],
+    [
+     641,
+     447,
+     871,
+     495
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 399,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 399
+   }
+  ],
+  "prompt_token_count": 8596,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7551
+   }
+  ],
+  "thoughts_token_count": 4500,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 13495,
+  "traffic_type": null
+ }
+}

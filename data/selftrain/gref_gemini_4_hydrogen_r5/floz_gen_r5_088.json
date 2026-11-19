@@ -1,0 +1,86 @@
+{
+ "sheet": "floz_gen_r5_088",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "grey vertical board-and-batten siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "tan fibre-cement vertical panel siding",
+   "reference_valid": true,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     376,
+     63,
+     627,
+     332
+    ],
+    [
+     376,
+     422,
+     624,
+     584
+    ],
+    [
+     376,
+     591,
+     624,
+     825
+    ],
+    [
+     627,
+     63,
+     687,
+     114
+    ],
+    [
+     626,
+     591,
+     687,
+     842
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 283,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 283
+   }
+  ],
+  "prompt_token_count": 6548,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5517
+   }
+  ],
+  "thoughts_token_count": 4085,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10916,
+  "traffic_type": null
+ }
+}

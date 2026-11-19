@@ -1,0 +1,117 @@
+{
+ "sheet": "real005",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "window glass",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     630,
+     145,
+     825,
+     165
+    ],
+    [
+     629,
+     209,
+     825,
+     307
+    ],
+    [
+     674,
+     485,
+     874,
+     511
+    ],
+    [
+     629,
+     549,
+     825,
+     613
+    ],
+    [
+     637,
+     638,
+     907,
+     755
+    ],
+    [
+     630,
+     810,
+     825,
+     843
+    ],
+    [
+     630,
+     881,
+     825,
+     946
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     405,
+     355,
+     549,
+     552
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     122,
+     763,
+     428,
+     794
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 420,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8229,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7659
+   }
+  ],
+  "thoughts_token_count": 4507,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 13156,
+  "traffic_type": null
+ }
+}

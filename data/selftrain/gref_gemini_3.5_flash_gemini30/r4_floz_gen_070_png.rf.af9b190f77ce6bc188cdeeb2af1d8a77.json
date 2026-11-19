@@ -1,0 +1,50 @@
+{
+ "sheet": "r4_floz_gen_070_png.rf.af9b190f77ce6bc188cdeeb2af1d8a77",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 1,
+  "F2": 7
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 146,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6014,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 843,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7003,
+  "traffic_type": null
+ }
+}

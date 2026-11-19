@@ -1,0 +1,120 @@
+{
+ "sheet": "real009",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 1,
+  "F2": 2,
+  "F3": 4,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roofing shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     134,
+     692,
+     203,
+     831
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "window glazing and text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     377,
+     137,
+     511,
+     172
+    ],
+    [
+     377,
+     226,
+     511,
+     260
+    ],
+    [
+     715,
+     308,
+     776,
+     335
+    ],
+    [
+     637,
+     512,
+     773,
+     572
+    ],
+    [
+     372,
+     702,
+     511,
+     736
+    ],
+    [
+     642,
+     692,
+     739,
+     722
+    ],
+    [
+     637,
+     843,
+     773,
+     874
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "ground grade flat fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 468,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 10236,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 580
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9656
+   }
+  ],
+  "thoughts_token_count": 4049,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 14753,
+  "traffic_type": null
+ }
+}

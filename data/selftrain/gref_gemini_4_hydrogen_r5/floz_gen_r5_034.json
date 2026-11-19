@@ -1,0 +1,180 @@
+{
+ "sheet": "floz_gen_r5_034",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 4,
+  "F6": 5,
+  "F7": 7,
+  "F8": 8,
+  "F9": 9
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "fine stipple stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "pinkish-brown horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     695,
+     198,
+     730,
+     231
+    ],
+    [
+     726,
+     277,
+     767,
+     325
+    ]
+   ],
+   "missed_regions": [
+    [
+     580,
+     221,
+     676,
+     396
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "grey standing-seam vertical metal",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "composite shingle horizontal roof lines",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     575,
+     474,
+     650,
+     569
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "green painted stipple stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "stone veneer",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     332,
+     121,
+     422,
+     153
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F7",
+   "material": "grey horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     576,
+     548,
+     595,
+     571
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F8",
+   "material": "flat pinkish-brown roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     712,
+     138,
+     786,
+     204
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F9",
+   "material": "flat tan-olive roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     575,
+     474,
+     650,
+     569
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 844,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 844
+   }
+  ],
+  "prompt_token_count": 21640,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1129
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 20511
+   }
+  ],
+  "thoughts_token_count": 10891,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 33375,
+  "traffic_type": null
+ }
+}

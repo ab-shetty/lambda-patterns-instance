@@ -1,0 +1,110 @@
+{
+ "sheet": "real005",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     628,
+     145,
+     810,
+     166
+    ],
+    [
+     626,
+     208,
+     810,
+     305
+    ],
+    [
+     626,
+     484,
+     897,
+     513
+    ],
+    [
+     625,
+     549,
+     810,
+     613
+    ],
+    [
+     625,
+     633,
+     898,
+     755
+    ],
+    [
+     626,
+     812,
+     810,
+     842
+    ],
+    [
+     626,
+     882,
+     810,
+     946
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     150,
+     762,
+     218,
+     795
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 395,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8229,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7659
+   }
+  ],
+  "thoughts_token_count": 2339,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10963,
+  "traffic_type": null
+ }
+}

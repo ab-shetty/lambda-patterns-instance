@@ -1,0 +1,93 @@
+{
+ "sheet": "floz_gen_r5_136",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     387,
+     460,
+     541,
+     518
+    ],
+    [
+     612,
+     167,
+     639,
+     341
+    ],
+    [
+     612,
+     527,
+     639,
+     710
+    ],
+    [
+     651,
+     345,
+     973,
+     523
+    ],
+    [
+     651,
+     720,
+     973,
+     850
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "standing-seam metal roof",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     585,
+     810,
+     627,
+     863
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 302,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 302
+   }
+  ],
+  "prompt_token_count": 6485,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 3366,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10153,
+  "traffic_type": null
+ }
+}

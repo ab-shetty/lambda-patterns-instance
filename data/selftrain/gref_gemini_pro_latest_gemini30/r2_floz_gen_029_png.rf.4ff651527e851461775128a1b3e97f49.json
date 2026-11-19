@@ -1,0 +1,96 @@
+{
+ "sheet": "r2_floz_gen_029_png.rf.4ff651527e851461775128a1b3e97f49",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "diagonal hatching",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     95,
+     485,
+     455,
+     610
+    ],
+    [
+     95,
+     610,
+     455,
+     665
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "vertical floor joists",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     95,
+     485,
+     455,
+     610
+    ],
+    [
+     350,
+     670,
+     460,
+     955
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 375,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 10236,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 580
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9656
+   }
+  ],
+  "thoughts_token_count": 5928,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 16539,
+  "traffic_type": null
+ }
+}

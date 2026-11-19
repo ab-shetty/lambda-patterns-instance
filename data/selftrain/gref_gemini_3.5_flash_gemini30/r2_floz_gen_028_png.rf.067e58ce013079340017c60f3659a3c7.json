@@ -1,0 +1,40 @@
+{
+ "sheet": "r2_floz_gen_028_png.rf.067e58ce013079340017c60f3659a3c7",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 80,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 3799,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 3249
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 550
+   }
+  ],
+  "thoughts_token_count": 1219,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 5098,
+  "traffic_type": null
+ }
+}

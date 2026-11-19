@@ -1,0 +1,67 @@
+{
+ "sheet": "r2_floz_gen_060_png.rf.3a2f2571d4ac7d749b229200267474ab",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 2,
+  "F2": 3,
+  "F3": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "board and batten siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled wall surface",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     540,
+     462,
+     856,
+     521
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 252,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 8121,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 7551
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 570
+   }
+  ],
+  "thoughts_token_count": 1244,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 9617,
+  "traffic_type": null
+ }
+}

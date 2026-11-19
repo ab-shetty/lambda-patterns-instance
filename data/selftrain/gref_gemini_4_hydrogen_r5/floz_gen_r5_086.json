@@ -1,0 +1,102 @@
+{
+ "sheet": "floz_gen_r5_086",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 2,
+  "F3": 3,
+  "F4": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "green standing seam metal roof",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     530,
+     72,
+     653,
+     373
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "horizontal wood planks",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "concrete steps and porch foundation",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     646,
+     270,
+     660,
+     460
+    ],
+    [
+     646,
+     734,
+     660,
+     927
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "smooth painted siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     832,
+     280,
+     882,
+     443
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 396,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 396
+   }
+  ],
+  "prompt_token_count": 10875,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9816
+   }
+  ],
+  "thoughts_token_count": 7111,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 18382,
+  "traffic_type": null
+ }
+}

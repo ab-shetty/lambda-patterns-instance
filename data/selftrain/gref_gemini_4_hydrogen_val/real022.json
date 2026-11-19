@@ -1,0 +1,45 @@
+{
+ "sheet": "real022",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 66,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 66
+   }
+  ],
+  "prompt_token_count": 4248,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3231
+   }
+  ],
+  "thoughts_token_count": 186,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 4500,
+  "traffic_type": null
+ }
+}

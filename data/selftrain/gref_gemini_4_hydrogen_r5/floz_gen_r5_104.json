@@ -1,0 +1,106 @@
+{
+ "sheet": "floz_gen_r5_104",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "blank door glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     388,
+     335,
+     507,
+     354
+    ],
+    [
+     387,
+     658,
+     503,
+     677
+    ],
+    [
+     377,
+     766,
+     511,
+     820
+    ],
+    [
+     692,
+     204,
+     864,
+     248
+    ],
+    [
+     710,
+     329,
+     851,
+     344
+    ],
+    [
+     736,
+     350,
+     906,
+     386
+    ],
+    [
+     705,
+     425,
+     864,
+     493
+    ],
+    [
+     701,
+     567,
+     916,
+     594
+    ],
+    [
+     731,
+     654,
+     893,
+     681
+    ],
+    [
+     700,
+     760,
+     855,
+     829
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 318,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 318
+   }
+  ],
+  "prompt_token_count": 4272,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3255
+   }
+  ],
+  "thoughts_token_count": 3780,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8370,
+  "traffic_type": null
+ }
+}

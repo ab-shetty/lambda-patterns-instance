@@ -1,0 +1,124 @@
+{
+ "sheet": "real010",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 3,
+  "F5": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "solid ground fill",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     65,
+     195,
+     237,
+     300
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "stucco",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "window glass",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     325,
+     291,
+     483,
+     325
+    ],
+    [
+     330,
+     768,
+     485,
+     802
+    ],
+    [
+     330,
+     855,
+     487,
+     889
+    ],
+    [
+     625,
+     151,
+     775,
+     185
+    ],
+    [
+     629,
+     305,
+     734,
+     335
+    ],
+    [
+     625,
+     455,
+     773,
+     513
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 508,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 12419,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 11829
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 590
+   }
+  ],
+  "thoughts_token_count": 2506,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 15433,
+  "traffic_type": null
+ }
+}

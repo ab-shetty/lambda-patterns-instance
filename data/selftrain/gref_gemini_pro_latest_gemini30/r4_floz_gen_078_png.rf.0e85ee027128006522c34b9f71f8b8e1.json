@@ -1,0 +1,63 @@
+{
+ "sheet": "r4_floz_gen_078_png.rf.0e85ee027128006522c34b9f71f8b8e1",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "smooth trim band",
+   "reference_valid": true,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     259,
+     181,
+     428,
+     512
+    ],
+    [
+     251,
+     636,
+     520,
+     885
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 195,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6014,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   }
+  ],
+  "thoughts_token_count": 2198,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8407,
+  "traffic_type": null
+ }
+}

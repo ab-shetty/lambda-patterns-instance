@@ -1,0 +1,58 @@
+{
+ "sheet": "floz_gen_r5_112",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick wall",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     24,
+     55,
+     232,
+     494
+    ],
+    [
+     170,
+     430,
+     418,
+     882
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 139,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 139
+   }
+  ],
+  "prompt_token_count": 4226,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3209
+   }
+  ],
+  "thoughts_token_count": 1797,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 6162,
+  "traffic_type": null
+ }
+}

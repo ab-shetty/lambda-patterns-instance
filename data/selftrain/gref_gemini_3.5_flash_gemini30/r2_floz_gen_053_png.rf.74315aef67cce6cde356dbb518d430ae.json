@@ -1,0 +1,122 @@
+{
+ "sheet": "r2_floz_gen_053_png.rf.74315aef67cce6cde356dbb518d430ae",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 4,
+  "F5": 5,
+  "F6": 6
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "brick veneer",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     586,
+     281,
+     746,
+     317
+    ],
+    [
+     604,
+     810,
+     812,
+     850
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roof trim",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "roof shingles",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     740,
+     95,
+     755,
+     238
+    ],
+    [
+     562,
+     275,
+     588,
+     326
+    ],
+    [
+     120,
+     611,
+     148,
+     638
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "dimension lines and text",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F5",
+   "material": "stucco finish",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F6",
+   "material": "window glazing",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 532,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 14669,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 600
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 14069
+   }
+  ],
+  "thoughts_token_count": 2867,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 18068,
+  "traffic_type": null
+ }
+}

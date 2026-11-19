@@ -1,0 +1,89 @@
+{
+ "sheet": "r2_floz_gen_046_png.rf.4dab24552f8e4c840264826547bd047a",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "standing seam metal roofing",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     300,
+     636,
+     365,
+     675
+    ]
+   ],
+   "missed_regions": [
+    [
+     665,
+     253,
+     745,
+     308
+    ],
+    [
+     665,
+     318,
+     745,
+     385
+    ],
+    [
+     825,
+     208,
+     876,
+     295
+    ],
+    [
+     775,
+     355,
+     876,
+     417
+    ],
+    [
+     802,
+     554,
+     975,
+     645
+    ],
+    [
+     892,
+     905,
+     960,
+     958
+    ]
+   ],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 256,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 256
+   }
+  ],
+  "prompt_token_count": 4320,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1017
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 3303
+   }
+  ],
+  "thoughts_token_count": 4213,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8789,
+  "traffic_type": null
+ }
+}

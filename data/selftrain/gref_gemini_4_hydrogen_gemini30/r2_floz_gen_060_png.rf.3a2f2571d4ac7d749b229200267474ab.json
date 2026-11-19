@@ -1,0 +1,85 @@
+{
+ "sheet": "r2_floz_gen_060_png.rf.3a2f2571d4ac7d749b229200267474ab",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 2,
+  "F2": 3,
+  "F3": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "board and batten siding",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     7,
+     90,
+     52,
+     918
+    ],
+    [
+     51,
+     106,
+     75,
+     524
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "shingle siding with stipple",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     548,
+     462,
+     845,
+     516
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 218,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 218
+   }
+  ],
+  "prompt_token_count": 8596,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7551
+   }
+  ],
+  "thoughts_token_count": 3635,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 12449,
+  "traffic_type": null
+ }
+}

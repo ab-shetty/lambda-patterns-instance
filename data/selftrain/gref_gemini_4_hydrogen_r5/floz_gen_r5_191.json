@@ -1,0 +1,96 @@
+{
+ "sheet": "floz_gen_r5_191",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "fibre-cement panels",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     168,
+     102,
+     188,
+     895
+    ],
+    [
+     233,
+     630,
+     388,
+     660
+    ],
+    [
+     208,
+     697,
+     385,
+     848
+    ],
+    [
+     697,
+     114,
+     717,
+     886
+    ],
+    [
+     767,
+     302,
+     914,
+     333
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 342,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 342
+   }
+  ],
+  "prompt_token_count": 8680,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1045
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 7635
+   }
+  ],
+  "thoughts_token_count": 1911,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10933,
+  "traffic_type": null
+ }
+}

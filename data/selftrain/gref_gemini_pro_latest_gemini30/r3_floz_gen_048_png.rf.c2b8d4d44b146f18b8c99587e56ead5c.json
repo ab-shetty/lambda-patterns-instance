@@ -1,0 +1,83 @@
+{
+ "sheet": "r3_floz_gen_048_png.rf.c2b8d4d44b146f18b8c99587e56ead5c",
+ "model": "gemini-pro-latest",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 2,
+  "F4": 4
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "asphalt shingles",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "wood plank soffit",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "horizontal lap siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "blank paper",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     0,
+     20,
+     424,
+     47
+    ],
+    [
+     533,
+     20,
+     951,
+     47
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 339,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 10291,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 9711
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 580
+   }
+  ],
+  "thoughts_token_count": null,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 10630,
+  "traffic_type": null
+ }
+}

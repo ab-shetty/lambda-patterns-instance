@@ -1,0 +1,68 @@
+{
+ "sheet": "r3_floz_gen_036_png.rf.816799880244b32cd4e64cefd8709d27",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "sloped parallel-line roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "stippled flat roofing",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     486,
+     94,
+     822,
+     103
+    ],
+    [
+     813,
+     94,
+     823,
+     284
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 211,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 211
+   }
+  ],
+  "prompt_token_count": 6401,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1031
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 5370
+   }
+  ],
+  "thoughts_token_count": 2110,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 8722,
+  "traffic_type": null
+ }
+}

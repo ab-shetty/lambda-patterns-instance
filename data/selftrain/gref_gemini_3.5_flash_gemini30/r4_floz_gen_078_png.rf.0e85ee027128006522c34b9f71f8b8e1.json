@@ -1,0 +1,63 @@
+{
+ "sheet": "r4_floz_gen_078_png.rf.0e85ee027128006522c34b9f71f8b8e1",
+ "model": "gemini-3.5-flash",
+ "ids": {
+  "F1": 0,
+  "F2": 2
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "smooth trim band",
+   "reference_valid": true,
+   "verdict": "contaminated",
+   "wrong_regions": [
+    [
+     266,
+     183,
+     441,
+     510
+    ],
+    [
+     257,
+     634,
+     553,
+     890
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "roofing",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 113,
+  "candidates_tokens_details": null,
+  "prompt_token_count": 6014,
+  "prompt_tokens_details": [
+   {
+    "modality": "IMAGE",
+    "token_count": 5454
+   },
+   {
+    "modality": "TEXT",
+    "token_count": 560
+   }
+  ],
+  "thoughts_token_count": 1485,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 7612,
+  "traffic_type": null
+ }
+}

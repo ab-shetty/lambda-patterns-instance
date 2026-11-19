@@ -1,0 +1,149 @@
+{
+ "sheet": "floz_gen_r5_114",
+ "model": "gemini-4-hydrogen",
+ "ids": {
+  "F1": 0,
+  "F2": 1,
+  "F3": 3,
+  "F4": 5
+ },
+ "families": [
+  {
+   "id": "F1",
+   "material": "beige trim and fascia",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [
+    [
+     118,
+     84,
+     383,
+     333
+    ],
+    [
+     260,
+     261,
+     398,
+     404
+    ],
+    [
+     424,
+     278,
+     706,
+     289
+    ],
+    [
+     424,
+     376,
+     706,
+     387
+    ],
+    [
+     423,
+     98,
+     706,
+     104
+    ],
+    [
+     423,
+     616,
+     706,
+     622
+    ],
+    [
+     423,
+     910,
+     706,
+     915
+    ]
+   ],
+   "same_as": []
+  },
+  {
+   "id": "F2",
+   "material": "standing-seam metal roof",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F3",
+   "material": "brown shingle siding",
+   "reference_valid": true,
+   "verdict": "good",
+   "wrong_regions": [],
+   "missed_regions": [],
+   "same_as": []
+  },
+  {
+   "id": "F4",
+   "material": "garage door panels",
+   "reference_valid": false,
+   "verdict": "wrong",
+   "wrong_regions": [
+    [
+     474,
+     663,
+     750,
+     870
+    ],
+    [
+     423,
+     289,
+     725,
+     377
+    ],
+    [
+     378,
+     403,
+     398,
+     929
+    ],
+    [
+     423,
+     159,
+     441,
+     210
+    ],
+    [
+     423,
+     504,
+     441,
+     555
+    ]
+   ],
+   "missed_regions": [],
+   "same_as": []
+  }
+ ],
+ "usage": {
+  "cache_tokens_details": null,
+  "cached_content_token_count": null,
+  "candidates_token_count": 567,
+  "candidates_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 567
+   }
+  ],
+  "prompt_token_count": 10915,
+  "prompt_tokens_details": [
+   {
+    "modality": "TEXT",
+    "token_count": 1059
+   },
+   {
+    "modality": "IMAGE",
+    "token_count": 9856
+   }
+  ],
+  "thoughts_token_count": 6785,
+  "tool_use_prompt_token_count": null,
+  "tool_use_prompt_tokens_details": null,
+  "total_token_count": 18267,
+  "traffic_type": null
+ }
+}
