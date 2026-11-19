@@ -1,0 +1,17 @@
+{
+  "device": "cuda",
+  "host": "192-222-59-224",
+  "gpu": "NVIDIA GH200 480GB",
+  "torch": "2.7.0",
+  "opencv": "4.11.0",
+  "opencv_threads": 64,
+  "torch_threads": 64,
+  "scales": [
+    5120,
+    4096,
+    3072
+  ],
+  "repeats": 3,
+  "smoke": false,
+  "source_commit": "acae8bf061e3ce26f3f53343031b9e133f3c3a03"
+}

@@ -1,21 +1,26 @@
 # Handoff
 
-Last updated: 2026-11-14 (foreground A/B, GH200)
+Last updated: 2026-11-19 (seed 9, self-training v3, frozen candidate, refine head unfrozen; GH200)
 
 Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDING.md` defines the task and the metric;
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
 Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
 
-## 2026-11-19: foreground at three seeds; Gemini-reviewed pseudo-labels
+## 2026-11-19: four closed directions; fgavg78 stays the best
 
-- **`--foreground` at three seeds:** fg - ctl three-seed blends val -0.0008, HF14 +0.0022 (n.s.), Gemini30 +0.0081 (p 0.016). The
-  default stays; seed 9 does not improve on fgavg78, which stays the best (synth_progress 2026-11-19).
-- **Gemini review of pseudo-labels** (`scripts/selftrain/gemini_refine.py` -> `pseudolabel.py --refine`, `gemini-4-hydrogen`):
-  on Gemini30 / val labels it removes 20 of 30 junk families (windows, doors, railings, blank paper) and no human family.
-  Self-training v3 on round 5 with it: `run_selftrain_ab_v3.sh`, result in synth_progress.
-- **Open results** (synth_progress): the frozen harder-reference candidate (`~/codex.md` bundle, output in
-  `data/evaluations/frozen_benchmark/`) and the refinement head trained unfrozen (`run_ab_vs_best.sh`, TAG refunf).
-- **One edge convention in training: not worth running** -- no grow of the Gemini labels matches the real convention.
+All against fgavg78 on the product output (synth_progress 2026-11-19 has the tables):
+- **`--foreground` at three seeds:** three-seed blends fg - ctl val -0.0008, HF14 +0.0022 (n.s.), Gemini30 +0.0081 (p 0.016).
+  The default stays; the fg three-seed blend does not beat fgavg78 (+0.0005 / -0.0017 / +0.0001).
+- **Self-training v3** (round-5 pseudo-labels reviewed by `gemini-4-hydrogen`, `scripts/selftrain/gemini_refine.py`): the review
+  is good -- 20 of 30 junk families removed, no human family lost -- and cut the HF14 loss from -0.009 to -0.001, but Gemini30
+  still -0.008: **gate fail, round-5 self-training closed** (three label versions, six seeds).
+- **Frozen harder-reference candidate** (`~/codex.md` bundle): valfix4 -0.0004, hf14fix4 -0.0014 paired, latency a tie: not adopted.
+- **Refinement head unfrozen** at 3072: val -0.0014, HF14 -0.0020, Gemini30 -0.0214: fail. **One edge convention:** no label
+  conversion matches the real convention (5 points of edge ink; 1 px overshoots by 20), not run.
+
+**Next:** (1) more human-labelled sheets -- still the only lever that has moved results beyond seed noise; (2) the deployment
+latency check on a 16-20 GB card (`scripts/bench_deploy.py`); (3) the remaining real-split gap is small-sheet edges at about the
+labeller's own noise (synth_progress 2026-11-19 CPU) -- no model-side edge lever tried so far works.
 
 ## 2026-11-14: `--foreground` A/B passes the gate; default 0.4 (GEN 2026-11-14a)
 
@@ -91,7 +96,7 @@ vertices / label (`scripts/pp_probe/vertcount.py`, or `curve.py --summary`) next
 ## Where we are (2026-11-14)
 
 Best: `abshetty/floz-refunet-swint-fgavg78` (published 2026-11-14): product v3 valfix4 0.9503 / hf14fix4 0.9498 / gemini30 0.9131.
-Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 RECOVERED (2026-11-14, CPU session): 200 images on `abshetty/floz-assets` `gemini_r5/`, unlabelled. Self-training on round 5 (fgavg78's confident answers, two pool versions,
+Next levers: shadow-siding / floor-plan-v3 generator A/Bs, CPU post-processing latency. Round 5 RECOVERED (2026-11-14, CPU session): 200 images on `abshetty/floz-assets` `gemini_r5/`, unlabelled. Self-training on round 5 (fgavg78's confident answers, two pool versions + a Gemini-reviewed v3 on 2026-11-19,
 four seeds) FAILED the gate both times (v2 blend: valfix4 +0.0004, hf14fix4 -0.0089, gemini30 -0.0086): closed. Round-5 DRAFTS for
 human correction are in Roboflow `floz-gen-gemini-r5`, but the user will not label round 5 (2026-11-19): the pseudo-labels were its
 labels, and round 5 is done.

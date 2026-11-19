@@ -1,0 +1,18 @@
+loading Roboflow workspace...
+== Gemini holdout: 139 sheets, 2502 records
+== ctl pool: 8937 sheets
+== pool 11439 sheets
+== trained
+== scored: data/evaluations/fgab_ctl_s9
+ctl valfix4 product 0.9498
+ctl hf14fix4 product 0.9419
+ctl gemini30 product 0.8968
+== fg pool: 8937 sheets
+== pool 11439 sheets
+== trained
+== scored: data/evaluations/fgab_fg_s9
+fg valfix4 product 0.9509
+fg hf14fix4 product 0.9404
+fg gemini30 product 0.9057
+FOREGROUND AB DONE 15:51:29
+FG SEED9 DONE 15:51:29

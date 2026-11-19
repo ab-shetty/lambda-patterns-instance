@@ -31,6 +31,7 @@ BACKUP_REPO = "abshetty/floz-runs-backup"
 API = "https://cloud.lambdalabs.com/api/v1"
 QUIET_MIN = 10
 DOCS_TIMEOUT_H = 2.0
+DEADLINE = "2026-11-20 03:00"         # UTC: past this, stop waiting (a hung job must not keep the VM billing); record + go on
 BUSY = ("train_refunet", "evaluate_refunet_selection", "selftrain/discover", "gemini_refine", "pseudolabel.py",
         "augment_local_dataset", "benchmark_frozen_candidate", "run_ab_vs_best", "run_selftrain_ab", "gpu_queue.sh")
 STATE = ROOT / "logs/finalize_state.json"
@@ -83,13 +84,22 @@ def busy():
     return found
 
 
+def late():
+    return time.strftime("%Y-%m-%d %H:%M", time.gmtime()) >= DEADLINE
+
+
 def wait():
     q = ROOT / "logs/gpu_queue.log"
     while not (q.exists() and "QUEUE DONE" in q.read_text()):
+        if late():
+            log(f"DEADLINE {DEADLINE} UTC passed with the queue unfinished: recording what exists and going on")
+            state(step="deadline"); auto_record(); return
         state(step="wait: queue"); time.sleep(60)
     log("queue done")
     quiet_since = None
     while True:
+        if late():
+            log(f"DEADLINE {DEADLINE} UTC passed while waiting for quiet: going on"); auto_record(); return
         b = busy()
         if b:
             quiet_since = None; state(step="wait: quiet", busy=sorted(b))
@@ -102,7 +112,7 @@ def wait():
     log(f"quiet for {QUIET_MIN} min")
     t0 = time.time()
     while not (ROOT / "logs/DOCS_DONE").exists():
-        if time.time() - t0 > DOCS_TIMEOUT_H * 3600:
+        if time.time() - t0 > DOCS_TIMEOUT_H * 3600 or late():
             log("DOCS_DONE missing after the timeout: recording raw results"); auto_record(); return
         state(step="wait: DOCS_DONE"); time.sleep(60)
     log("docs done (logs/DOCS_DONE)")

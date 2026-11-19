@@ -1,0 +1,28 @@
+== refunf vs fgavg78 valfix4
+== paired over 71 fixed selections: refunf - fgavg78
+   paired mean difference -0.0014   se 0.0008   t(70) = -1.81   p = 0.07433
+   refunf better on 1, worse on 5, tied (|d|<0.01) on 65   sign-test p = 0.2188
+
+   per image (refunf - fgavg78), worst first:
+     image                     26  n= 1  mean -0.0088   share of total    9.0%
+   seed 7 alone: 0.9481 (-0.0022)
+   seed 8 alone: 0.9482 (-0.0020)
+== refunf vs fgavg78 hf14fix4
+== paired over 50 fixed selections: refunf - fgavg78
+   paired mean difference -0.0020   se 0.0033   t(49) = -0.60   p = 0.5489
+   refunf better on 2, worse on 5, tied (|d|<0.01) on 43   sign-test p = 0.4531
+
+   per image (refunf - fgavg78), worst first:
+     image                     12  n= 4  mean -0.0337   share of total  134.2%
+   seed 7 alone: 0.9388 (-0.0110)
+   seed 8 alone: 0.9460 (-0.0038)
+== refunf vs fgavg78 gemini30
+== paired over 195 fixed selections: refunf - fgavg78
+   paired mean difference -0.0214   se 0.0073   t(194) = -2.94   p = 0.003663
+   refunf better on 28, worse on 37, tied (|d|<0.01) on 130   sign-test p = 0.3211
+
+   per image (refunf - fgavg78), worst first:
+     image                     18  n= 6  mean -0.2730   share of total   39.2%
+   seed 7 alone: 0.8956 (-0.0175)
+   seed 8 alone: 0.8842 (-0.0289)
+GATE (blend vs fgavg78): FAIL {'valfix4': -0.0014, 'hf14fix4': -0.002, 'gemini30': -0.0214}

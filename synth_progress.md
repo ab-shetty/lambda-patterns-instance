@@ -3606,3 +3606,47 @@ fgavg78 stays the best. Checkpoints `data/runs/ck_fgab_{ctl,fg}_{s9_blend50,3see
 -- real val 0.535, Gemini30 0.489; growing the Gemini labels over touching ink by 1 px gives 0.739, 2 px 0.864. The conventions
 differ by ~5 points (under half a pixel) and the smallest grow overshoots the real labels by 20 points, so converting the Gemini
 training labels would teach a third convention. The A/B (the CPU session's idea 2) was not run.
+
+## 2026-11-19 (GPU) -- self-training v3 (Gemini-reviewed pseudo-labels): GATE FAIL; round-5 self-training closed for good
+
+Pre-registered above (same recipe, seeds and gate as v2). Product mIoU vs fgavg78 (HEAD product; fgavg78 0.9503 / 0.9498 / 0.9131):
+
+| | valfix4 | hf14fix4 | gemini30 |
+|---|---:|---:|---:|
+| **v3 two-seed blend** | +0.0001 | -0.0011 | **-0.0080** |
+| v3 seed 7 / seed 8 (vs fg s7 / s8) | -0.0003 / -0.0005 | -0.0038 / -0.0052 | -0.0127 / -0.0075 |
+| (v2 blend, 2026-11-14) | +0.0004 | -0.0089 | -0.0086 |
+
+The Gemini review removed most of the HF14 loss (-0.0089 -> -0.0011: the junk families -- windows, doors, railings -- were doing
+harm) but Gemini30 still loses 0.008 and the real sheets gain nothing. Three pseudo-label versions, six seeds: training on the
+teacher's own answers for round 5 does not help. Direction closed; the labelled-data lever (human labels) is the one that works.
+
+## 2026-11-19 (GPU) -- frozen harder-reference candidate (the ~/codex.md handoff): no gain on the real splits, not adopted
+
+The bundle (`abshetty/floz-frozen-candidate-benchmark-20261119`, sha256 verified; baseline weights identical to fgavg78; candidate
+= fgavg78 with the 8 `condition.*.reference` tensors refit on CPU from 58 hard box pairs, polygons at eps 7) run unmodified on the
+GH200 (`scripts/benchmark_frozen_candidate.py`; output `data/evaluations/frozen_benchmark/frozen-benchmark-20261119T170622Z/`):
+
+| | valfix4 baseline / candidate | hf14fix4 baseline / candidate |
+|---|---|---|
+| mIoU | 0.9503 / 0.9498 | 0.9497 / 0.9484 |
+| paired candidate - baseline | -0.0004 (t -1.1; 15 better, 26 worse) | -0.0014 (t -0.8; sheet 0 -0.022) |
+| median vertices / label | 1.000x / 1.000x | 1.246x / 1.225x |
+| median / p95 latency | 461 / 1684 ms -> 462 / 1689 ms (CI -2..+4 ms) | 580 / 1307 -> 581 / 1306 ms (CI -6..+5 ms) |
+
+Fails the handoff's thresholds on both splits (mIoU < 0.96, and not above the baseline); latency a tie. The +0.0035 on 23 fresh
+synthetic sheets does not transfer. CPU smoke check here differs in the 4th decimal (torch 2.7 / OpenCV 4.10 vs 2.6 / 4.12).
+
+## 2026-11-19 (GPU) -- refinement head trained UNFROZEN (run_refine_ab.sh step 4, never run before): GATE FAIL
+
+`run_ab_vs_best.sh` TAG refunf: the fgavg78 recipe (one-epoch restarts of gem2s-x on fgab_fg_mix, DR + no-DR, seeds 7 / 8) with
+`--refine-head 32 --image-max-size-max 3072`, batch 4, everything trainable. Product mIoU vs fgavg78:
+
+| | valfix4 | hf14fix4 | gemini30 |
+|---|---:|---:|---:|
+| **two-seed blend** | -0.0014 (p 0.074) | -0.0020 (p 0.55) | **-0.0214 (p 0.004)** |
+| seed 7 / seed 8 | -0.0022 / -0.0020 | -0.0110 / -0.0038 | -0.0175 / -0.0289 |
+
+Worse everywhere, Gemini30 badly. Like the head-only arms (flat) and the earlier high-resolution fine-tunes (HF14 -0.011): training
+at 3072 with a full-resolution head does not buy edges. Do not retry without a new idea. With the edge-convention measurement
+above, both of the CPU session's model-side edge levers are now closed.

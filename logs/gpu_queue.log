@@ -1,0 +1,7 @@
+2026-11-19 16:26:29 queue started
+2026-11-19 17:06:29 1 v3 done
+2026-11-19 17:14:29 2 frozen benchmark done
+2026-11-19 17:14:29 3 refunf start
+2026-11-19 19:26:46 3 refunf done: GATE (blend vs fgavg78): FAIL {'valfix4': -0.0014, 'hf14fix4': -0.002, 'gemini30': -0.0214}
+2026-11-19 19:26:46 4 edgeconv SKIPPED: run_edgeconv.sh not ready
+2026-11-19 19:26:46 QUEUE DONE

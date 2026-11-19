@@ -1,0 +1,41 @@
+{
+  "hf14fix4": {
+    "baseline": {
+      "miou": 0.9497466794803968,
+      "median_vertex_ratio": 1.246031746031746,
+      "median_ms": 579.8661290000382,
+      "p95_ms": 1306.5329159494463
+    },
+    "candidate": {
+      "miou": 0.9483500220445987,
+      "median_vertex_ratio": 1.225,
+      "median_ms": 580.7430185004705,
+      "p95_ms": 1305.9165364006726
+    },
+    "median_latency_change_ms_95pct_sheet_bootstrap": [
+      -5.628893999528373,
+      4.96632700196642
+    ],
+    "observed_thresholds_met": false
+  },
+  "valfix4": {
+    "baseline": {
+      "miou": 0.9502882117454962,
+      "median_vertex_ratio": 1.0,
+      "median_ms": 460.88819799842895,
+      "p95_ms": 1684.053273000245
+    },
+    "candidate": {
+      "miou": 0.949847825229131,
+      "median_vertex_ratio": 1.0,
+      "median_ms": 461.6901900008088,
+      "p95_ms": 1688.6142994999318
+    },
+    "median_latency_change_ms_95pct_sheet_bootstrap": [
+      -1.520272999187,
+      3.9634999993722886
+    ],
+    "observed_thresholds_met": false
+  },
+  "both_splits_met_observed_thresholds": false
+}

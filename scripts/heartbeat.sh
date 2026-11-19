@@ -13,4 +13,7 @@ echo "-- errors in the last 30 min of logs:"
 find logs ~/frozen_ab -name '*.log' -mmin -30 2>/dev/null | xargs -r grep -l -E 'Traceback|OutOfMemory|FAILED|Error' 2>/dev/null | sed 's/^/   /'
 echo "-- results so far:"; grep -h 'GATE' logs/selftrain_ab_v3.log logs/*_compare.txt 2>/dev/null | sed 's/^/   /'
 grep -q 'FROZEN BENCH DONE' ~/frozen_ab/benchmark.log 2>/dev/null && echo "   frozen benchmark: $(tail -1 ~/frozen_ab/benchmark.log)"
+echo "-- finalizer: $(pgrep -f 'python3 scripts/finalize_session.py' >/dev/null && echo running || echo NOT RUNNING); state: $(tr -d '\n' < logs/finalize_state.json 2>/dev/null)"
+tail -3 logs/finalize.log 2>/dev/null | sed 's/^/   /'
+git fetch -q 2>/dev/null; echo "-- git: HEAD $(git rev-parse --short HEAD) upstream $(git rev-parse --short @{u}) $( [ "$(git rev-parse HEAD)" = "$(git rev-parse @{u})" ] && echo IN-SYNC || echo NOT-IN-SYNC); tracked changes: $(git status --porcelain --untracked-files=no | wc -l); docs marker: $( [ -f logs/DOCS_DONE ] && echo present || echo absent)"
 true
