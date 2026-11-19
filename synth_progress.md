@@ -3541,3 +3541,19 @@ trained window holes and unreviewed markers as patterns. Fixed: `hole_<name>` is
 no hole / marker classes in the output, masks pixel-identical to the same sheets with the holes renamed `remove`.
 Drafts overall: 200 sheets (15 blank holdouts), families per sheet median 3 (p90 5, max 16), 393 check_here markers on 139
 sheets, 19 sheets with no family drafted. Render: `data/diag/r5_drafts_sample.jpg`.
+
+## 2026-11-19 (CPU) -- is 0.96 fairly reachable? Where fgavg78's remaining loss sits
+
+- **By sheet size** (product, fgavg78): sheets < 2,500 px long side: valfix4 0.936 (36 of 71 q, 6 sheets), hf14fix4 0.937
+  (14 q); 2,500-4,500 px 0.966 / 0.952; > 4,500 px 0.965 / 0.957. Small-sheet loss is edge (tol2 - IoU 0.044 val), not patches.
+- **Not an offset**: within 2 px the small-sheet error is symmetric (val short 0.023 / over 0.024); the 1 px offset is already
+  best in every size group (`pp_probe/sizeoff.py`). **Not the inference scale**: no single scale or pair beats the blend on
+  small sheets (best 4096 alone 0.937 vs 0.936, `pp_probe/scalesize.py`).
+- **Metric sensitivity** (`pp_probe/ceiling.py`, the label vs itself): a uniform 1 px edge error costs valfix4 0.039 on small
+  sheets (dil1 0.9615) vs 0.015 / 0.009 on larger ones; even the label shifted 1 px loses 0.013 there. In pixels fgavg78's
+  edges are NOT worse on small sheets (~1.6 px uniform-equivalent there vs ~2-3 px on large ones); the metric weighs them more.
+  0.96 on valfix4 needs ~1 px-accurate edges on the small sheets -- about the labeller's own placement noise.
+- **Map ensembles** (`pp_probe/ens.py`, probability averaging): fgavg78 + its seed-7 component +0.0004 / +0.0007, + gem2s-x 0 /
+  -0.0010. Not a lever.
+- Untried model-side edge levers: the refinement head UNFROZEN (step 4 of run_refine_ab.sh, never run; head-only was flat), and
+  one edge convention in training (Gemini labels sit on the opposite side of the stroke from the real ones, 2026-11-11).

@@ -17,11 +17,12 @@ if __name__ == "__main__":
     split = sys.argv[1]
     common.MAPS = Path(sys.argv[2] if len(sys.argv) > 2 else "data/floz-diag/fgavg78")
     R = {k: [] for k in ("shift1", "shift2", "dil1", "ero1", "dil2", "ero2", "stroke_in", "stroke_out", "best_stroke")}
+    LONG = []
     for job in common.jobs(split):
         idx, img, _, qs = common.load(job)
         ink = common.ink_map(img, 40)
         for ref, cat, tgt, _, box in qs:
-            key = (idx, ref); t8 = tgt.astype(np.uint8)
+            key = (idx, ref); t8 = tgt.astype(np.uint8); LONG.append(max(img.shape[:2]))
             iou = lambda m: common.masked_iou(m, tgt, key)
             for k in (1, 2):
                 R[f"shift{k}"].append(max(iou(np.roll(tgt, s, ax)) for s in (k, -k) for ax in (0, 1)))
@@ -33,5 +34,8 @@ if __name__ == "__main__":
             si = iou(tgt | (ink & band)); so = iou(tgt & ~(ink & band))
             R["stroke_in"].append(si); R["stroke_out"].append(so); R["best_stroke"].append(max(si, so))
     print(f"{split}: {len(R['shift1'])} q -- the LABEL vs consistent rules applied to itself (mean IoU)")
+    L = np.array(LONG)
     for k, v in R.items():
-        print(f"  {k:12s} {np.mean(v):.4f}")
+        v = np.array(v)
+        print(f"  {k:12s} {v.mean():.4f}   by long side < 2500 / 2500-4500 / > 4500 px: "
+              + " / ".join(f"{v[(L >= lo) & (L < hi)].mean():.4f}" for lo, hi in ((0, 2500), (2500, 4500), (4500, 99999))))
