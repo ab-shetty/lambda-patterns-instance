@@ -85,7 +85,7 @@ def main():
 
     n_img = n_img_skipped = n_inst = n_pattern_dropped = 0
     n_hole = n_hole_dropped = 0
-    n_hole_attachments = n_multi_parent = 0
+    n_hole_attachments = n_multi_parent = n_check = 0
     for img_id, im in images.items():
         anns = anns_by_img.get(img_id, [])
         # COCO segmentation is a list of polygons; take only the first ring per
@@ -97,8 +97,13 @@ def main():
                 continue  # skip RLE / empty
             ring = seg[0]
             name = id2name.get(a["category_id"], "pattern")
+            if name == "check_here":
+                n_check += 1
+                continue
             if name == "remove":
-                removes.append(ring)
+                removes.append((ring, None))
+            elif name.startswith("hole_"):
+                removes.append((ring, name[len("hole_"):]))
             elif not _usable_pattern(ring):
                 n_pattern_dropped += 1
                 print(f"  WARN: degenerate pattern polygon in {im['file_name']} "
@@ -117,12 +122,14 @@ def main():
         pattern_names = [name for _, name in patterns]
         outer_polys = [_poly_xy(p) for p, _ in patterns]
 
-        for rem in removes:
+        for rem, owner in removes:
             cx, cy = _centroid(rem)
             # A remove region can sit inside overlapping material annotations;
-            # subtract it from every mask that contains it.
+            # subtract it from every mask that contains it (a hole_<name> only from <name>'s).
             containing = [j for j, poly in enumerate(outer_polys)
                           if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0]
+            if owner is not None and any(pattern_names[j] == owner for j in containing):
+                containing = [j for j in containing if pattern_names[j] == owner]
             if containing:
                 parents = containing
                 if len(parents) > 1:
@@ -169,6 +176,7 @@ def main():
           f"{f', {n_hole_dropped} holes dropped' if n_hole_dropped else ''}"
           f"{f', {n_pattern_dropped} degenerate patterns dropped' if n_pattern_dropped else ''}"
           f"{f', {n_img_skipped} unlabeled images skipped' if n_img_skipped else ''}"
+          f"{f', {n_check} check_here markers dropped (NOT cleared in review)' if n_check else ''}"
           f" -> {args.out}")
 
 

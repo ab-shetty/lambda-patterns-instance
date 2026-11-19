@@ -3531,3 +3531,13 @@ draft rules: 47 / 57 families drafted, 6 flagged, 4 silent misses.
     GATE (blend vs fgavg78): FAIL {'valfix4': 0.0004, 'hf14fix4': -0.0089, 'gemini30': -0.0086}
 
 Backup of local-only checkpoints / round-5 discovery / pseudo pools: `abshetty/floz-runs-backup` (private). Instance 5764a1b50bda44b6a72254984e199176 terminated after the backup (the user's instruction).
+
+## 2026-11-19 (CPU) -- pre-GPU checks: round-5 drafts vs the Roboflow converter
+
+The round-5 drafts (`floz-gen-gemini-r5`) mark holes as `hole_patternN` and review markers as `check_here`; rounds 3-4 used
+`remove`. `scripts/roboflow_to_local.py` treated every class but `remove` as a material, so a corrected round-5 export would have
+trained window holes and unreviewed markers as patterns. Fixed: `hole_<name>` is a hole of `<name>`'s instances (falls back to
+`remove` matching), `check_here` is dropped and counted ("NOT cleared in review"). Check on 3 drafted sheets (061 / 140 / 155):
+no hole / marker classes in the output, masks pixel-identical to the same sheets with the holes renamed `remove`.
+Drafts overall: 200 sheets (15 blank holdouts), families per sheet median 3 (p90 5, max 16), 393 check_here markers on 139
+sheets, 19 sheets with no family drafted. Render: `data/diag/r5_drafts_sample.jpg`.
