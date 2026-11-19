@@ -1,3 +1,14 @@
 2026-11-19 19:27:25 queue done
 2026-11-19 19:37:26 quiet for 10 min
 2026-11-19 19:47:27 docs done (logs/DOCS_DONE)
+2026-11-19 19:47:29 git verified: HEAD == upstream 3fd16da and no tracked changes
+2026-11-19 19:47:30 backup: 2243 files, 9.4 GB -> abshetty/floz-runs-backup
+2026-11-19 19:48:25 backup verified: 2243 files match by size
+Traceback (most recent call last):
+  File "/home/ubuntu/lambda-patterns-instance/scripts/finalize_session.py", line 253, in <module>
+    terminate()
+  File "/home/ubuntu/lambda-patterns-instance/scripts/finalize_session.py", line 225, in terminate
+    check_git()                                      # last look: nothing committed since, push still verified
+  File "/home/ubuntu/lambda-patterns-instance/scripts/finalize_session.py", line 171, in check_git
+    raise RuntimeError(f"git NOT in sync: HEAD {head[:7]} upstream {up[:7]} dirty={bool(dirty)} {dirty[:200]}")
+RuntimeError: git NOT in sync: HEAD 3fd16da upstream 3fd16da dirty=True M logs/finalize.log

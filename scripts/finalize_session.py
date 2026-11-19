@@ -166,7 +166,8 @@ def git_sync():
 def check_git():
     sh("git fetch -q")
     head, up = sh("git rev-parse HEAD"), sh("git rev-parse @{u}")
-    dirty = sh("git status --porcelain --untracked-files=no")
+    dirty = "\n".join(l for l in sh("git status --porcelain --untracked-files=no").splitlines()
+                      if not l.endswith(("logs/finalize.log", "logs/finalize_state.json")))   # its own live log
     if head != up or dirty:
         raise RuntimeError(f"git NOT in sync: HEAD {head[:7]} upstream {up[:7]} dirty={bool(dirty)} {dirty[:200]}")
     log("git verified: HEAD == upstream", head[:7], "and no tracked changes"); state(git_verified=head)
@@ -243,6 +244,8 @@ if __name__ == "__main__":
     env()
     if "--check-git" in sys.argv:
         check_git(); sys.exit(0)
+    if "--terminate-only" in sys.argv:      # after a run that verified git + backup and stopped at the last look
+        check_git(); terminate(); sys.exit(0)
     try:
         wait()
         git_sync()
