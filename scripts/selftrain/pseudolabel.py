@@ -82,6 +82,8 @@ def family_layers(d, img_bgr, meta):
             if any(g is not o and g["draft"].sum() > o["draft"].sum() and (o["draft"] & g["draft"]).sum() >= 0.5 * o["draft"].sum()
                    for g in E):
                 o["pl"], o["fragment"] = False, True
+    if CFG.get("refine"):
+        apply_refine(out, meta["sheet"], (h, w))
     # a pixel confident for two eligible families is ignored for both
     elig = [o["pos"] for o in out if o["pl"]]
     if len(elig) >= 2:
@@ -89,6 +91,80 @@ def family_layers(d, img_bgr, meta):
         for o in out:
             o["pos"] = o["pos"] & ~two
     return out
+
+
+def box_mask(boxes, shape):
+    """Gemini boxes ([ymin, xmin, ymax, xmax], 0-1000) -> bool mask of their union."""
+    h, w = shape
+    m = np.zeros(shape, bool)
+    for b in boxes or []:
+        if len(b) != 4:
+            continue
+        y0, x0, y1, x1 = (min(1000, max(0, int(v))) for v in b)
+        y0, y1 = sorted((y0 * h // 1000, -(-y1 * h // 1000))); x0, x1 = sorted((x0 * w // 1000, -(-x1 * w // 1000)))
+        m[y0:y1, x0:x1] = True
+    return m
+
+
+def apply_refine(out, sid, shape):
+    """Gemini's verdicts (gemini_refine.py) on the eligible families, in place: drop / ignore wrong areas of the target /
+    ignore missed areas of the background / merge same-material families. A sheet without a verdict loses its families."""
+    p = Path(CFG["refine"]) / f"{sid}.json"
+    by_k = {o["k"]: o for o in out}
+    if not p.exists():
+        for o in out:
+            if o["pl"]:
+                o["pl"], o["gref"] = False, "no_verdict"
+        return
+    v = json.loads(p.read_text())
+    ids = v["ids"]
+    seen = set()
+    for f in v["families"]:
+        k = ids.get(f["id"])
+        if k is None or k in seen or not by_k[k]["pl"]:
+            continue
+        seen.add(k); o = by_k[k]
+        o["gemini"] = {x: f[x] for x in ("material", "reference_valid", "verdict")}
+        if not f["reference_valid"] or f["verdict"] == "wrong" or (f["verdict"] == "contaminated" and not f["wrong_regions"]
+                                                                   and not CFG.get("keep_contaminated")):
+            o["pl"], o["gref"] = False, "drop"
+            continue
+        if f["wrong_regions"] and not CFG.get("no_wrong"):
+            o["pos"] = o["pos"] & ~box_mask(f["wrong_regions"], shape)
+        if f["missed_regions"] and not CFG.get("no_missed"):
+            o["neg"] = o["neg"] & ~box_mask(f["missed_regions"], shape)
+    for o in out:                      # Gemini returned nothing for an eligible family: keep it as the teacher made it
+        if o["pl"] and o["k"] not in seen:
+            o["gref"] = "unreviewed"
+    if CFG.get("no_merge"):
+        return
+    par = {k: k for k in by_k}
+    def root(k):
+        while par[k] != k:
+            k = par[k]
+        return k
+    for f in v["families"]:
+        a = ids.get(f["id"])
+        for g in f["same_as"]:
+            b = ids.get(g)
+            if a is not None and b is not None and a != b and by_k[a]["pl"] and by_k[b]["pl"]:
+                par[root(a)] = root(b)
+    groups = {}
+    for o in out:
+        if o["pl"]:
+            groups.setdefault(root(o["k"]), []).append(o)
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        g.sort(key=lambda o: -o["support"])
+        o0 = g[0]
+        draft = np.logical_or.reduce([o["draft"] for o in g])
+        o0["pos"] = np.logical_or.reduce([o["pos"] for o in g])
+        o0["neg"] = np.logical_and.reduce([o["neg"] for o in g]) & ~draft
+        o0["draft"] = draft; o0["support"] = sum(o["support"] for o in g)
+        o0["merged"] = [o["k"] for o in g]
+        for o in g[1:]:
+            o["pl"], o["gref"] = False, f"merged_into_{o0['k']}"
 
 
 def human_targets(sid, a):
@@ -240,8 +316,13 @@ def main():
     ap.add_argument("--keep-fragments", action="store_true", help="the first A/B's behaviour (fragments stay pseudo families)")
     ap.add_argument("--write-pool", help="with --images: write the pseudo-labelled local pool here (stage C)")
     ap.add_argument("--only", help="file of sheet stems to use (one per line)")
+    ap.add_argument("--refine", help="dir of Gemini verdicts (gemini_refine.py) to apply to the families")
+    ap.add_argument("--no-merge", action="store_true"); ap.add_argument("--no-missed", action="store_true")
+    ap.add_argument("--no-wrong", action="store_true", help="drop families only; keep the target inside wrong_regions boxes")
+    ap.add_argument("--keep-contaminated", action="store_true")
     a = ap.parse_args()
-    CFG.update(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments)
+    CFG.update(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments, refine=a.refine,
+               no_merge=a.no_merge, no_missed=a.no_missed, no_wrong=a.no_wrong, keep_contaminated=a.keep_contaminated)
     if a.real:
         from evaluate_refunet_selection import load_parquet_records
         CFG["recs"] = load_parquet_records("abshetty/floz-synth-v5", cache_dir="./data", config="real-world-test", split="test")
@@ -257,7 +338,8 @@ def main():
         summ = dict(sheets_in=len(dirs), sheets_written=len(done), families=sum(len(k) for k in done.values()),
                     mean_pos_frac=round(float(np.mean([f["pos_frac"] for k in done.values() for f in k])), 4) if done else 0,
                     mean_ign_frac=round(float(np.mean([f["ign_frac"] for k in done.values() for f in k])), 4) if done else 0,
-                    params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments))
+                    params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments,
+                               refine=a.refine, no_merge=a.no_merge, no_missed=a.no_missed, no_wrong=a.no_wrong))
         print(json.dumps(summ, indent=1))
         Path(a.write_pool, "selftrain_manifest.json").write_text(json.dumps(dict(summary=summ, sheets=done), indent=1))
         return
@@ -280,7 +362,8 @@ def main():
         unmatched_pl_families=sum(len(s["extra"]) for s in res),
         unmatched_pl_on_labels=round(sum(e["on_labels"] for s in res for e in s["extra"]) /
                                      max(sum(e["pos_px"] for s in res for e in s["extra"]), 1), 4),
-        params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments))
+        params=dict(hi=a.hi, lo=a.lo, s_min=a.s_min, min_area=a.min_area, drop_fragments=not a.keep_fragments,
+                               refine=a.refine, no_merge=a.no_merge, no_missed=a.no_missed, no_wrong=a.no_wrong))
     print(json.dumps(summ, indent=1, default=int))
     if a.report:
         Path(a.report).parent.mkdir(parents=True, exist_ok=True)

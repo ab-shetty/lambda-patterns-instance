@@ -1,0 +1,9 @@
+== gemini30
+  base                               pseudo_families 65  covered_families 43  pos_precision 0.9909  pos_recall 0.9053  neg_error 0.0081  ignored 0.0866  own_material_as_background 0.0081  unmatched_families 18  unmatched_on_labels 0.0203
+  gemini_4_hydrogen                  pseudo_families 51  covered_families 43  pos_precision 0.9918  pos_recall 0.8766  neg_error 0.0071  ignored 0.1163  own_material_as_background 0.0072  unmatched_families 6  unmatched_on_labels 0.0129
+  gemini_4_hydrogen_nomerge          pseudo_families 51  covered_families 43  pos_precision 0.9918  pos_recall 0.8766  neg_error 0.0071  ignored 0.1163  own_material_as_background 0.0072  unmatched_families 6  unmatched_on_labels 0.0129
+== val
+  base                               pseudo_families 34  covered_families 22  pos_precision 0.9892  pos_recall 0.9574  neg_error 0.0066  ignored 0.036  own_material_as_background 0.0066  unmatched_families 12  unmatched_on_labels 0.0021
+  gemini_4_hydrogen                  pseudo_families 26  covered_families 22  pos_precision 0.9892  pos_recall 0.9438  neg_error 0.0066  ignored 0.0496  own_material_as_background 0.0066  unmatched_families 4  unmatched_on_labels 0.0034
+  gemini_4_hydrogen_nomerge          pseudo_families 26  covered_families 22  pos_precision 0.9892  pos_recall 0.9438  neg_error 0.0066  ignored 0.0496  own_material_as_background 0.0066  unmatched_families 4  unmatched_on_labels 0.0034
+GREF VALIDATE DONE 14:55:40

@@ -3557,3 +3557,52 @@ sheets, 19 sheets with no family drafted. Render: `data/diag/r5_drafts_sample.jp
   -0.0010. Not a lever.
 - Untried model-side edge levers: the refinement head UNFROZEN (step 4 of run_refine_ab.sh, never run; head-only was flat), and
   one edge convention in training (Gemini labels sit on the opposite side of the stroke from the real ones, 2026-11-11).
+
+## 2026-11-19 (GPU) -- Gemini-refined pseudo-labels (v3), pre-registered before training; foreground seed 9
+
+**Refinement** (`scripts/selftrain/gemini_refine.py`, `pseudolabel.py --refine`): one Gemini call per sheet shows the drawing,
+each eligible family's draft (blue tint + red reference box) and a zoom of the box; verdicts drop non-material families, ignore
+target inside "wrong area" boxes and background inside "missed area" boxes, merge same-material families (none proposed).
+Model `gemini-4-hydrogen` (Google's detection / segmentation examples use it), media resolution high.
+**Validated against human labels first** (fgavg78 discovery on Gemini30 / val, `run_gref_validate.sh`; HF14 never used):
+
+| | Gemini30 base / Pro / Hydrogen | val base / Pro / Hydrogen |
+|---|---|---|
+| junk families (match no human family) | 18 / 7 / 6 | 12 / 5 / 4 |
+| human families covered | 43 / 43 / 43 | 22 / 22 / 22 |
+| confident-target precision | 0.9909 / 0.9910 / 0.9918 | 0.9892 / 0.9951 / 0.9892 |
+| target recall | 0.905 / 0.891 / 0.877 | 0.957 / 0.938 / 0.944 |
+| junk-family pixels on labelled material | 0.020 / 0.001 / 0.013 | 0.002 / 0.003 / 0.003 |
+
+Drops are clean (30 -> 10 junk families, no human family lost); the wrong-area boxes trade recall (to ignore, not to
+background) for fewer junk pixels on labelled material (Hydrogen without them: 0.051 on Gemini30). Missed-area boxes: no effect.
+Round 5 (111 elevations, Hydrogen): pool v3 101 sheets / 211 families vs v2 105 / 273; dropped families are mostly window
+glazing, doors, railings, blank paper. Gemini cost for the session ~$9-10 (the user's cap: $12).
+**Gate (unchanged from v2, pre-registered):** `run_selftrain_ab_v3.sh`, seeds 7 / 8, two-seed blend vs fgavg78, product mIoU:
+hf14fix4 >= +0.002, valfix4 not < -0.002, gemini30 not < -0.003. Nothing published.
+**Seed 9 of the --foreground A/B** (`run_fg_seed9.sh`): same pools as seeds 7 / 8 (8,937 sheets, + Gemini holdout x18).
+Notes: discovery at 5120 needs > 28 GB, so it cannot share the GPU with training (both OOM'd once); tesseract must be installed
+on a fresh VM (`sudo apt-get install tesseract-ocr`, 4.1.1 here) or discovery fails at the text mask.
+
+## 2026-11-19 (GPU) -- --foreground at three seeds: Gemini30 replicates, HF14 does not; fgavg78 stays
+
+All scored with the HEAD product (`run_fg3seed_compare.sh`; seeds 7 / 8 re-scored, the Nov 14 numbers predate three product
+steps). fg - ctl, product mIoU, paired:
+
+| | valfix4 | hf14fix4 | gemini30 |
+|---|---:|---:|---:|
+| seed 7 | -0.0003 | +0.0030 | +0.0069 (p 0.087) |
+| seed 8 | -0.0019 (p 0.0007) | +0.0022 | +0.0049 |
+| seed 9 (new) | +0.0011 | -0.0016 (sheet 14 -0.015) | +0.0090 (p 0.009) |
+| **3-seed blends** (ctl 0.9515 / 0.9460 / 0.9052, fg 0.9508 / 0.9481 / 0.9132) | -0.0008 (p 0.06) | +0.0022 (p 0.19) | **+0.0081 (p 0.016)** |
+
+`--foreground 0.4` helps Gemini-style sheets at every seed and is neutral on the real ones; the default stays. The fg three-seed
+blend vs fgavg78 (fg two-seed): val +0.0005, HF14 -0.0017, Gemini30 +0.0001 (fgavg78's Nov 14 numbers) -- no gain from seed 9,
+fgavg78 stays the best. Checkpoints `data/runs/ck_fgab_{ctl,fg}_{s9_blend50,3seed}.pth` (backed up to floz-runs-backup).
+
+## 2026-11-19 (CPU) -- one edge convention for training: no conversion matches, not run
+
+`scripts/edge_convention.py measure` (labels only): share of drawn ink within 3 px of a family's edge that lies inside the label
+-- real val 0.535, Gemini30 0.489; growing the Gemini labels over touching ink by 1 px gives 0.739, 2 px 0.864. The conventions
+differ by ~5 points (under half a pixel) and the smallest grow overshoots the real labels by 20 points, so converting the Gemini
+training labels would teach a third convention. The A/B (the CPU session's idea 2) was not run.

@@ -1,0 +1,9 @@
+== gemini30
+  base                               pseudo_families 65  covered_families 43  pos_precision 0.9909  pos_recall 0.9053  neg_error 0.0081  ignored 0.0866  own_material_as_background 0.0081  unmatched_families 18  unmatched_on_labels 0.0203
+  gemini_pro_latest                  pseudo_families 53  covered_families 43  pos_precision 0.991  pos_recall 0.891  neg_error 0.008  ignored 0.101  own_material_as_background 0.0082  unmatched_families 7  unmatched_on_labels 0.0008
+  gemini_pro_latest_nomerge          pseudo_families 53  covered_families 43  pos_precision 0.991  pos_recall 0.891  neg_error 0.008  ignored 0.101  own_material_as_background 0.0082  unmatched_families 7  unmatched_on_labels 0.0008
+== val
+  base                               pseudo_families 34  covered_families 22  pos_precision 0.9892  pos_recall 0.9574  neg_error 0.0066  ignored 0.036  own_material_as_background 0.0066  unmatched_families 12  unmatched_on_labels 0.0021
+  gemini_pro_latest                  pseudo_families 27  covered_families 22  pos_precision 0.9951  pos_recall 0.9378  neg_error 0.0066  ignored 0.0557  own_material_as_background 0.0066  unmatched_families 5  unmatched_on_labels 0.0031
+  gemini_pro_latest_nomerge          pseudo_families 27  covered_families 22  pos_precision 0.9951  pos_recall 0.9378  neg_error 0.0066  ignored 0.0557  own_material_as_background 0.0066  unmatched_families 5  unmatched_on_labels 0.0031
+GREF VALIDATE DONE 14:49:28

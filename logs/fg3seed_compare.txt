@@ -1,0 +1,84 @@
+== fg_s7 vs ctl_s7 valfix4
+== paired over 71 fixed selections: fg_s7 - ctl_s7
+   paired mean difference -0.0003   se 0.0004   t(70) = -0.76   p = 0.4511
+   fg_s7 better on 0, worse on 3, tied (|d|<0.01) on 68   sign-test p = 0.25
+
+   per image (fg_s7 - ctl_s7), worst first:
+     image                     22  n= 1  mean -0.0113   share of total   50.4%
+== fg_s7 vs ctl_s7 hf14fix4
+== paired over 50 fixed selections: fg_s7 - ctl_s7
+   paired mean difference +0.0030   se 0.0028   t(49) = +1.08   p = 0.2849
+   fg_s7 better on 4, worse on 3, tied (|d|<0.01) on 43   sign-test p = 1
+
+   per image (fg_s7 - ctl_s7), worst first:
+     image                     25  n= 4  mean -0.0102   share of total  -27.4%
+== fg_s7 vs ctl_s7 gemini30
+== paired over 195 fixed selections: fg_s7 - ctl_s7
+   paired mean difference +0.0069   se 0.0040   t(194) = +1.72   p = 0.08663
+   fg_s7 better on 28, worse on 27, tied (|d|<0.01) on 140   sign-test p = 1
+
+   per image (fg_s7 - ctl_s7), worst first:
+     image                     19  n= 4  mean -0.0377   share of total  -11.2%
+== fg_s8 vs ctl_s8 valfix4
+== paired over 71 fixed selections: fg_s8 - ctl_s8
+   paired mean difference -0.0019   se 0.0005   t(70) = -3.54   p = 0.0007059
+   fg_s8 better on 0, worse on 3, tied (|d|<0.01) on 68   sign-test p = 0.25
+
+   per image (fg_s8 - ctl_s8), worst first:
+     image                     19  n= 9  mean -0.0065   share of total   44.3%
+== fg_s8 vs ctl_s8 hf14fix4
+== paired over 50 fixed selections: fg_s8 - ctl_s8
+   paired mean difference +0.0022   se 0.0039   t(49) = +0.55   p = 0.5841
+   fg_s8 better on 3, worse on 6, tied (|d|<0.01) on 41   sign-test p = 0.5078
+
+   per image (fg_s8 - ctl_s8), worst first:
+     image                      0  n= 2  mean -0.0072   share of total  -13.3%
+== fg_s8 vs ctl_s8 gemini30
+== paired over 195 fixed selections: fg_s8 - ctl_s8
+   paired mean difference +0.0049   se 0.0035   t(194) = +1.39   p = 0.1659
+   fg_s8 better on 38, worse on 29, tied (|d|<0.01) on 128   sign-test p = 0.3284
+
+   per image (fg_s8 - ctl_s8), worst first:
+     image                      8  n= 5  mean -0.0443   share of total  -23.0%
+== fg_s9 vs ctl_s9 valfix4
+== paired over 71 fixed selections: fg_s9 - ctl_s9
+   paired mean difference +0.0011   se 0.0009   t(70) = +1.22   p = 0.2264
+   fg_s9 better on 3, worse on 1, tied (|d|<0.01) on 67   sign-test p = 0.625
+
+   per image (fg_s9 - ctl_s9), worst first:
+     image                      5  n= 3  mean -0.0066   share of total  -24.6%
+== fg_s9 vs ctl_s9 hf14fix4
+== paired over 50 fixed selections: fg_s9 - ctl_s9
+   paired mean difference -0.0016   se 0.0025   t(49) = -0.63   p = 0.5292
+   fg_s9 better on 7, worse on 6, tied (|d|<0.01) on 37   sign-test p = 1
+
+   per image (fg_s9 - ctl_s9), worst first:
+     image                     14  n= 8  mean -0.0147   share of total  150.1%
+== fg_s9 vs ctl_s9 gemini30
+== paired over 195 fixed selections: fg_s9 - ctl_s9
+   paired mean difference +0.0090   se 0.0034   t(194) = +2.63   p = 0.009308
+   fg_s9 better on 29, worse on 18, tied (|d|<0.01) on 148   sign-test p = 0.1439
+
+   per image (fg_s9 - ctl_s9), worst first:
+     image                     26  n= 8  mean -0.0254   share of total  -11.6%
+== fg_3 vs ctl_3 valfix4
+== paired over 71 fixed selections: fg_3 - ctl_3
+   paired mean difference -0.0008   se 0.0004   t(70) = -1.91   p = 0.0602
+   fg_3 better on 0, worse on 2, tied (|d|<0.01) on 69   sign-test p = 0.5
+
+   per image (fg_3 - ctl_3), worst first:
+     image                     19  n= 9  mean -0.0061   share of total  103.2%
+== fg_3 vs ctl_3 hf14fix4
+== paired over 50 fixed selections: fg_3 - ctl_3
+   paired mean difference +0.0022   se 0.0016   t(49) = +1.34   p = 0.1879
+   fg_3 better on 6, worse on 2, tied (|d|<0.01) on 42   sign-test p = 0.2891
+
+   per image (fg_3 - ctl_3), worst first:
+     image                     25  n= 4  mean -0.0037   share of total  -13.7%
+== fg_3 vs ctl_3 gemini30
+== paired over 195 fixed selections: fg_3 - ctl_3
+   paired mean difference +0.0081   se 0.0033   t(194) = +2.43   p = 0.01598
+   fg_3 better on 20, worse on 17, tied (|d|<0.01) on 158   sign-test p = 0.7428
+
+   per image (fg_3 - ctl_3), worst first:
+     image                     19  n= 4  mean -0.0274   share of total   -7.0%

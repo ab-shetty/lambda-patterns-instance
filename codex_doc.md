@@ -6,6 +6,17 @@ Where the work stands and what to do next -- nothing else. `PROJECT_UNDERSTANDIN
 `startup.md` is the reference manual (current best, numbers, gate, setup, commands); `synth_progress.md` logs every experiment.
 Finished handoffs are in `archive/startup_archive.md` and git history. Rewrite this file at the end of each session.
 
+## 2026-11-19: foreground at three seeds; Gemini-reviewed pseudo-labels
+
+- **`--foreground` at three seeds:** fg - ctl three-seed blends val -0.0008, HF14 +0.0022 (n.s.), Gemini30 +0.0081 (p 0.016). The
+  default stays; seed 9 does not improve on fgavg78, which stays the best (synth_progress 2026-11-19).
+- **Gemini review of pseudo-labels** (`scripts/selftrain/gemini_refine.py` -> `pseudolabel.py --refine`, `gemini-4-hydrogen`):
+  on Gemini30 / val labels it removes 20 of 30 junk families (windows, doors, railings, blank paper) and no human family.
+  Self-training v3 on round 5 with it: `run_selftrain_ab_v3.sh`, result in synth_progress.
+- **Open results** (synth_progress): the frozen harder-reference candidate (`~/codex.md` bundle, output in
+  `data/evaluations/frozen_benchmark/`) and the refinement head trained unfrozen (`run_ab_vs_best.sh`, TAG refunf).
+- **One edge convention in training: not worth running** -- no grow of the Gemini labels matches the real convention.
+
 ## 2026-11-14: `--foreground` A/B passes the gate; default 0.4 (GEN 2026-11-14a)
 
 One seed (7), restarts of gem2s-x, product v3: hf14fix4 0.9473 -> **0.9504** (+0.0031, p 0.23), valfix4 0.9517 -> 0.9514,
