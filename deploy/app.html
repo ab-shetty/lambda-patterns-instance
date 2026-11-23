@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pattern Segmentation</title>
+<style>
+  :root { --bg:#f6f6f4; --panel:#ffffff; --ink:#1d1d1b; --muted:#6b6b66; --line:#dcdcd6; --accent:#1f7a4d; --label:#c2410c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201e; --ink:#ececea; --muted:#9a9a94; --line:#383835; --accent:#4ade80; --label:#fb923c; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:15px; margin:0 8px 0 0; font-weight:600; }
+  select, button { font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:5px 9px; }
+  button { cursor:pointer; } button:disabled { opacity:.5; cursor:default; }
+  label.tog { display:flex; gap:5px; align-items:center; color:var(--muted); }
+  main { display:grid; grid-template-columns:1fr 300px; gap:0; height:calc(100vh - 51px); }
+  #stage { position:relative; overflow:auto; }
+  canvas { display:block; cursor:crosshair; }
+  aside { border-left:1px solid var(--line); background:var(--panel); padding:14px 16px; overflow:auto; }
+  aside h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:16px 0 6px; font-weight:600; }
+  aside h2:first-child { margin-top:0; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; }
+  .kv span:nth-child(odd) { color:var(--muted); }
+  .big { font-size:26px; font-weight:600; }
+  #status { color:var(--muted); min-height:1.4em; }
+  .err { color:#dc2626; }
+  .legend { display:flex; gap:14px; color:var(--muted); font-size:13px; }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:5px; }
+  @media (max-width: 760px) { main { grid-template-columns:1fr; height:auto; } aside { border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pattern Segmentation</h1>
+  <select id="sheet"></select>
+  <label class="tog"><input type="checkbox" id="showLabel" checked> human label</label>
+  <label class="tog"><input type="checkbox" id="showVerts" checked> vertices</label>
+  <button id="dl" disabled>Download JSON</button>
+  <span id="status">Drag a box on a pattern.</span>
+</header>
+<main>
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <aside>
+    <h2>Result</h2>
+    <div class="big" id="iou">–</div>
+    <div style="color:var(--muted)">IoU vs the human label of the family under the box</div>
+    <h2>Details</h2>
+    <div class="kv" id="details"><span>box</span><span>–</span></div>
+    <h2>Legend</h2>
+    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>output</span><span><i class="sw" style="background:var(--label)"></i>label</span><span><i class="sw" style="background:#2563eb"></i>box</span></div>
+    <p style="color:var(--muted);font-size:12.5px;margin-top:18px">The label comparison uses the raw labels (no eval fixes or ignore regions), so its IoU can differ a little from the reported numbers. The first box after the GPU worker has been idle waits for it to start.</p>
+  </aside>
+</main>
+<script>
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let sheets = [], cur = null, img = null, scale = 1, view = 1, drag = null, box = null, result = null, busy = false;
+
+async function init() {
+  sheets = await (await fetch('/api/sheets')).json();
+  const sel = document.getElementById('sheet');
+  for (const s of sheets) { const o = document.createElement('option'); o.value = s.i; o.textContent = `${s.i}: ${s.split} · ${s.name.slice(0, 40)} (${s.w}×${s.h})`; sel.appendChild(o); }
+  sel.onchange = () => load(+sel.value);
+  ['showLabel','showVerts'].forEach(id => document.getElementById(id).onchange = draw);
+  document.getElementById('dl').onclick = download;
+  window.addEventListener('resize', fit);
+  load(sheets[0].i);
+}
+
+async function load(i) {
+  cur = sheets.find(s => s.i === i); box = null; result = null; setStatus('Loading sheet…');
+  document.getElementById('dl').disabled = true; document.getElementById('iou').textContent = '–'; details({});
+  const r = await fetch(`/api/image/${i}.jpg`); scale = parseFloat(r.headers.get('X-Scale')) || 1;
+  const url = URL.createObjectURL(await r.blob());
+  img = new Image(); img.onload = () => { fit(); setStatus('Drag a box on a pattern.'); }; img.src = url;
+}
+
+function fit() {
+  if (!img) return;
+  const st = document.getElementById('stage'); const w = st.clientWidth - 2;
+  view = Math.min(1, w / img.width); cv.width = Math.round(img.width * view); cv.height = Math.round(img.height * view); draw();
+}
+// native px <-> canvas px
+const k = () => scale * view;
+const toNative = (x, y) => [x / k(), y / k()];
+
+function ring(r) { ctx.beginPath(); r.forEach(([x, y], j) => j ? ctx.lineTo(x * k(), y * k()) : ctx.moveTo(x * k(), y * k())); ctx.closePath(); }
+
+function draw() {
+  if (!img) return;
+  ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  if (result && result.label && document.getElementById('showLabel').checked) {
+    ctx.strokeStyle = css('--label'); ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    for (const p of result.label.polygons) for (const r of p) { ring(r); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+  if (result) {
+    const acc = css('--accent');
+    ctx.fillStyle = acc + '55'; ctx.strokeStyle = acc; ctx.lineWidth = 2;
+    for (const p of result.polygons) {
+      ctx.beginPath();
+      for (const r of [p.outer, ...p.holes]) r.forEach(([x, y], j) => j ? ctx.lineTo(x * k(), y * k()) : ctx.moveTo(x * k(), y * k()));
+      ctx.fill('evenodd'); ctx.stroke();
+      if (document.getElementById('showVerts').checked) { ctx.fillStyle = acc; for (const r of [p.outer, ...p.holes]) for (const [x, y] of r) { ctx.beginPath(); ctx.arc(x * k(), y * k(), 3, 0, 7); ctx.fill(); } ctx.fillStyle = acc + '55'; }
+    }
+  }
+  const b = drag || (box && box.map(v => v * k()));
+  if (b) { ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2; ctx.strokeRect(b[0], b[1], b[2], b[3]); }
+}
+
+function pos(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+cv.addEventListener('pointerdown', e => { if (busy || !img) return; const [x, y] = pos(e); drag = [x, y, 0, 0]; drag.x0 = x; drag.y0 = y; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', e => { if (!drag) return; const [x, y] = pos(e); drag[0] = Math.min(x, drag.x0); drag[1] = Math.min(y, drag.y0); drag[2] = Math.abs(x - drag.x0); drag[3] = Math.abs(y - drag.y0); draw(); });
+cv.addEventListener('pointerup', e => {
+  if (!drag) return; const d = drag; drag = null;
+  if (d[2] < 6 || d[3] < 6) { draw(); return; }
+  const [x, y] = toNative(d[0], d[1]); box = [x, y, d[2] / k(), d[3] / k()].map(Math.round); segment();
+});
+
+async function segment() {
+  busy = true; result = null; draw(); setStatus('Segmenting… (the first box after idle waits for the GPU worker)');
+  const t0 = performance.now();
+  try {
+    const r = await fetch('/api/segment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sheet: cur.i, box }) });
+    const out = await r.json(); if (!r.ok || out.error) throw new Error(out.error || r.statusText);
+    result = out; box = out.box; draw();
+    document.getElementById('iou').textContent = out.label ? out.label.iou.toFixed(3) : 'no label here';
+    details(out, (performance.now() - t0) / 1000); document.getElementById('dl').disabled = false; setStatus('Done. Drag another box.');
+  } catch (e) { setStatus(e.message, true); }
+  busy = false;
+}
+
+function details(o, wall) {
+  const rows = [];
+  if (o.box) rows.push(['box (native px)', o.box.join(', ')]);
+  if (o.label) rows.push(['label family', o.label.family], ['vertices output / label', `${o.vertices} / ${o.label.vertices} (${(o.vertices / o.label.vertices).toFixed(2)}×)`]);
+  else if (o.vertices != null) rows.push(['vertices', o.vertices]);
+  if (o.polygons) rows.push(['polygons', o.polygons.length]);
+  if (o.timing_s) rows.push(['GPU / model time', `${o.timing_s.total} s on ${o.device}`]);
+  if (o.runpod_delay_s != null) rows.push(['queue + cold start', `${o.runpod_delay_s} s`]);
+  if (wall != null) rows.push(['total wait', `${wall.toFixed(1)} s`]);
+  if (cur) rows.push(['sheet', `${cur.i} (${cur.split}), ${cur.w}×${cur.h}`]);
+  document.getElementById('details').innerHTML = rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('') || '<span>box</span><span>–</span>';
+}
+function setStatus(t, err) { const s = document.getElementById('status'); s.textContent = t; s.className = err ? 'err' : ''; }
+function download() {
+  if (!result) return;
+  const blob = new Blob([JSON.stringify({ sheet: cur.name, sheet_index: cur.i, box: result.box, polygons: result.polygons, vertices: result.vertices }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `sheet${cur.i}_box${result.box.join('-')}.json`; a.click();
+}
+init();
+</script>
+</body>
+</html>

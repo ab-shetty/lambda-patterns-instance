@@ -1,0 +1,8 @@
+runpod>=1.7
+opencv-python-headless>=4.9,<5
+numpy<2.3
+pillow
+shapely>=2.0
+scipy
+huggingface_hub>=0.23
+safetensors
