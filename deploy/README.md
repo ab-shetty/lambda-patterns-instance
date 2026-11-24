@@ -14,6 +14,7 @@ sheet 12 q0 / q1 0.9311 / 0.9490 vs 0.9323 / 0.9472 GPU-scored, CPU float32 vs G
    - GPU: 24 GB (RTX 4090 / A5000 class); if workers fail with CUDA out-of-memory at the 5120 px scale, use 48 GB.
    - Workers: max 1, active (always-on) 0; idle timeout ~120 s, so boxes in one session reuse a warm worker; FlashBoot on.
    - Execution timeout 600 s; container disk 20 GB.
+   - Advanced -> allowed CUDA versions: 12.8 and newer (the image is built on CUDA 12.8; older host drivers can't run it).
    - Environment: `HF_TOKEN` = a Hugging Face read token for the private model repo
      (`abshetty/floz-refunet-swint-fgavg78`), preferably as a Runpod secret.
 4. Copy the endpoint ID.

@@ -1,7 +1,8 @@
 # Runpod Serverless worker for the pattern-segmentation product (deploy/handler.py). Build context = the repository root:
 # in the Runpod console, New Endpoint -> Import Git Repository, this branch, Dockerfile path deploy/Dockerfile.
 # The model is downloaded from the private Hub repo at start-up: set HF_TOKEN in the endpoint's environment (a Runpod secret).
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+# CUDA 12.8 build: torch 2.5/cu124 has no kernels for Blackwell GPUs (sm_120), which Runpod's 24 GB pool can hand out.
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HUB_DISABLE_TELEMETRY=1
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
