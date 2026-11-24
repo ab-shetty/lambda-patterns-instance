@@ -21,12 +21,15 @@ sheet 12 q0 / q1 0.9311 / 0.9490 vs 0.9323 / 0.9472 GPU-scored, CPU float32 vs G
 
 Later code changes reach the endpoint through a new GitHub release (Runpod rebuilds on releases).
 
-## Run the front end
+## Run the front end (your machine; no GPU or torch needed)
 
-    python3 deploy/app.py --endpoint <ENDPOINT_ID>          # needs HF access (the sheets) and a Runpod key
+    pip install -r deploy/requirements-app.txt
+    export HF_TOKEN=...          # read access to the private dataset abshetty/floz-synth-v5 (the 28 sheets)
+    export RUNPOD_API_KEY=...    # Runpod key with access to the endpoint
+    python3 deploy/app.py --endpoint 5crvpzv67a8ed1
     open http://127.0.0.1:7860
 
-The Runpod key is sent as `Authorization: Bearer $RUNPOD_API_KEY` (in the Claude Code session the proxy injects it for
-`api.runpod.ai`). The first box after the worker has been idle waits for it to start (~10-60 s); then ~1-2 s per box.
-`python3 deploy/app.py --local data/runs/ck_best/fgavg78.pth` runs the model in-process instead (a GPU machine; 20-80 s per
-box on CPU).
+Checked 2026-11-24 on the endpoint (RTX PRO 6000 Blackwell MIG 24 GB slice): HF14 sheet 12 q0/q1/q2 IoU 0.9316/0.9475/0.9121
+(eval 0.9323/0.9472), ~1.6 s model time, 2.5-5 s per box warm. The first box after the worker has been idle waits for it to
+start. `python3 deploy/app.py --local data/runs/ck_best/fgavg78.pth` runs the model in-process instead (needs torch; GPU
+machine; 20-80 s per box on CPU).

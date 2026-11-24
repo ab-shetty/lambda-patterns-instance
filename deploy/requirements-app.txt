@@ -1,0 +1,5 @@
+# Front end only (deploy/app.py --endpoint): no torch needed.
+numpy
+opencv-python-headless
+huggingface_hub>=0.23
+pyarrow

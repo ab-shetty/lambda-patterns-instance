@@ -25,19 +25,36 @@ import cv2
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
-from refmask2former.dataset import load_parquet_records, render_instance_mask  # noqa: E402
-from polygonize import rasterize  # noqa: E402
 
 VAL = [4, 5, 6, 8, 9, 10, 13, 15, 17, 19, 20, 21, 22, 26]
 HF14 = [12, 16, 27, 7, 11, 25, 23, 1, 18, 2, 0, 3, 14, 24]
 DISPLAY = 2400                     # long side of the image sent to the browser
 
 
+def render_instance_mask(seg, h, w):
+    """COCO polygons -> mask; the first ring is the outer, the rest holes (as refmask2former.dataset)."""
+    m = np.zeros((h, w), np.uint8)
+    for j, r in enumerate(seg or []):
+        cv2.fillPoly(m, [np.asarray(r, np.float32).reshape(-1, 2).astype(np.int32)], 0 if j else 1)
+    return m
+
+
+def rasterize(polys, hw):
+    """Product polygons -> bool mask (as scripts/polygonize.rasterize)."""
+    m = np.zeros(hw, np.uint8)
+    for p in polys:
+        cv2.fillPoly(m, [np.array(p["outer"], np.int32)], 1)
+        for hole in p["holes"]:
+            cv2.fillPoly(m, [np.array(hole, np.int32)], 0)
+    return m.astype(bool)
+
+
 class Sheets:
     def __init__(self):
-        self.recs = load_parquet_records("abshetty/floz-synth-v5", cache_dir=str(ROOT / "data"), config="real-world-test",
-                                         split="test")
+        import pyarrow.parquet as pq
+        from huggingface_hub import hf_hub_download
+        f = hf_hub_download("abshetty/floz-synth-v5", "real-world-test/test-00000.parquet", repo_type="dataset")
+        self.recs = pq.read_table(f).to_pylist()
         self._img, self._disp = {}, {}
 
     def __len__(self):
@@ -116,7 +133,7 @@ class RunpodBackend:
 
 class LocalBackend:
     def __init__(self, checkpoint):
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        sys.path[:0] = [str(Path(__file__).resolve().parent), str(ROOT), str(ROOT / "scripts")]
         from segment import Segmenter
         self.seg = Segmenter(checkpoint)
 
